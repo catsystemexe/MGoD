@@ -28,6 +28,9 @@ function randInt(r: () => number, min: number, max: number): number {
 type PlayerState = { prev: Vec2; cur: Vec2 };
 type SnakeSeg = { x: number; y: number };
 
+type Bullet = { x:number; y:number; vx:number; vy:number; life:number; r:number; dmg:number };
+
+
 export class Game {
   private loop = new Loop(Config.FIXED_HZ, Config.CA_HZ);
   private input: Input;
@@ -69,6 +72,8 @@ export class Game {
 
   // speed estimate for “stretch”
   private lastSpeed = 0;
+
+  private bullets: Bullet[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -210,6 +215,11 @@ export class Game {
     if (this.input.wasMousePressed(2)) this.lastShot = "weapon2"; // RMB
     if (this.input.wasMousePressed(1)) this.lastShot = "bomb";    // MMB
 
+
+    if (this.input.wasMousePressed(0)) this.spawnBullet("w1");
+    if (this.input.wasMousePressed(2)) this.spawnBullet("w2");
+    if (this.input.wasMousePressed(1)) this.applyBomb();
+
     const wheel = this.input.consumeWheel();
     if (wheel !== 0) {
       // deltaY: >0 obvykle dolů, <0 nahoru
@@ -236,7 +246,9 @@ export class Game {
       this.checkPickups();
     }
 
-    const t1 = performance.now();
+        this.updateBullets(dtSec);
+
+const t1 = performance.now();
     this.perf.onFixed(t1 - t0);
   }
 
@@ -390,7 +402,9 @@ export class Game {
       this.ca.injectGlider(((this.seed ^ this.caTicks) >>> 0));
     }
 
-    const t1 = performance.now();
+        this.updateBullets(dtSec);
+
+const t1 = performance.now();
     this.perf.onCA(t1 - t0);
   }
 
@@ -420,6 +434,8 @@ export class Game {
       const facing = Math.atan2(this.aim.y - p.y, this.aim.x - p.x);
     const cam = this.camera.follow(this.camPrev, this.camCur, alpha);
 
+    this.renderer.drawGrid(cam);
+
       const mouse = this.input.getMouse();
       if (mouse && mouse.inside) {
         const rd = this.renderer.getDebug();
@@ -434,6 +450,9 @@ export class Game {
 
     this.renderer.drawStableChunks(this.ca.getStableChunks(), cam);
     this.renderer.drawCA(this.ca, cam);
+
+
+    this.renderer.drawBullets(this.bullets, cam);
 
     if (Config.ENABLE_PHASE2) {
       this.renderer.drawPickups(this.pickups, cam);
@@ -466,7 +485,9 @@ export class Game {
 
     ]);
 
-    const t1 = performance.now();
+        this.updateBullets(dtSec);
+
+const t1 = performance.now();
     this.perf.onRender(t1 - t0);
   }
 }

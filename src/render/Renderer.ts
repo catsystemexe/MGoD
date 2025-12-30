@@ -183,6 +183,23 @@ export class Renderer {
     this.ctx.restore();
   }
 
+  drawBullets(bullets: {x:number;y:number;r:number}[], cam: Vec2): void {
+    const halfW = this.cssW / 2;
+    const halfH = this.cssH / 2;
+
+    this.ctx.save();
+    this.ctx.fillStyle = "rgba(255,255,255,0.9)";
+
+    for (const b of bullets) {
+      const sx = Math.floor((b.x - cam.x) * this.cellSize + halfW);
+      const sy = Math.floor((b.y - cam.y) * this.cellSize + halfH);
+      const rr = Math.max(1, Math.floor(b.r * this.cellSize));
+      this.ctx.fillRect(sx - rr, sy - rr, rr*2, rr*2);
+    }
+
+    this.ctx.restore();
+  }
+
   drawAim(aim: Vec2, cam: Vec2): void {
     const s = this.worldToScreen(aim, cam);
 
