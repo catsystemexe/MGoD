@@ -51,7 +51,7 @@ export const Config = {
   SNAKE_SPEED_NORM: 1.2,
   
   // Phase2 snake tuning
-  SNAKE_SEG_MIN_DIST: 8,   // min vzdálenost hlavy pro přidání segmentu
+  SNAKE_SEG_MIN_DIST: 5,   // min vzdálenost hlavy pro přidání segmentu
   SNAKE_SEGS_PER_LEN: 1,    // hustota ocasu
   SNAKE_SELF_SKIP: 20,       // ignoruj posledních N segmentů při self-hit
   PICKUP_SPAWN_TRIES: 60,    // kolikrát zkusit najít živou buňku ve stable chunku

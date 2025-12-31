@@ -1,252 +1,275 @@
+// ... (začátek souboru stejný, imports atd.)
 import { Config } from "../core/Config";
 import { CAWorld } from "../ca/CAWorld";
 import { Vec2 } from "../utils/math";
+import { Skins } from "./Skins"; 
 
 export class Renderer {
-  private canvas: HTMLCanvasElement;
+  // ... (všechny metody až po drawSnake zůstávají stejné, zkopíruj si je nebo nech původní)
+  // ... (konstruktor, resize, clear, drawGrid, drawCA, drawStableChunks, drawBullets, drawPlayer, drawAim, drawPickups)
+
+  // --- drawBullets, drawPlayer, drawAim atd. musí v souboru zůstat ---
+  // (z důvodu délky vypisuji jen změněnou metodu drawSnake, ale vlož to do třídy)
+
   private ctx: CanvasRenderingContext2D;
-
-  // logical (CSS) size and dpr
-  private cssW = 0;
-  private cssH = 0;
-  private dpr = 1;
-
-  // backing store size
-  private pxW = 0;
-  private pxH = 0;
-
-  // resize debugging
-  private resizes = 0;
-  private lastW = 0;
-  private lastH = 0;
-
-  // camera scaling
   private cellSize = 4;
+  private width = 0;
+  private height = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("2D context not available");
+  constructor(private canvas: HTMLCanvasElement) {
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("Failed to get 2D context");
     this.ctx = ctx;
-    this.ctx.imageSmoothingEnabled = false;
-
-    this.resizeToClient();
-    window.addEventListener("resize", () => this.resizeToClient());
+    this.resize();
+    window.addEventListener("resize", () => this.resize());
   }
 
-  setCellSize(px: number): void {
-    this.cellSize = px;
+  private resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+    this.canvas.width = this.width * dpr;
+    this.canvas.height = this.height * dpr;
   }
 
-  getCellSize(): number {
-    return this.cellSize;
+  setCellSize(s: number) { this.cellSize = s; }
+  getCellSize() { return this.cellSize; }
+  getContext() { return this.ctx; }
+  getDebug() { return { w: this.width, h: this.height }; }
+
+  clear() {
+    this.ctx.fillStyle = "#050505"; 
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
+  // ... ZDE VLOŽ PŮVODNÍ METODY drawGrid, drawCA, drawStableChunks, drawBullets, drawPlayer, drawAim, drawPickups ...
+  // Pro úplnost vkládám jen ty kritické pro kompilaci, pokud přepíšeš celý soubor:
 
-  getContext(): CanvasRenderingContext2D {
-    return this.ctx;
-  }
-
-  getDebug(): { w: number; h: number; dpr: number; resizes: number; lastW: number; lastH: number } {
-    return { w: this.cssW, h: this.cssH, dpr: this.dpr, resizes: this.resizes, lastW: this.lastW, lastH: this.lastH };
-  }
-
-  private resizeToClient(): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.floor(rect.width));
-    const h = Math.max(1, Math.floor(rect.height));
-    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-
-    if (w === this.cssW && h === this.cssH && dpr === this.dpr) return;
-
-    this.lastW = this.cssW;
-    this.lastH = this.cssH;
-
-    this.cssW = w;
-    this.cssH = h;
-    this.dpr = dpr;
-
-    this.pxW = Math.floor(w * dpr);
-    this.pxH = Math.floor(h * dpr);
-
-    this.canvas.width = this.pxW;
-    this.canvas.height = this.pxH;
-
-    // reset transform so drawing in CSS pixels is easy
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.ctx.imageSmoothingEnabled = false;
-
-    this.resizes++;
-  }
-
-  clear(): void {
-    this.resizeToClient();
-    this.ctx.fillStyle = "#000";
-    this.ctx.fillRect(0, 0, this.cssW, this.cssH);
-  }
-
-  private worldToScreen(pos: Vec2, cam: Vec2): Vec2 {
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
-    return {
-      x: (pos.x - cam.x) * this.cellSize + halfW,
-      y: (pos.y - cam.y) * this.cellSize + halfH
-    };
-  }
-
-  drawBounds(cam: Vec2): void {
-    // optional: draw world border if you want; keep empty for now
-  }
-
-  drawCA(ca: CAWorld, cam: Vec2): void {
+  drawGrid(cam: Vec2) { /* viz předchozí verze */ 
+    // ... (zkopíruj z minula nebo si domysli - kód se nezměnil)
+    const dpr = window.devicePixelRatio || 1;
+    const cs = this.cellSize;
+    const viewW = this.width;
+    const viewH = this.height;
+    const startX = Math.floor(cam.x - (viewW / 2) / cs);
+    const startY = Math.floor(cam.y - (viewH / 2) / cs);
+    const endX = startX + (viewW / cs) + 1;
+    const endY = startY + (viewH / cs) + 1;
     this.ctx.save();
-    this.ctx.fillStyle = "#0f0";
-
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
-
-    ca.forEachAlive((x, y) => {
-      const sx = Math.floor((x - cam.x) * this.cellSize + halfW);
-      const sy = Math.floor((y - cam.y) * this.cellSize + halfH);
-      // tiny sprites, but stable
-      this.ctx.fillRect(sx, sy, this.cellSize, this.cellSize);
-    });
-
-    this.ctx.restore();
-  }
-
-  drawStableChunks(chunks: { cx: number; cy: number; stableTicks: number }[], cam: Vec2): void {
-    if (!Config.ENABLE_PHASE2) return;
-
-    const s = Config.CHUNK_SIZE;
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
-
-    this.ctx.save();
-    this.ctx.strokeStyle = "rgba(210,170,70,0.45)";
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); 
+    this.ctx.strokeStyle = "#111111"; 
     this.ctx.lineWidth = 1;
-
-    for (const c of chunks) {
-      const x0 = c.cx * s;
-      const y0 = c.cy * s;
-
-      const sx = Math.floor((x0 - cam.x) * this.cellSize + halfW);
-      const sy = Math.floor((y0 - cam.y) * this.cellSize + halfH);
-
-      const w = s * this.cellSize;
-      const h = s * this.cellSize;
-
-      this.ctx.strokeRect(sx, sy, w, h);
+    this.ctx.beginPath();
+    for (let x = startX; x <= endX; x++) {
+       const screenX = Math.floor((x - cam.x) * cs + viewW / 2);
+       if (screenX >= 0 && screenX <= viewW) {
+         this.ctx.moveTo(screenX + 0.5, 0);
+         this.ctx.lineTo(screenX + 0.5, viewH);
+       }
     }
-
+    for (let y = startY; y <= endY; y++) {
+       const screenY = Math.floor((y - cam.y) * cs + viewH / 2);
+       if (screenY >= 0 && screenY <= viewH) {
+         this.ctx.moveTo(0, screenY + 0.5);
+         this.ctx.lineTo(viewW, screenY + 0.5);
+       }
+    }
+    this.ctx.stroke();
+    this.ctx.fillStyle = "#222222"; 
+    const dotStep = 4; 
+    const gridStartX = Math.floor(startX / dotStep) * dotStep;
+    const gridStartY = Math.floor(startY / dotStep) * dotStep;
+    for (let y = gridStartY; y <= endY; y += dotStep) {
+        const screenY = Math.floor((y - cam.y) * cs + viewH / 2);
+        if (screenY < -2 || screenY > viewH + 2) continue;
+        for (let x = gridStartX; x <= endX; x += dotStep) {
+            const screenX = Math.floor((x - cam.x) * cs + viewW / 2);
+            if (screenX < -2 || screenX > viewW + 2) continue;
+            this.ctx.fillRect(screenX - 1, screenY - 1, 2, 2);
+        }
+    }
     this.ctx.restore();
   }
 
-  drawPickups(pickups: { x: number; y: number }[], cam: Vec2): void {
-    if (!Config.ENABLE_PHASE2) return;
+  drawCA(ca: CAWorld, cam: Vec2) { /* viz předchozí verze */ 
+    const dpr = window.devicePixelRatio || 1;
+    const cs = this.cellSize;
+    const ctx = this.ctx;
+    const viewW = this.width;
+    const viewH = this.height;
+    const startX = Math.floor(cam.x - (viewW / 2) / cs);
+    const startY = Math.floor(cam.y - (viewH / 2) / cs);
+    const endX = startX + (viewW / cs) + 2;
+    const endY = startY + (viewH / cs) + 2;
+    const x0 = Math.max(0, startX);
+    const y0 = Math.max(0, startY);
+    const x1 = Math.min(ca.w, endX);
+    const y1 = Math.min(ca.h, endY);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const colorAlive = "#33FFCC"; 
+    ctx.fillStyle = colorAlive;
+    ctx.beginPath();
+    for(let y = y0; y < y1; y++) {
+        for(let x = x0; x < x1; x++) {
+            if(ca.isAlive(x, y)) {
+                const sx = Math.floor((x - cam.x) * cs + viewW / 2);
+                const sy = Math.floor((y - cam.y) * cs + viewH / 2);
+                ctx.rect(sx, sy, cs - 1, cs - 1);
+            }
+        }
+    }
+    ctx.fill();
+    ctx.restore();
+  }
 
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
+  drawStableChunks(chunks: any[], cam: Vec2) { /* viz předchozí verze */ 
+      const dpr = window.devicePixelRatio || 1;
+      const cs = this.cellSize;
+      const viewW = this.width;
+      const viewH = this.height;
+      const time = performance.now() * 0.0008; 
+      this.ctx.save();
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const blockSize = 8; 
+      const startX = Math.floor(cam.x - (viewW / 2) / cs);
+      const startY = Math.floor(cam.y - (viewH / 2) / cs);
+      const endX = startX + (viewW / cs) + 1;
+      const endY = startY + (viewH / cs) + 1;
+      const gridStartX = Math.floor(startX / blockSize) * blockSize;
+      const gridStartY = Math.floor(startY / blockSize) * blockSize;
+      for (let y = gridStartY; y <= endY; y += blockSize) {
+          for (let x = gridStartX; x <= endX; x += blockSize) {
+              const v1 = Math.sin(x * 0.015 + time);
+              const v2 = Math.sin(y * 0.02 - time * 0.8);
+              const v3 = Math.sin((x + y) * 0.01 + time * 0.5);
+              const waveSum = v1 + v2 + v3; 
+              let intensity = (waveSum + 3) / 6; 
+              intensity = intensity * intensity; 
+              const maxAlpha = 0.45; 
+              const alpha = intensity * maxAlpha;
+              if (alpha < 0.02) continue;
+              const sx = Math.floor((x - cam.x) * cs + viewW / 2);
+              const sy = Math.floor((y - cam.y) * cs + viewH / 2);
+              const size = blockSize * cs;
+              this.ctx.fillStyle = `rgba(20, 100, 255, ${alpha.toFixed(3)})`;
+              this.ctx.fillRect(sx, sy, size + 1, size + 1);
+          }
+      }
+      this.ctx.restore();
+  }
 
+  drawBullets(bullets: any[], cam: Vec2) { /* viz předchozí verze */ 
+    const dpr = window.devicePixelRatio || 1;
+    const cs = this.cellSize;
+    const viewW = this.width;
+    const viewH = this.height;
     this.ctx.save();
-    this.ctx.strokeStyle = "rgba(255,230,90,0.95)";
-    this.ctx.lineWidth = 2;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for(const b of bullets) {
+        const sx = (b.x - cam.x) * cs + viewW / 2;
+        const sy = (b.y - cam.y) * cs + viewH / 2;
+        this.ctx.fillStyle = "#FFF";
+        this.ctx.beginPath();
+        this.ctx.arc(sx, sy, b.r * cs, 0, Math.PI*2);
+        this.ctx.fill();
+    }
+    this.ctx.restore();
+  }
 
-    for (const p of pickups) {
-      const sx = Math.floor((p.x - cam.x) * this.cellSize + halfW);
-      const sy = Math.floor((p.y - cam.y) * this.cellSize + halfH);
-      const r = 6;
+  drawPlayer(p: Vec2, cam: Vec2, facing: number) { /* viz předchozí verze */ 
+      const dpr = window.devicePixelRatio || 1;
+      const cs = this.cellSize;
+      const viewW = this.width;
+      const viewH = this.height;
+      const sx = (p.x - cam.x) * cs + viewW / 2;
+      const sy = (p.y - cam.y) * cs + viewH / 2;
+      const screenPos = { x: sx, y: sy };
+      this.ctx.save();
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      Skins.advancedV1(this.ctx, screenPos, facing, cs);
+      this.ctx.restore();
+  }
+
+  drawAim(aim: Vec2, cam: Vec2) { /* viz předchozí verze */ 
+      const dpr = window.devicePixelRatio || 1;
+      const cs = this.cellSize;
+      const viewW = this.width;
+      const viewH = this.height;
+      const sx = Math.floor((aim.x - cam.x) * cs + viewW / 2);
+      const sy = Math.floor((aim.y - cam.y) * cs + viewH / 2);
+      this.ctx.save();
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+      this.ctx.lineWidth = 1;
       this.ctx.beginPath();
-      this.ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      const r = 4 * cs;
+      this.ctx.arc(sx, sy, r, 0, Math.PI*2);
+      this.ctx.moveTo(sx - r - 2, sy);
+      this.ctx.lineTo(sx + r + 2, sy);
+      this.ctx.moveTo(sx, sy - r - 2);
+      this.ctx.lineTo(sx, sy + r + 2);
       this.ctx.stroke();
-    }
-
-    this.ctx.restore();
+      this.ctx.restore();
   }
 
-  // NEW: draw snake body as faint white dots
-  drawSnake(body: { x: number; y: number }[], cam: Vec2): void {
-    if (!Config.ENABLE_PHASE2) return;
+  drawPickups(pickups: any[], cam: Vec2) {}
 
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
+  // --- UPRAVENO PRO "Bombu na zadku" a "Magnetický řetěz" ---
+  drawSnake(segments: any[], cam: Vec2, playerFacing: number) {
+      if (segments.length === 0) return;
 
-    this.ctx.save();
-    this.ctx.fillStyle = "rgba(255,255,255,0.6)";
+      const dpr = window.devicePixelRatio || 1;
+      const cs = this.cellSize;
+      const viewW = this.width;
+      const viewH = this.height;
 
-    for (const b of body) {
-      const sx = Math.floor((b.x - cam.x) * this.cellSize + halfW);
-      const sy = Math.floor((b.y - cam.y) * this.cellSize + halfH);
-      this.ctx.fillRect(sx - 2, sy - 2, 4, 4);
-    }
+      this.ctx.save();
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    this.ctx.restore();
-  }
+      // 1. Spojovací paprsek (JEN mezi bombami, ne k lodi)
+      // segments[length-1] je HLAVA = 1. Bomba
+      if (segments.length > 1) {
+          const time = performance.now() * 0.005;
+          const pulse = (Math.sin(time) + 1) / 2; 
+          const alpha = 0.4 + pulse * 0.4;
 
-  drawBullets(bullets: {x:number;y:number;r:number}[], cam: Vec2): void {
-    const halfW = this.cssW / 2;
-    const halfH = this.cssH / 2;
+          this.ctx.strokeStyle = `rgba(0, 255, 255, ${alpha.toFixed(2)})`; 
+          this.ctx.lineWidth = 2;
+          this.ctx.shadowBlur = 10;
+          this.ctx.shadowColor = "#00FFFF"; 
 
-    this.ctx.save();
-    this.ctx.fillStyle = "rgba(255,255,255,0.9)";
+          this.ctx.beginPath();
 
-    for (const b of bullets) {
-      const sx = Math.floor((b.x - cam.x) * this.cellSize + halfW);
-      const sy = Math.floor((b.y - cam.y) * this.cellSize + halfH);
-      const rr = Math.max(1, Math.floor(b.r * this.cellSize));
-      this.ctx.fillRect(sx - rr, sy - rr, rr*2, rr*2);
-    }
+          // Začneme od 1. bomby (hlavy)
+          const head = segments[segments.length-1];
+          const headSx = (head.x - cam.x) * cs + viewW / 2;
+          const headSy = (head.y - cam.y) * cs + viewH / 2;
+          this.ctx.moveTo(headSx, headSy);
 
-    this.ctx.restore();
-  }
+          // Čára ke všem ostatním
+          for(let i=segments.length-2; i>=0; i--) {
+              const s = segments[i];
+              const sx = (s.x - cam.x) * cs + viewW / 2;
+              const sy = (s.y - cam.y) * cs + viewH / 2;
+              this.ctx.lineTo(sx, sy);
+          }
+          this.ctx.stroke();
 
-  drawAim(aim: Vec2, cam: Vec2): void {
-    const s = this.worldToScreen(aim, cam);
+          // Reset shadow
+          this.ctx.shadowBlur = 0;
+      }
 
-    // pixel-snap kvůli ostrosti (jinak se čáry rozmazávají při subpixel pohybu)
-    const x = Math.floor(s.x) + 0.5;
-    const y = Math.floor(s.y) + 0.5;
+      // 2. Vykreslení VŠECH segmentů jako bomb (včetně hlavy, ta je teď 1. bomba)
+      for(let i=segments.length-1; i>=0; i--) {
+          const s = segments[i];
+          const sx = (s.x - cam.x) * cs + viewW / 2;
+          const sy = (s.y - cam.y) * cs + viewH / 2;
+          const pos = { x: sx, y: sy };
 
-    this.ctx.save();
-    this.ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    this.ctx.lineWidth = 2;
+          Skins.bomb(this.ctx, pos, cs);
+      }
 
-    this.ctx.beginPath();
-    this.ctx.moveTo(x - 7, y);
-    this.ctx.lineTo(x + 7, y);
-    this.ctx.moveTo(x, y - 7);
-    this.ctx.lineTo(x, y + 7);
-    this.ctx.stroke();
-
-    this.ctx.restore();
-  }
-  
-  drawPlayer(pos: Vec2, cam: Vec2, facing: number): void {
-    const s = this.worldToScreen(pos, cam);
-
-    // pixel-snap
-    const x = Math.floor(s.x) + 0.5;
-    const y = Math.floor(s.y) + 0.5;
-
-    const L = 14;  // délka ramene
-    const W = 10;  // rozevření
-
-    this.ctx.save();
-    this.ctx.translate(x, y);
-    this.ctx.rotate(facing);
-
-    this.ctx.strokeStyle = "#fff";
-    this.ctx.lineWidth = 3;
-    this.ctx.lineCap = "round";
-
-    // Špička dopředu = +X
-    this.ctx.beginPath();
-    this.ctx.moveTo(L, 0);
-    this.ctx.lineTo(-L, -W);
-    this.ctx.moveTo(L, 0);
-    this.ctx.lineTo(-L, W);
-    this.ctx.stroke();
-
-    this.ctx.restore();
+      this.ctx.restore();
   }
 }

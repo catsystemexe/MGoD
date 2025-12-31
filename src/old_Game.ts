@@ -13,9 +13,6 @@ import { ParticleSystem } from "./game/systems/ParticleSystem";
 import { ProjectileSystem } from "./game/systems/ProjectileSystem";
 import { SnakeSystem } from "./game/systems/SnakeSystem";
 import { WeaponsSystem } from "./game/systems/WeaponsSystem";
-import { EnemySystem } from "./game/systems/EnemySystem";
-import { DirectorSystem } from "./game/systems/DirectorSystem"; 
-import { LootSystem } from "./game/systems/LootSystem"; 
 import { PlayerState } from "./game/types";
 
 function mulberry32(seed: number) {
@@ -46,9 +43,6 @@ export class Game {
   private projectiles = new ProjectileSystem();
   private snake = new SnakeSystem();
   private weapons = new WeaponsSystem();
-  private enemies = new EnemySystem();
-  private director = new DirectorSystem();
-  private loot = new LootSystem(); 
 
   // --- GAME STATE ---
   private state: "PLAY" | "GAME_OVER" = "PLAY";
@@ -145,8 +139,6 @@ export class Game {
     this.ca.seedTestPattern(this.seed);
     this.snake.resetAt(this.player.cur.x, this.player.cur.y);
 
-    this.director.reset(this.enemies);
-
     if (Config.ENABLE_PHASE2) {
       const target = (Config as any).PICKUP_MAX_ACTIVE ?? 6;
       for (let i = 0; i < target; i++) this.spawnOnePickupNearStable();
@@ -182,9 +174,6 @@ export class Game {
       this.projectiles.reset();
       this.particles.reset();
       this.weapons.reset();
-      this.enemies.reset();
-      this.director.reset(this.enemies); 
-      this.loot.reset(); 
       
       this.player.cur = v2(100, 100);
       this.player.prev = { ...this.player.cur };
@@ -240,6 +229,7 @@ export class Game {
     if (this.input.wasPressed("Period")) this.stepFixed++;
     if (this.input.wasPressed("Comma")) this.stepCA++;
 
+    // --- GAME OVER ---
     if (this.state === "GAME_OVER") {
         this.particles.update(dtSec);
         if (this.input.wasPressed("KeyY")) this.resetGame();
@@ -288,7 +278,7 @@ export class Game {
 
     this.facing = Math.atan2(this.aim.y - this.player.cur.y, this.aim.x - this.player.cur.x);
 
-    // --- DAMAGE LOGIC ---
+    // --- Damage Logic ---
     if (this.invuln > 0) {
         this.invuln -= dtSec;
     } else {
@@ -303,40 +293,16 @@ export class Game {
             if (this.energy <= 0) {
                 this.energy = 0;
                 this.setGameOver("ENERGY DEPLETED");
-                this.particles.spawnChaoticRing(this.player.cur.x, this.player.cur.y, 50, "#FF0000", 60, 4);
+                this.particles.spawnSymmetricalRing(this.player.cur.x, this.player.cur.y, 50, "#FF0000", 60, 4);
             }
         }
     }
 
     // --- Systems Updates ---
-    this.director.update(dtSec, this.enemies); 
-    this.weapons.update(dtSec); 
-    this.weapons.updatePrimary(dtSec, this.lmbDown, this.projectiles, this.player.cur, this.aim);
-    
-    if (this.state === "PLAY") {
-       this.score += this.enemies.update(dtSec, this.player, this.ca, this.particles, this.projectiles.getBullets(), this.loot); 
-       this.score += this.projectiles.update(dtSec, this.ca, this.particles, this.loot);
-
-       const collected = this.loot.update(dtSec, this.player.cur);
-       if (collected) {
-           if (collected === "health") {
-               this.energy = Math.min(this.energyMax, this.energy + 25);
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 5, "#00FF00", 30, 2);
-           } else if (collected === "coin") {
-               this.score += 100;
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 5, "#FFFF00", 30, 2);
-           } else if (collected === "upgrade_w1") {
-               this.weapons.upgradeW1();
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 10, "#00FFFF", 50, 3);
-           } else if (collected === "upgrade_w2") {
-               this.weapons.upgradeW2();
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 10, "#FF8800", 50, 3);
-           }
-       }
-    }
+    this.weapons.update(dtSec, this.lmbDown, this.projectiles, this.player.cur, this.aim);
     
     if (this.input.wasPressed("Space")) {
-        const score = this.weapons.tryFireBomb(this.aim, this.ca, this.particles, this.snake, this.loot);
+        const score = this.weapons.tryFireBomb(this.aim, this.ca, this.particles, this.snake);
         this.score += score;
     }
 
@@ -348,11 +314,11 @@ export class Game {
     }
 
     if (Config.ENABLE_PHASE2) {
-      // FIX: Posíláme this.facing do snake.update
-      this.snake.update(dtSec, this.player, this.facing);
+      this.snake.update(dtSec, this.player);
       this.checkPickups();
     }
 
+    this.score += this.projectiles.update(dtSec, this.ca, this.particles);
     this.particles.update(dtSec);
 
     const t1 = performance.now();
@@ -368,7 +334,6 @@ export class Game {
       if (d2 <= r * r) {
         this.pickups.splice(i, 1);
         this.snake.grow();
-        this.energy = Math.min(this.energyMax, this.energy + 20); 
         this.spawnOnePickupNearStable();
         break;
       }
@@ -383,6 +348,10 @@ export class Game {
     const t0 = performance.now();
     this.caTicks++;
     this.ca.tick();
+    const every = (Config as any).INJECT_EVERY_CA_TICKS ?? 200;
+    if (Config.ENABLE_PHASE2 && this.caTicks % every === 0) {
+      this.ca.injectGlider(((this.seed ^ this.caTicks) >>> 0));
+    }
     const t1 = performance.now();
     this.perf.onCA(t1 - t0);
   }
@@ -403,40 +372,31 @@ export class Game {
     this.renderer.drawBullets(this.projectiles.getBullets(), cam);
 
     if (Config.ENABLE_PHASE2) {
-      this.renderer.drawSnake(this.snake.getAllSegments(), cam, this.facing);
+      this.renderer.drawPickups(this.pickups, cam);
+      this.renderer.drawSnake(this.snake.getAllSegments(), cam);
     }
-
-    const ctx = this.renderer.getContext();
-    const cellSize = (this.renderer as any).getCellSize?.() ?? 4;
-    const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    this.enemies.render(ctx, cam, cellSize);
-    this.loot.render(ctx, cam, cellSize); 
 
     this.particles.render(this.renderer, cam);
 
     this.renderer.drawPlayer(p, cam, this.facing);
     this.renderer.drawAim(this.aim as any, cam);
 
-    const wStatus = this.weapons.getStatus();
-    const waveInfo = this.director.getHUDInfo();
+    const ctx = this.renderer.getContext();
+    const rd = this.renderer.getDebug();
 
     this.overlay.draw(ctx, [
       `STATE: ${this.state}`,
       `ENERGY: ${this.energy.toFixed(0)} / ${this.energyMax}`,
       `SCORE: ${this.score}`,
-      `${waveInfo}`,
       `----------------`,
       this.state === "GAME_OVER" ? `GAME OVER: ${this.gameOverReason}` : "",
       this.state === "GAME_OVER" ? `PRESS 'Y' TO RESTART` : "",
       `----------------`,
       `FPS: ${(1000/this.perf.lastFrameMs).toFixed(0)}`,
-      `Snake: ${this.snake.getLength()}`,
-      `Weapons:`,
-      `LMB: MG (Lvl ${wStatus.lvlW1})`,
-      `RMB: Shotgun (Lvl ${wStatus.lvlW2}) (${wStatus.w2Ready ? "READY" : wStatus.w2Cd.toFixed(1)}s)`,
-      `SPC: Bomb (${wStatus.bombReady ? "READY" : wStatus.bombCd.toFixed(1)}s) Cost: 1 Seg`,
+      `Snake segs: ${this.snake.getLength()} (Need 2 for Bomb)`,
+      `Speed: ${this.lastSpeed.toFixed(2)}`,
+      `LMB: Shredder | RMB: Shotgun`,
+      `Space: Pixel Bomb (-1 segment)`,
     ]);
 
     const t1 = performance.now();
