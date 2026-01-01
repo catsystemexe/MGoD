@@ -8,7 +8,7 @@ export class Loop {
       this.caHz = hz;
   }
 
-  start(callbacks: { fixedUpdate: (dt: number) => void, caUpdate: () => void, render: (alpha, frameDt) => void }) {
+  start(callbacks: { fixedUpdate: (dt: number) => void, caUpdate: () => void, render: (alpha: number, frameDt: number) => void }) {
     const step = 1 / this.hz;
     
     const frame = (time: number) => {

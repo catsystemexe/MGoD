@@ -47,16 +47,10 @@ export class HUD {
     ctx.textAlign = "left";
     ctx.fillStyle = "#fff";
     ctx.font = "bold 8px sans-serif";
-    ctx.fillText(`SECTOR ${waveInfo?.current || 1}`, margin, h - margin - 6);
+
     ctx.font = "5px monospace";
     ctx.fillStyle = "#00FFFF";
-    ctx.fillText(`THREAT: ${waveInfo?.difficulty || 'STABLE'}`, margin, h - margin);
-
-    // --- BOTTOM RIGHT (Neural Link) ---
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#FF00FF";
-    ctx.font = "bold 8px sans-serif";
-    ctx.fillText(`NEURAL_LINK [${snakeLen}]`, w - margin, h - margin - 6);
+   
     
     // Show Spin Cooldown state
     ctx.font = "5px monospace";

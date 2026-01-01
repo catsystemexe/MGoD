@@ -1,46 +1,65 @@
-html, body { 
-    margin: 0; 
-    padding: 0; 
-    height: 100%; 
-    width: 100%;
-    background: #000; 
-    overflow: hidden;
-    overscroll-behavior: none; /* Prevents pull-to-refresh or bounce on Mac/Mobile */
+/* ===== MGoD base ===== */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
-/* Global disable selection */
 * {
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
-    outline: none; /* Removes focus ring from canvas */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  outline: none;
 }
 
-#game-container { 
-    width: 100vw; 
-    height: 100vh; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
+/* ===== Container & stacking ===== */
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
 }
 
-#game { 
-    width: 100%; 
-    height: 100%; 
-    display: block;
-    object-fit: contain; 
-    image-rendering: pixelated; 
-    background: #050508;
-    touch-action: none; /* Critical: disables browser gestures/scrolling on canvas */
-    cursor: crosshair;
+/* Both canvases fill viewport and stack */
+#game, #ui {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+
+  touch-action: none;
 }
 
-#crt-overlay { 
-    position: fixed; 
-    top: 0; left: 0; right: 0; bottom: 0; 
-    background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.1) 50%); 
-    background-size: 100% 3px; 
-    pointer-events: none; 
-    z-index: 1000; 
-    opacity: 0.3; 
+/* World canvas */
+#game {
+  z-index: 1;
+  background: #050508;
+  cursor: crosshair;
+}
+
+/* UI canvas */
+#ui {
+  z-index: 5;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* CRT overlay (optional) */
+#crt-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+
+  /* scanlines example */
+  background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.10) 50%);
+  background-size: 100% 3px;
+  opacity: 0.30;
 }

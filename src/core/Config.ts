@@ -1,4 +1,8 @@
+export const LOGIC_WIDTH = 320;
+export const LOGIC_HEIGHT = 224;
+export const FIXED_TIMESTEP = 1 / 60;
 export const Config = {
+  SHOW_OVERLAY: true,
   FIXED_HZ: 60,
   CA_HZ: 15, 
   WORLD_W: 1024,

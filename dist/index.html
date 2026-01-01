@@ -2,16 +2,16 @@
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <title>Game of Death — Phase 1</title>
-    <style>
-      html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
-      #game { width:100vw; height:100vh; display:block; background:#000; }
-    </style>
-    <script type="module" crossorigin src="/assets/index-DVzd6hPh.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-uKHdQazO.css">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <title>M-GOD — Phase 3: Core</title>
+    <script type="module" crossorigin src="/assets/index-CvEEsyFs.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cl7xZ0fy.css">
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <!-- <div id="crt-overlay"></div> -->
+    <div id="game-container">
+      <canvas id="game" tabindex="1"></canvas>
+      <canvas id="ui" style="display:none"></canvas>
+    </div>
   </body>
 </html>

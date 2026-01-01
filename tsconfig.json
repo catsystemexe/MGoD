@@ -11,5 +11,6 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include":["src"],
+  "exclude":["src/old_Game.ts"]
 }
