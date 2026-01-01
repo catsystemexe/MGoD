@@ -128,7 +128,13 @@ export class EnemySystem {
           e.pos.x += (b.vel.x / bSpeed) * knockStrength;
           e.pos.y += (b.vel.y / bSpeed) * knockStrength;
 
-          // 2. PARTICLE SHARDS
+          // 2. HIT PARTICLES (Feedback)
+          const hitColor = b.variant === 'mg' ? "#00FFFF" : "#FF8800";
+          for(let i=0; i<4; i++) {
+              part.add(e.pos, {x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120}, 0.2, hitColor);
+          }
+
+          // 3. PARTICLE SHARDS (Debris)
           if (b.variant === 'mg') {
               // Rainbow small shards
               const hue = Math.floor(Math.random() * 360);
@@ -144,6 +150,8 @@ export class EnemySystem {
           }
 
           if (e.hp <= 0) { 
+            // Explosion on death
+            part.add(e.pos, {x:0, y:0}, 0.8, "#FFFFFF");
             score += 100 * (e.type === 'kamikaze' ? 1 : 2); 
             if (Math.random() < 0.2) loot.spawn(e.pos);
             this.enemies.splice(i, 1); 

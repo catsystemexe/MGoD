@@ -13,18 +13,22 @@ export class SnakeSystem {
         this.maxSegments = 3; // Start with 3 bombs
         // Pre-fill to avoid empty tail at start
         for(let i=0; i<this.maxSegments; i++) {
-            this.segments.push({ pos: v2(x, y + (i+1)*5) });
+            this.segments.push({ pos: v2(x, y + (i+1)*12) });
         }
     }
 
-    update(dt: number, headPos: Vec2, velocity: Vec2) {
-        // Drag effect: Segments follow each other using Inverse Kinematics style constraint
-        const targetDist = 12; // Distance between nodes
-        let target = headPos;
+    update(dt: number, headPos: Vec2, velocity: Vec2, facing: number) {
+        // 1. Calculate Anchor Point (Where the first bomb should try to be)
+        // Offset is negative direction of facing (behind the ship). 
+        // Ship is approx 20-30px visual size, so we offset by ~24px to be at the engine.
+        const offsetDist = 24; 
+        const anchorX = headPos.x - Math.cos(facing) * offsetDist;
+        const anchorY = headPos.y - Math.sin(facing) * offsetDist;
 
         // Ensure we have enough segments
         while(this.segments.length < this.maxSegments) {
-             const last = this.segments.length > 0 ? this.segments[this.segments.length-1].pos : headPos;
+             // Spawn new segments at the location of the last segment (or anchor if empty)
+             const last = this.segments.length > 0 ? this.segments[this.segments.length-1].pos : {x: anchorX, y: anchorY};
              this.segments.push({ pos: { ...last } });
         }
         // Remove excess
@@ -32,18 +36,31 @@ export class SnakeSystem {
             this.segments.pop();
         }
 
+        // 2. Inverse Kinematics / Drag Logic
+        // The first segment follows the Anchor Point
+        // Subsequent segments follow the previous segment
+        const segmentSpacing = 14; // Distance between bombs
+
+        let targetX = anchorX;
+        let targetY = anchorY;
+
         for (let i = 0; i < this.segments.length; i++) {
             const s = this.segments[i];
-            const dx = target.x - s.pos.x;
-            const dy = target.y - s.pos.y;
+            
+            const dx = targetX - s.pos.x;
+            const dy = targetY - s.pos.y;
             const dist = Math.hypot(dx, dy);
             
-            if (dist > targetDist) {
+            // If segment is too far from target (anchor or prev segment), pull it closer
+            if (dist > segmentSpacing) {
                 const angle = Math.atan2(dy, dx);
-                s.pos.x = target.x - Math.cos(angle) * targetDist;
-                s.pos.y = target.y - Math.sin(angle) * targetDist;
+                s.pos.x = targetX - Math.cos(angle) * segmentSpacing;
+                s.pos.y = targetY - Math.sin(angle) * segmentSpacing;
             }
-            target = s.pos;
+            
+            // Set new target for the NEXT segment to be the current segment's position
+            targetX = s.pos.x;
+            targetY = s.pos.y;
         }
     }
 

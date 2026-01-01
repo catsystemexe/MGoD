@@ -1,5 +1,5 @@
-import { CAWorld } from "../../ca/CAWorld";
-
 export class EffectSystem {
-    process(ca: CAWorld) {}
+    process(ca: any) {
+        // Placeholder for CA effects
+    }
 }

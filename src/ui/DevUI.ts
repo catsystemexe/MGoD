@@ -6,19 +6,21 @@ export interface DevParams {
     genSpeed: number;
     spawnRate: number;
     timeScale: number;
+    crt: boolean;
 }
 
 export class DevUI {
     private selectedIndex = 0;
     private items = [
         { id: 'god', label: 'GOD MODE [I]', type: 'bool' },
+        { id: 'crt', label: 'CRT EFFECT', type: 'bool' },
         { id: 'size', label: 'CELL SIZE', type: 'num', min: 1.0, max: 5.0, step: 0.2 },
         { id: 'speed', label: 'GEN SPEED', type: 'num', min: 1, max: 60, step: 1 },
         { id: 'spawn', label: 'SPAWN RATE', type: 'num', min: 0.1, max: 5.0, step: 0.1 },
         { id: 'time', label: 'TIME SCALE', type: 'num', min: 0.1, max: 2.0, step: 0.1 },
     ];
 
-    updateInput(input: any, params: DevParams, callbacks: { onSizeChange: () => void, onSpeedChange: () => void }) {
+    updateInput(input: any, params: DevParams, callbacks: { onSizeChange: () => void, onSpeedChange: () => void, onCrtChange: (val: boolean) => void }) {
         if (input.wasPressed("ArrowUp")) {
             this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length;
         }
@@ -27,13 +29,15 @@ export class DevUI {
         }
 
         const item = this.items[this.selectedIndex];
-        let changed = false;
 
         if (input.wasPressed("ArrowRight") || input.wasPressed("ArrowLeft")) {
             const dir = input.wasPressed("ArrowRight") ? 1 : -1;
             
             if (item.id === 'god') {
                 params.godMode = !params.godMode;
+            } else if (item.id === 'crt') {
+                params.crt = !params.crt;
+                callbacks.onCrtChange(params.crt);
             } else if (item.id === 'size') {
                 params.cellSize = parseFloat((params.cellSize + dir * item.step!).toFixed(1));
                 if (params.cellSize < item.min!) params.cellSize = item.min!;
@@ -111,6 +115,7 @@ export class DevUI {
 
             let valStr = "";
             if (item.id === 'god') valStr = params.godMode ? "ON" : "OFF";
+            if (item.id === 'crt') valStr = params.crt ? "ON" : "OFF";
             if (item.id === 'size') valStr = params.cellSize.toFixed(1);
             if (item.id === 'speed') valStr = params.genSpeed.toString() + " Hz";
             if (item.id === 'spawn') valStr = params.spawnRate.toFixed(1) + "x";

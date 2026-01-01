@@ -43,7 +43,9 @@ export class Game {
 
   private energy = 100;
   private score = 0;
-  private state: "PLAY" | "GAME_OVER" = "PLAY";
+  private state: "PLAY" | "EXPLODING" | "GAME_OVER" = "PLAY"; // Added EXPLODING state
+  private explosionTimer = 0;
+  
   private player = { prev: v2(512, 512), cur: v2(512, 512) };
   private camPos = { prev: v2(512, 512), cur: v2(512, 512) };
   private aim = v2(0, 0);
@@ -64,7 +66,8 @@ export class Game {
       cellSize: Config.CELL_SIZE,
       genSpeed: Config.CA_HZ,
       spawnRate: Config.SPAWN_RATE_MULT,
-      timeScale: Config.TIME_SCALE
+      timeScale: Config.TIME_SCALE,
+      crt: true
   };
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -73,6 +76,13 @@ export class Game {
     this.onResize();
     this.initHandlers();
     this.resetGame();
+    // Force CRT state to apply immediately
+    this.applyCrtState();
+  }
+
+  private applyCrtState() {
+      const overlay = document.getElementById('crt-overlay');
+      if (overlay) overlay.style.display = this.devParams.crt ? 'block' : 'none';
   }
 
   onResize() {
@@ -111,6 +121,7 @@ export class Game {
     this.energy = 100;
     this.score = 0;
     this.state = "PLAY";
+    this.explosionTimer = 0;
     this.ca.seedTestPattern(Date.now());
     this.player.cur = v2(512, 512);
     this.player.prev = v2(512, 512);
@@ -156,7 +167,11 @@ export class Game {
     if (this.isDevOpen) {
         this.devUI.updateInput(this.input, this.devParams, {
             onSizeChange: () => this.reinitializeWorld(),
-            onSpeedChange: () => this.loop.setCAHz(this.devParams.genSpeed)
+            onSpeedChange: () => this.loop.setCAHz(this.devParams.genSpeed),
+            onCrtChange: (val) => {
+                const overlay = document.getElementById('crt-overlay');
+                if (overlay) overlay.style.display = val ? 'block' : 'none';
+            }
         });
     }
 
@@ -168,6 +183,26 @@ export class Game {
 
     // Apply Time Scale
     const scaledDt = dt * this.devParams.timeScale;
+
+    // --- EXPLOSION STATE LOGIC ---
+    if (this.state === "EXPLODING") {
+        this.explosionTimer += scaledDt;
+        // Slow down player during explosion
+        this.player.prev = { ...this.player.cur };
+        this.player.cur.x += this.velocity.x * scaledDt * 0.1;
+        this.player.cur.y += this.velocity.y * scaledDt * 0.1;
+        
+        // Still update world around player
+        this.particles.update(scaledDt);
+        this.projectiles.update(scaledDt, this.ca, this.particles, this.loot, this.camera, this.effects, this.enemies, undefined, undefined);
+        this.camPos.prev = { ...this.camPos.cur };
+        this.camPos.cur = { ...this.player.cur };
+
+        if (this.explosionTimer > 1.2) { // Duration of explosion animation
+            this.state = "GAME_OVER";
+        }
+        return;
+    }
 
     this.handleMovement(scaledDt);
     this.director.update(scaledDt, this.enemies);
@@ -181,7 +216,10 @@ export class Game {
           this.damageFlash = 1.0;
           if (this.energy <= 0) {
               this.energy = 0;
-              this.state = "GAME_OVER";
+              this.state = "EXPLODING"; // Trigger explosion instead of immediate game over
+              this.explosionTimer = 0;
+              // Add initial explosion particles
+              this.particles.add(this.player.cur, {x:0, y:0}, 1.0, "#FFFFFF");
           }
     };
 
@@ -208,8 +246,8 @@ export class Game {
         }
     }
 
-    // Snake Update
-    this.snake.update(scaledDt, this.player.cur, this.velocity);
+    // Snake Update (Updated to pass facing)
+    this.snake.update(scaledDt, this.player.cur, this.velocity, this.facing);
 
     // Spin Attack Collision
     if (this.isSpinning) {
@@ -315,7 +353,15 @@ export class Game {
     this.enemies.render(ctx, cam);
     this.loot.render(ctx, cam);
     this.particles.render(this.renderer, cam);
-    this.renderer.drawPlayer(p, cam, this.facing);
+
+    // Determine turn state for animation
+    let turnState = 0; 
+    if (this.input.isDown("KeyA")) turnState = -1;
+    if (this.input.isDown("KeyD")) turnState = 1;
+
+    // Modified drawPlayer call to include state, timer and turn info
+    this.renderer.drawPlayer(p, cam, this.facing, this.state, this.explosionTimer, turnState);
+    
     this.renderer.drawAim(this.aim, cam);
     this.renderer.drawShootingOverlay(this.lmbDown); // Blue shooting tint
     this.renderer.drawDamageVignette(this.damageFlash);

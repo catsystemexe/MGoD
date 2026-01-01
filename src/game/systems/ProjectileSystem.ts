@@ -60,19 +60,26 @@ export class ProjectileSystem {
           if (b.life <= 0) {
               // HUGE Particle Explosion
               // Core blast
-              particles.add(b.pos, {x:0, y:0}, 0.8, "#FFFFFF");
-              particles.add(b.pos, {x:0, y:0}, 0.6, "#FFFFAA");
+              particles.add(b.pos, {x:0, y:0}, 1.2, "#FFFFFF");
+              particles.add(b.pos, {x:0, y:0}, 0.9, "#FFFFAA");
               
-              // Expanding ring of fire
-              for(let k=0; k<60; k++) {
+              // Expanding ring of fire (increased count)
+              for(let k=0; k<150; k++) {
                   const ang = Math.random() * Math.PI * 2;
-                  const spd = 100 + Math.random() * 400;
+                  const spd = 100 + Math.random() * 500;
                   const color = Math.random() > 0.5 ? "#FF4400" : "#FFAA00";
-                  particles.add(b.pos, {x:Math.cos(ang)*spd, y:Math.sin(ang)*spd}, 0.5 + Math.random(), color);
+                  particles.add(b.pos, {x:Math.cos(ang)*spd, y:Math.sin(ang)*spd}, 0.6 + Math.random(), color);
+              }
+              
+              // Shockwave effect (particles expanding in a circle)
+              for(let k=0; k<36; k++) {
+                   const ang = (k / 36) * Math.PI * 2;
+                   const spd = 400;
+                   particles.add(b.pos, {x:Math.cos(ang)*spd, y:Math.sin(ang)*spd}, 0.8, "#FFFF00");
               }
 
-              // Destroy Terrain (scaled)
-              const radius = 3; 
+              // Destroy Terrain (scaled up)
+              const radius = 5; 
               for(let dy=-radius; dy<=radius; dy++) {
                   for(let dx=-radius; dx<=radius; dx++) {
                       if (dx*dx + dy*dy < radius*radius) {
@@ -81,7 +88,7 @@ export class ProjectileSystem {
                   }
               }
               // Damage Enemies
-              score += enemies.applyAreaDamage(b.pos, 80, 10);
+              score += enemies.applyAreaDamage(b.pos, 100, 10);
               this.bullets.splice(i, 1);
           }
           continue;

@@ -1,6 +1,7 @@
 import { Vec2 } from "../utils/math";
 import { CAWorld } from "../ca/CAWorld";
 import { Config } from "../core/Config";
+import { PALETTE, SHIP_IDLE, SHIP_LEFT, SHIP_RIGHT, FLAME_FRAMES, EXPLOSION_FRAMES } from "./Sprites";
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -17,10 +18,10 @@ export class Renderer {
     this.ctx.fillStyle = "#030305";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    // Jemná mřížka na pozadí - méně častá pro přehlednost při malých buňkách
+    // Jemná mřížka na pozadí
     this.ctx.strokeStyle = "rgba(0, 150, 255, 0.04)";
     this.ctx.lineWidth = 1;
-    const step = 64; // Větší rozestup mřížky
+    const step = 64; 
     for(let x=0; x<this.canvas.width; x+=step) {
         this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); this.ctx.stroke();
     }
@@ -34,7 +35,6 @@ export class Renderer {
     const viewH = this.canvas.height;
     const cs = Config.CELL_SIZE;
 
-    // Calculate visible grid range
     const offX = cam.x - viewW / 2;
     const offY = cam.y - viewH / 2;
 
@@ -43,7 +43,7 @@ export class Renderer {
     const endX = startX + Math.ceil(viewW / cs) + 1;
     const endY = startY + Math.ceil(viewH / cs) + 1;
 
-    this.ctx.fillStyle = "#90EE90"; // Light Green requested
+    this.ctx.fillStyle = "#90EE90"; 
 
     for (let y = startY; y < endY; y++) {
       if (y < 0 || y >= ca.getHeight()) continue;
@@ -51,10 +51,8 @@ export class Renderer {
         if (x < 0 || x >= ca.getWidth()) continue;
 
         if (ca.isAlive(x, y)) {
-           // World pos is x * cs. Screen pos is World pos - offX
            const screenX = Math.floor(x * cs - offX);
            const screenY = Math.floor(y * cs - offY);
-           // Draw square
            this.ctx.fillRect(screenX, screenY, cs, cs);
         }
       }
@@ -70,7 +68,6 @@ export class Renderer {
     for(const b of bullets) {
         if (b.type === 'bomb') {
             this.ctx.fillStyle = "#FF0000";
-            // Scale up bombs
             this.ctx.fillRect(Math.floor(b.pos.x - offX) - 6, Math.floor(b.pos.y - offY) - 6, 12, 12);
             this.ctx.fillStyle = "#FFF";
         } else if (b.type === 'enemy_bomb') {
@@ -80,13 +77,32 @@ export class Renderer {
             this.ctx.fill();
         } else {
             this.ctx.fillStyle = "#FFFFFF";
-            // Bullets 4px size (2x2 cells)
             this.ctx.fillRect(Math.floor(b.pos.x - offX) - 2, Math.floor(b.pos.y - offY) - 2, 4, 4);
         }
     }
   }
 
-  drawPlayer(p: Vec2, cam: Vec2, facing: number) {
+  // --- PROCEDURAL SPRITE DRAWING ---
+  
+  private drawPixelSprite(data: number[][], pixelScale: number, offsetX: number, offsetY: number) {
+      const rows = data.length;
+      const cols = data[0].length;
+      
+      const drawX = offsetX - (cols * pixelScale) / 2;
+      const drawY = offsetY - (rows * pixelScale) / 2;
+
+      for(let r=0; r<rows; r++) {
+          for(let c=0; c<cols; c++) {
+              const colorCode = data[r][c];
+              if (colorCode !== 0) {
+                  this.ctx.fillStyle = PALETTE[colorCode] || "#FF00FF";
+                  this.ctx.fillRect(drawX + c * pixelScale, drawY + r * pixelScale, pixelScale, pixelScale);
+              }
+          }
+      }
+  }
+
+  drawPlayer(p: Vec2, cam: Vec2, facing: number, state: string, explosionTime: number, turnState: number) {
     const viewW = this.canvas.width;
     const viewH = this.canvas.height;
     const x = Math.floor(p.x - (cam.x - viewW/2));
@@ -94,24 +110,24 @@ export class Renderer {
 
     this.ctx.save();
     this.ctx.translate(x, y);
-    this.ctx.rotate(facing);
+    this.ctx.rotate(facing + Math.PI/2);
     
-    // Scale 1x (Native resolution)
-    this.ctx.scale(1, 1);
-    
-    // Hráč - Neonový trojúhelník
-    this.ctx.shadowBlur = 5;
-    this.ctx.shadowColor = "#00AAFF";
-    this.ctx.fillStyle = "#00AAFF";
-    this.ctx.beginPath();
-    this.ctx.moveTo(8, 0);
-    this.ctx.lineTo(-5, -6);
-    this.ctx.lineTo(-5, 6);
-    this.ctx.fill();
-    
-    // Výfuk
-    this.ctx.fillStyle = "#00FFFF";
-    this.ctx.fillRect(-7, -2, 2, 4);
+    const pxScale = 3; 
+
+    if (state === "EXPLODING") {
+        const totalFrames = EXPLOSION_FRAMES.length;
+        const frameIndex = Math.min(totalFrames - 1, Math.floor(explosionTime * 8));
+        this.drawPixelSprite(EXPLOSION_FRAMES[frameIndex], pxScale, 0, 0);
+    } else {
+        const flameFrame = Math.floor(Date.now() / 50) % FLAME_FRAMES.length;
+        this.drawPixelSprite(FLAME_FRAMES[flameFrame], pxScale, 0, 8 * pxScale);
+
+        let sprite = SHIP_IDLE;
+        if (turnState === -1) sprite = SHIP_LEFT;
+        if (turnState === 1) sprite = SHIP_RIGHT;
+        
+        this.drawPixelSprite(sprite, pxScale, 0, 0);
+    }
     
     this.ctx.restore();
   }
@@ -122,7 +138,6 @@ export class Renderer {
     const offX = cam.x - viewW/2;
     const offY = cam.y - viewH/2;
 
-    // Draw connecting line
     this.ctx.beginPath();
     this.ctx.strokeStyle = "#550000";
     this.ctx.lineWidth = 2; 
@@ -135,13 +150,11 @@ export class Renderer {
         this.ctx.stroke();
     }
 
-    // Draw Bombs
     for(const s of segments) {
         this.ctx.fillStyle = "#AA0000";
         this.ctx.beginPath();
         this.ctx.arc(s.pos.x - offX, s.pos.y - offY, 5, 0, Math.PI*2); 
         this.ctx.fill();
-        // Core
         this.ctx.fillStyle = "#FF0000";
         this.ctx.fillRect(s.pos.x - offX - 1, s.pos.y - offY - 1, 2, 2);
     }
@@ -163,9 +176,7 @@ export class Renderer {
   }
   
   drawShootingOverlay(active: boolean) {
-    if (!active) return;
-    this.ctx.fillStyle = "rgba(0, 100, 255, 0.1)"; // Blue tint when firing
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+     // Disabled
   }
 
   drawDamageVignette(alpha: number) {

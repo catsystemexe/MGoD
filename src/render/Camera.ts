@@ -1,3 +1,1 @@
-export class Camera {
-    // Placeholder
-}
+export class Camera {}
