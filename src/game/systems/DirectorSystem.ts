@@ -1,57 +1,40 @@
-import { EnemySystem } from "./EnemySystem";
-
-type WaveDef = {
-  id: number;
-  name: string;
-  duration: number; // Sekundy
-  spawnRate: number;
-  maxEnemies: number;
-  types: ("skiff" | "miner")[];
-};
-
-const WAVES: WaveDef[] = [
-  { id: 1, name: "WARMUP", duration: 15, spawnRate: 3.0, maxEnemies: 3, types: ["miner"] },
-  { id: 2, name: "CONTACT", duration: 20, spawnRate: 2.5, maxEnemies: 5, types: ["skiff"] },
-  { id: 3, name: "CHAOS", duration: 30, spawnRate: 1.5, maxEnemies: 8, types: ["miner", "skiff"] },
-  { id: 4, name: "SURVIVAL", duration: 9999, spawnRate: 1.0, maxEnemies: 12, types: ["miner", "skiff"] }
-];
+import { Config } from "../../core/Config";
 
 export class DirectorSystem {
-  private currentWaveIdx = 0;
-  private waveTimer = 0;
-  private waveInfo = "";
+  private timer = 2;
+  private wave = 1;
+  update(dt: number, enemies: any) {
+    this.timer -= dt;
+    if (this.timer <= 0) { 
+        // Spawn around player but not too close
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 300 + Math.random() * 200;
+        const x = 512 + Math.cos(angle) * dist;
+        const y = 512 + Math.sin(angle) * dist;
+        
+        // Random enemy type selection
+        const rnd = Math.random();
+        let type = 'kamikaze';
+        
+        // UPRAVENO: Blob (Orbiter) dostupný hned od začátku (30% šance)
+        if (rnd > 0.7) type = 'orbiter';
+        
+        // UPRAVENO: Turret dostupný už od 2. vlny (přepisuje předchozí volbu)
+        if (this.wave >= 2 && rnd > 0.85) type = 'turret';
 
-  constructor() {}
-
-  reset(enemySystem: EnemySystem) {
-    this.currentWaveIdx = 0;
-    this.waveTimer = 0;
-    this.startWave(enemySystem);
-  }
-
-  update(dtSec: number, enemySystem: EnemySystem) {
-    const wave = WAVES[this.currentWaveIdx];
-    this.waveTimer += dtSec;
-
-    // Check wave end
-    if (this.waveTimer >= wave.duration && this.currentWaveIdx < WAVES.length - 1) {
-      this.currentWaveIdx++;
-      this.waveTimer = 0;
-      this.startWave(enemySystem);
+        enemies.spawn(x, y, type); 
+        
+        // Base delay * Spawn Rate Multiplier (Lower multiplier = faster spawns)
+        const baseDelay = Math.max(0.5, 2.0 - (this.wave * 0.1));
+        // Inverse the multiplier so higher spawn rate number = faster
+        const rate = Math.max(0.1, 1.0 / (Config.SPAWN_RATE_MULT || 1.0));
+        
+        this.timer = baseDelay * rate;
+        
+        // UPRAVENO: Rychlejší nárůst obtížnosti (25% šance na zvýšení vlny)
+        if (Math.random() < 0.25) this.wave++;
     }
-
-    this.waveInfo = `WAVE ${wave.id}: ${wave.name}`;
   }
-
-  private startWave(enemySystem: EnemySystem) {
-    const wave = WAVES[this.currentWaveIdx];
-    console.log(`Starting Wave ${wave.id}: ${wave.name}`);
-    enemySystem.setDifficulty(wave.spawnRate, wave.maxEnemies, wave.types);
-  }
-
-  getHUDInfo(): string {
-    const wave = WAVES[this.currentWaveIdx];
-    const timeLeft = Math.max(0, wave.duration - this.waveTimer);
-    return `${this.waveInfo} (${timeLeft.toFixed(0)}s)`;
-  }
+  reset(enemies: any) { this.timer = 2; this.wave = 1; }
+  getHUDInfo() { return { current: this.wave, difficulty: 'RISING' }; }
 }

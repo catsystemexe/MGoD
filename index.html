@@ -2,15 +2,15 @@
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <title>Game of Death — Phase 1</title>
-    <style>
-      html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
-      #game { width:100vw; height:100vh; display:block; background:#000; }
-    </style>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <title>M-GOD — Phase 3: Core</title>
+    <link rel="stylesheet" href="/src/style.css">
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <div id="crt-overlay"></div>
+    <div id="game-container">
+      <canvas id="game" tabindex="1"></canvas>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

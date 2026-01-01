@@ -1,275 +1,198 @@
-// ... (začátek souboru stejný, imports atd.)
-import { Config } from "../core/Config";
-import { CAWorld } from "../ca/CAWorld";
 import { Vec2 } from "../utils/math";
-import { Skins } from "./Skins"; 
+import { CAWorld } from "../ca/CAWorld";
+import { Config } from "../core/Config";
 
 export class Renderer {
-  // ... (všechny metody až po drawSnake zůstávají stejné, zkopíruj si je nebo nech původní)
-  // ... (konstruktor, resize, clear, drawGrid, drawCA, drawStableChunks, drawBullets, drawPlayer, drawAim, drawPickups)
-
-  // --- drawBullets, drawPlayer, drawAim atd. musí v souboru zůstat ---
-  // (z důvodu délky vypisuji jen změněnou metodu drawSnake, ale vlož to do třídy)
-
   private ctx: CanvasRenderingContext2D;
-  private cellSize = 4;
-  private width = 0;
-  private height = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) throw new Error("Failed to get 2D context");
-    this.ctx = ctx;
-    this.resize();
-    window.addEventListener("resize", () => this.resize());
+    this.ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })!;
+    this.ctx.imageSmoothingEnabled = false;
   }
 
-  private resize() {
-    const dpr = window.devicePixelRatio || 1;
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-    this.canvas.width = this.width * dpr;
-    this.canvas.height = this.height * dpr;
-  }
-
-  setCellSize(s: number) { this.cellSize = s; }
-  getCellSize() { return this.cellSize; }
   getContext() { return this.ctx; }
-  getDebug() { return { w: this.width, h: this.height }; }
+  getDebug() { return { w: this.canvas.width, h: this.canvas.height }; }
 
   clear() {
-    this.ctx.fillStyle = "#050505"; 
+    this.ctx.fillStyle = "#030305";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Jemná mřížka na pozadí - méně častá pro přehlednost při malých buňkách
+    this.ctx.strokeStyle = "rgba(0, 150, 255, 0.04)";
+    this.ctx.lineWidth = 1;
+    const step = 64; // Větší rozestup mřížky
+    for(let x=0; x<this.canvas.width; x+=step) {
+        this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.canvas.height); this.ctx.stroke();
+    }
+    for(let y=0; y<this.canvas.height; y+=step) {
+        this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.canvas.width, y); this.ctx.stroke();
+    }
+  }
+
+  drawCA(ca: CAWorld, cam: Vec2) {
+    const viewW = this.canvas.width;
+    const viewH = this.canvas.height;
+    const cs = Config.CELL_SIZE;
+
+    // Calculate visible grid range
+    const offX = cam.x - viewW / 2;
+    const offY = cam.y - viewH / 2;
+
+    const startX = Math.floor(offX / cs);
+    const startY = Math.floor(offY / cs);
+    const endX = startX + Math.ceil(viewW / cs) + 1;
+    const endY = startY + Math.ceil(viewH / cs) + 1;
+
+    this.ctx.fillStyle = "#90EE90"; // Light Green requested
+
+    for (let y = startY; y < endY; y++) {
+      if (y < 0 || y >= ca.getHeight()) continue;
+      for (let x = startX; x < endX; x++) {
+        if (x < 0 || x >= ca.getWidth()) continue;
+
+        if (ca.isAlive(x, y)) {
+           // World pos is x * cs. Screen pos is World pos - offX
+           const screenX = Math.floor(x * cs - offX);
+           const screenY = Math.floor(y * cs - offY);
+           // Draw square
+           this.ctx.fillRect(screenX, screenY, cs, cs);
+        }
+      }
+    }
+  }
+
+  drawBullets(bullets: any[], cam: Vec2) {
+    const viewW = this.canvas.width;
+    const viewH = this.canvas.height;
+    const offX = cam.x - viewW/2;
+    const offY = cam.y - viewH/2;
+
+    for(const b of bullets) {
+        if (b.type === 'bomb') {
+            this.ctx.fillStyle = "#FF0000";
+            // Scale up bombs
+            this.ctx.fillRect(Math.floor(b.pos.x - offX) - 6, Math.floor(b.pos.y - offY) - 6, 12, 12);
+            this.ctx.fillStyle = "#FFF";
+        } else if (b.type === 'enemy_bomb') {
+            this.ctx.fillStyle = "#FF8800";
+            this.ctx.beginPath();
+            this.ctx.arc(b.pos.x - offX, b.pos.y - offY, 8, 0, Math.PI*2);
+            this.ctx.fill();
+        } else {
+            this.ctx.fillStyle = "#FFFFFF";
+            // Bullets 4px size (2x2 cells)
+            this.ctx.fillRect(Math.floor(b.pos.x - offX) - 2, Math.floor(b.pos.y - offY) - 2, 4, 4);
+        }
+    }
+  }
+
+  drawPlayer(p: Vec2, cam: Vec2, facing: number) {
+    const viewW = this.canvas.width;
+    const viewH = this.canvas.height;
+    const x = Math.floor(p.x - (cam.x - viewW/2));
+    const y = Math.floor(p.y - (cam.y - viewH/2));
+
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(facing);
+    
+    // Scale 1x (Native resolution)
+    this.ctx.scale(1, 1);
+    
+    // Hráč - Neonový trojúhelník
+    this.ctx.shadowBlur = 5;
+    this.ctx.shadowColor = "#00AAFF";
+    this.ctx.fillStyle = "#00AAFF";
+    this.ctx.beginPath();
+    this.ctx.moveTo(8, 0);
+    this.ctx.lineTo(-5, -6);
+    this.ctx.lineTo(-5, 6);
+    this.ctx.fill();
+    
+    // Výfuk
+    this.ctx.fillStyle = "#00FFFF";
+    this.ctx.fillRect(-7, -2, 2, 4);
+    
+    this.ctx.restore();
+  }
+
+  drawSnake(segments: any[], cam: Vec2) {
+    const viewW = this.canvas.width;
+    const viewH = this.canvas.height;
+    const offX = cam.x - viewW/2;
+    const offY = cam.y - viewH/2;
+
+    // Draw connecting line
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = "#550000";
+    this.ctx.lineWidth = 2; 
+    if (segments.length > 0) {
+        for(let i=0; i<segments.length; i++) {
+             const s = segments[i];
+             if (i===0) this.ctx.moveTo(s.pos.x - offX, s.pos.y - offY);
+             else this.ctx.lineTo(s.pos.x - offX, s.pos.y - offY);
+        }
+        this.ctx.stroke();
+    }
+
+    // Draw Bombs
+    for(const s of segments) {
+        this.ctx.fillStyle = "#AA0000";
+        this.ctx.beginPath();
+        this.ctx.arc(s.pos.x - offX, s.pos.y - offY, 5, 0, Math.PI*2); 
+        this.ctx.fill();
+        // Core
+        this.ctx.fillStyle = "#FF0000";
+        this.ctx.fillRect(s.pos.x - offX - 1, s.pos.y - offY - 1, 2, 2);
+    }
+  }
+
+  drawAim(aim: Vec2, cam: Vec2) {
+    const viewW = this.canvas.width;
+    const viewH = this.canvas.height;
+    const x = Math.floor(aim.x - (cam.x - viewW/2));
+    const y = Math.floor(aim.y - (cam.y - viewH/2));
+    
+    this.ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(x-5, y-5, 10, 10);
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y-2); this.ctx.lineTo(x, y+2);
+    this.ctx.moveTo(x-2, y); this.ctx.lineTo(x+2, y);
+    this.ctx.stroke();
+  }
+  
+  drawShootingOverlay(active: boolean) {
+    if (!active) return;
+    this.ctx.fillStyle = "rgba(0, 100, 255, 0.1)"; // Blue tint when firing
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  // ... ZDE VLOŽ PŮVODNÍ METODY drawGrid, drawCA, drawStableChunks, drawBullets, drawPlayer, drawAim, drawPickups ...
-  // Pro úplnost vkládám jen ty kritické pro kompilaci, pokud přepíšeš celý soubor:
-
-  drawGrid(cam: Vec2) { /* viz předchozí verze */ 
-    // ... (zkopíruj z minula nebo si domysli - kód se nezměnil)
-    const dpr = window.devicePixelRatio || 1;
-    const cs = this.cellSize;
-    const viewW = this.width;
-    const viewH = this.height;
-    const startX = Math.floor(cam.x - (viewW / 2) / cs);
-    const startY = Math.floor(cam.y - (viewH / 2) / cs);
-    const endX = startX + (viewW / cs) + 1;
-    const endY = startY + (viewH / cs) + 1;
-    this.ctx.save();
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); 
-    this.ctx.strokeStyle = "#111111"; 
-    this.ctx.lineWidth = 1;
-    this.ctx.beginPath();
-    for (let x = startX; x <= endX; x++) {
-       const screenX = Math.floor((x - cam.x) * cs + viewW / 2);
-       if (screenX >= 0 && screenX <= viewW) {
-         this.ctx.moveTo(screenX + 0.5, 0);
-         this.ctx.lineTo(screenX + 0.5, viewH);
-       }
-    }
-    for (let y = startY; y <= endY; y++) {
-       const screenY = Math.floor((y - cam.y) * cs + viewH / 2);
-       if (screenY >= 0 && screenY <= viewH) {
-         this.ctx.moveTo(0, screenY + 0.5);
-         this.ctx.lineTo(viewW, screenY + 0.5);
-       }
-    }
-    this.ctx.stroke();
-    this.ctx.fillStyle = "#222222"; 
-    const dotStep = 4; 
-    const gridStartX = Math.floor(startX / dotStep) * dotStep;
-    const gridStartY = Math.floor(startY / dotStep) * dotStep;
-    for (let y = gridStartY; y <= endY; y += dotStep) {
-        const screenY = Math.floor((y - cam.y) * cs + viewH / 2);
-        if (screenY < -2 || screenY > viewH + 2) continue;
-        for (let x = gridStartX; x <= endX; x += dotStep) {
-            const screenX = Math.floor((x - cam.x) * cs + viewW / 2);
-            if (screenX < -2 || screenX > viewW + 2) continue;
-            this.ctx.fillRect(screenX - 1, screenY - 1, 2, 2);
-        }
-    }
-    this.ctx.restore();
+  drawDamageVignette(alpha: number) {
+    if (alpha <= 0) return;
+    this.ctx.fillStyle = `rgba(255, 0, 0, ${alpha * 0.15})`;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  drawCA(ca: CAWorld, cam: Vec2) { /* viz předchozí verze */ 
-    const dpr = window.devicePixelRatio || 1;
-    const cs = this.cellSize;
-    const ctx = this.ctx;
-    const viewW = this.width;
-    const viewH = this.height;
-    const startX = Math.floor(cam.x - (viewW / 2) / cs);
-    const startY = Math.floor(cam.y - (viewH / 2) / cs);
-    const endX = startX + (viewW / cs) + 2;
-    const endY = startY + (viewH / cs) + 2;
-    const x0 = Math.max(0, startX);
-    const y0 = Math.max(0, startY);
-    const x1 = Math.min(ca.w, endX);
-    const y1 = Math.min(ca.h, endY);
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const colorAlive = "#33FFCC"; 
-    ctx.fillStyle = colorAlive;
-    ctx.beginPath();
-    for(let y = y0; y < y1; y++) {
-        for(let x = x0; x < x1; x++) {
-            if(ca.isAlive(x, y)) {
-                const sx = Math.floor((x - cam.x) * cs + viewW / 2);
-                const sy = Math.floor((y - cam.y) * cs + viewH / 2);
-                ctx.rect(sx, sy, cs - 1, cs - 1);
-            }
-        }
-    }
-    ctx.fill();
-    ctx.restore();
-  }
-
-  drawStableChunks(chunks: any[], cam: Vec2) { /* viz předchozí verze */ 
-      const dpr = window.devicePixelRatio || 1;
-      const cs = this.cellSize;
-      const viewW = this.width;
-      const viewH = this.height;
-      const time = performance.now() * 0.0008; 
-      this.ctx.save();
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const blockSize = 8; 
-      const startX = Math.floor(cam.x - (viewW / 2) / cs);
-      const startY = Math.floor(cam.y - (viewH / 2) / cs);
-      const endX = startX + (viewW / cs) + 1;
-      const endY = startY + (viewH / cs) + 1;
-      const gridStartX = Math.floor(startX / blockSize) * blockSize;
-      const gridStartY = Math.floor(startY / blockSize) * blockSize;
-      for (let y = gridStartY; y <= endY; y += blockSize) {
-          for (let x = gridStartX; x <= endX; x += blockSize) {
-              const v1 = Math.sin(x * 0.015 + time);
-              const v2 = Math.sin(y * 0.02 - time * 0.8);
-              const v3 = Math.sin((x + y) * 0.01 + time * 0.5);
-              const waveSum = v1 + v2 + v3; 
-              let intensity = (waveSum + 3) / 6; 
-              intensity = intensity * intensity; 
-              const maxAlpha = 0.45; 
-              const alpha = intensity * maxAlpha;
-              if (alpha < 0.02) continue;
-              const sx = Math.floor((x - cam.x) * cs + viewW / 2);
-              const sy = Math.floor((y - cam.y) * cs + viewH / 2);
-              const size = blockSize * cs;
-              this.ctx.fillStyle = `rgba(20, 100, 255, ${alpha.toFixed(3)})`;
-              this.ctx.fillRect(sx, sy, size + 1, size + 1);
-          }
-      }
-      this.ctx.restore();
-  }
-
-  drawBullets(bullets: any[], cam: Vec2) { /* viz předchozí verze */ 
-    const dpr = window.devicePixelRatio || 1;
-    const cs = this.cellSize;
-    const viewW = this.width;
-    const viewH = this.height;
-    this.ctx.save();
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for(const b of bullets) {
-        const sx = (b.x - cam.x) * cs + viewW / 2;
-        const sy = (b.y - cam.y) * cs + viewH / 2;
-        this.ctx.fillStyle = "#FFF";
-        this.ctx.beginPath();
-        this.ctx.arc(sx, sy, b.r * cs, 0, Math.PI*2);
-        this.ctx.fill();
-    }
-    this.ctx.restore();
-  }
-
-  drawPlayer(p: Vec2, cam: Vec2, facing: number) { /* viz předchozí verze */ 
-      const dpr = window.devicePixelRatio || 1;
-      const cs = this.cellSize;
-      const viewW = this.width;
-      const viewH = this.height;
-      const sx = (p.x - cam.x) * cs + viewW / 2;
-      const sy = (p.y - cam.y) * cs + viewH / 2;
-      const screenPos = { x: sx, y: sy };
-      this.ctx.save();
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      Skins.advancedV1(this.ctx, screenPos, facing, cs);
-      this.ctx.restore();
-  }
-
-  drawAim(aim: Vec2, cam: Vec2) { /* viz předchozí verze */ 
-      const dpr = window.devicePixelRatio || 1;
-      const cs = this.cellSize;
-      const viewW = this.width;
-      const viewH = this.height;
-      const sx = Math.floor((aim.x - cam.x) * cs + viewW / 2);
-      const sy = Math.floor((aim.y - cam.y) * cs + viewH / 2);
-      this.ctx.save();
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-      this.ctx.lineWidth = 1;
-      this.ctx.beginPath();
-      const r = 4 * cs;
-      this.ctx.arc(sx, sy, r, 0, Math.PI*2);
-      this.ctx.moveTo(sx - r - 2, sy);
-      this.ctx.lineTo(sx + r + 2, sy);
-      this.ctx.moveTo(sx, sy - r - 2);
-      this.ctx.lineTo(sx, sy + r + 2);
-      this.ctx.stroke();
-      this.ctx.restore();
-  }
-
-  drawPickups(pickups: any[], cam: Vec2) {}
-
-  // --- UPRAVENO PRO "Bombu na zadku" a "Magnetický řetěz" ---
-  drawSnake(segments: any[], cam: Vec2, playerFacing: number) {
-      if (segments.length === 0) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const cs = this.cellSize;
-      const viewW = this.width;
-      const viewH = this.height;
-
-      this.ctx.save();
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // 1. Spojovací paprsek (JEN mezi bombami, ne k lodi)
-      // segments[length-1] je HLAVA = 1. Bomba
-      if (segments.length > 1) {
-          const time = performance.now() * 0.005;
-          const pulse = (Math.sin(time) + 1) / 2; 
-          const alpha = 0.4 + pulse * 0.4;
-
-          this.ctx.strokeStyle = `rgba(0, 255, 255, ${alpha.toFixed(2)})`; 
-          this.ctx.lineWidth = 2;
-          this.ctx.shadowBlur = 10;
-          this.ctx.shadowColor = "#00FFFF"; 
-
-          this.ctx.beginPath();
-
-          // Začneme od 1. bomby (hlavy)
-          const head = segments[segments.length-1];
-          const headSx = (head.x - cam.x) * cs + viewW / 2;
-          const headSy = (head.y - cam.y) * cs + viewH / 2;
-          this.ctx.moveTo(headSx, headSy);
-
-          // Čára ke všem ostatním
-          for(let i=segments.length-2; i>=0; i--) {
-              const s = segments[i];
-              const sx = (s.x - cam.x) * cs + viewW / 2;
-              const sy = (s.y - cam.y) * cs + viewH / 2;
-              this.ctx.lineTo(sx, sy);
-          }
-          this.ctx.stroke();
-
-          // Reset shadow
-          this.ctx.shadowBlur = 0;
-      }
-
-      // 2. Vykreslení VŠECH segmentů jako bomb (včetně hlavy, ta je teď 1. bomba)
-      for(let i=segments.length-1; i>=0; i--) {
-          const s = segments[i];
-          const sx = (s.x - cam.x) * cs + viewW / 2;
-          const sy = (s.y - cam.y) * cs + viewH / 2;
-          const pos = { x: sx, y: sy };
-
-          Skins.bomb(this.ctx, pos, cs);
-      }
-
-      this.ctx.restore();
+  drawGameOver(score: number) {
+     this.ctx.fillStyle = "rgba(0,0,0,0.85)";
+     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+     
+     this.ctx.textAlign = "center";
+     
+     this.ctx.fillStyle = "#FF0055";
+     this.ctx.font = "bold 40px monospace";
+     this.ctx.shadowBlur = 10;
+     this.ctx.shadowColor = "#FF0055";
+     this.ctx.fillText("SYSTEM FAILURE", this.canvas.width/2, this.canvas.height/2 - 20);
+     this.ctx.shadowBlur = 0;
+     
+     this.ctx.fillStyle = "#FFFFFF";
+     this.ctx.font = "20px monospace";
+     this.ctx.fillText(`FINAL DATA: ${score}`, this.canvas.width/2, this.canvas.height/2 + 20);
+     
+     this.ctx.fillStyle = "#00FFFF";
+     this.ctx.font = "12px monospace";
+     this.ctx.fillText("PRESS 'Y' TO REBOOT", this.canvas.width/2, this.canvas.height/2 + 60);
   }
 }

@@ -3,7 +3,7 @@ modules = ["nodejs-20", "web"]
 
 [nix]
 channel = "stable-24_11"
-packages = ["static-web-server", "nano", "imagemagick_light"]
+packages = ["static-web-server", "nano", "imagemagick_light", "zip"]
 
 [deployment]
 publicDir = "/"

@@ -4,9 +4,7 @@ import { Input } from "./input/Input";
 import { Renderer } from "./render/Renderer";
 import { Camera } from "./render/Camera";
 import { CAWorld } from "./ca/CAWorld";
-import { Overlay } from "./debug/Overlay";
-import { Perf } from "./debug/Perf";
-import { Vec2, v2, lerpV2 } from "./utils/math";
+import { v2, lerpV2 } from "./utils/math";
 
 // Systems
 import { ParticleSystem } from "./game/systems/ParticleSystem";
@@ -16,32 +14,25 @@ import { WeaponsSystem } from "./game/systems/WeaponsSystem";
 import { EnemySystem } from "./game/systems/EnemySystem";
 import { DirectorSystem } from "./game/systems/DirectorSystem"; 
 import { LootSystem } from "./game/systems/LootSystem"; 
-import { PlayerState } from "./game/types";
-
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function randInt(r: () => number, min: number, max: number): number {
-  if (max < min) [min, max] = [max, min];
-  const u = r();
-  return Math.floor(min + u * (max - min + 1));
-}
+import { EffectSystem } from "./game/systems/EffectSystem"; 
+import { HUD } from "./ui/HUD";
+import { DevUI, DevParams } from "./ui/DevUI";
 
 export class Game {
   private loop = new Loop(Config.FIXED_HZ, Config.CA_HZ);
   private input: Input;
   private renderer: Renderer;
   private camera = new Camera();
-  private overlay = new Overlay();
-  private perf = new Perf();
+  private hud = new HUD(); 
+  private devUI = new DevUI();
 
-  // --- Systems ---
+  private virtualW = 640;
+  private virtualH = 360;
+
+  // CA World dimensions are now scaled down by CELL_SIZE
+  private ca = new CAWorld(Math.ceil(Config.WORLD_W / Config.CELL_SIZE), Math.ceil(Config.WORLD_H / Config.CELL_SIZE));
+  private effects = new EffectSystem();
+  
   private particles = new ParticleSystem();
   private projectiles = new ProjectileSystem();
   private snake = new SnakeSystem();
@@ -50,396 +41,290 @@ export class Game {
   private director = new DirectorSystem();
   private loot = new LootSystem(); 
 
-  // --- GAME STATE ---
-  private state: "PLAY" | "GAME_OVER" = "PLAY";
-  private gameOverReason = "";
-  
   private energy = 100;
-  private energyMax = 100;
-  private damagePerSec = 30; 
-  private invuln = 0; 
   private score = 0;
-
-  private paused = false;
-  private stepFixed = 0;
-  private stepCA = 0;
-
-  private aim = { x: 0, y: 0 };
-  private facing = 0; 
-  private seed: number;
-  private r: () => number;
-
-  private player: PlayerState = { prev: v2(100, 100), cur: v2(100, 100) };
-  private camPrev = v2(0, 0);
-  private camCur = v2(0, 0);
-
-  private ca = new CAWorld(Config.WORLD_W, Config.WORLD_H);
-
-  private fixedTicks = 0;
-  private caTicks = 0;
-
-  private pickups: { x: number; y: number }[] = [];
+  private state: "PLAY" | "GAME_OVER" = "PLAY";
+  private player = { prev: v2(512, 512), cur: v2(512, 512) };
+  private camPos = { prev: v2(512, 512), cur: v2(512, 512) };
+  private aim = v2(0, 0);
+  private facing = 0;
+  private velocity = v2(0, 0);
   private lmbDown = false;
+  private damageFlash = 0;
+
+  // Spin Logic
+  private spinTimer = 0;
+  private isSpinning = false;
+  private spinCooldown = 0;
+
+  // Dev Logic
+  private isDevOpen = false;
+  private devParams: DevParams = {
+      godMode: false,
+      cellSize: Config.CELL_SIZE,
+      genSpeed: Config.CA_HZ,
+      spawnRate: Config.SPAWN_RATE_MULT,
+      timeScale: Config.TIME_SCALE
+  };
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
-    this.renderer.setCellSize(4);
     this.input = new Input(window, canvas);
-
-    const style = document.createElement('style');
-    style.innerHTML = `
-      html, body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: #000;
-        width: 100%;
-        height: 100%;
-      }
-      canvas {
-        display: block;
-        width: 100vw;
-        height: 100vh;
-        touch-action: none;
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        user-select: none;
-        outline: none;
-      }
-    `;
-    document.head.appendChild(style);
-    
-    const resize = () => {
-        const dpr = window.devicePixelRatio || 1;
-        this.canvas.width = window.innerWidth * dpr;
-        this.canvas.height = window.innerHeight * dpr;
-    };
-    window.addEventListener('resize', resize);
-    resize(); 
-
-    window.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-    }, { passive: false });
-
-    this.canvas.addEventListener("pointerdown", (e) => {
-      this.canvas.focus();
-      if (e.button === 0) this.lmbDown = true;
-      if (e.button === 2) {
-        e.preventDefault();
-        this.weapons.tryFireSecondary(this.projectiles, this.player.cur, this.aim);
-      }
-    });
-
-    this.canvas.addEventListener("pointerup", (e) => {
-      if (e.button === 0) this.lmbDown = false;
-    });
-
-    this.canvas.addEventListener("pointerleave", () => {
-      this.lmbDown = false;
-    });
-
-    this.seed = (Date.now() >>> 0) ^ 0xc0ffee;
-    this.r = mulberry32(this.seed);
-    this.ca.seedTestPattern(this.seed);
-    this.snake.resetAt(this.player.cur.x, this.player.cur.y);
-
-    this.director.reset(this.enemies);
-
-    if (Config.ENABLE_PHASE2) {
-      const target = (Config as any).PICKUP_MAX_ACTIVE ?? 6;
-      for (let i = 0; i < target; i++) this.spawnOnePickupNearStable();
-    }
+    this.onResize();
+    this.initHandlers();
+    this.resetGame();
   }
 
-  start(): void {
+  onResize() {
+    const aspect = window.innerWidth / window.innerHeight;
+    this.virtualH = Config.RETRO_HEIGHT;
+    this.virtualW = Math.round(this.virtualH * aspect);
+    
+    this.canvas.width = this.virtualW;
+    this.canvas.height = this.virtualH;
+  }
+
+  private initHandlers() {
+    // Prevent Context Menu
+    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    this.canvas.addEventListener("pointerdown", (e) => {
+      // CRITICAL FIX: Prevent default browser behavior (text selection, focus loss) immediately
+      e.preventDefault(); 
+      this.canvas.focus();
+      
+      if (this.state !== "PLAY") return;
+      if (e.button === 0) {
+          this.lmbDown = true;
+      }
+      if (e.button === 2) {
+        this.weapons.tryFireSecondary(this.projectiles, this.player.cur, this.aim, this.effects);
+      }
+    });
+    this.canvas.addEventListener("pointerup", (e) => {
+      e.preventDefault();
+      if (e.button === 0) this.lmbDown = false;
+    });
+  }
+
+  private resetGame() {
+    this.energy = 100;
+    this.score = 0;
+    this.state = "PLAY";
+    this.ca.seedTestPattern(Date.now());
+    this.player.cur = v2(512, 512);
+    this.player.prev = v2(512, 512);
+    this.camPos.cur = v2(512, 512);
+    this.camPos.prev = v2(512, 512);
+    this.snake.reset(512, 512); // Start with 3 bombs
+    this.director.reset(this.enemies);
+    this.damageFlash = 0;
+    this.velocity = v2(0,0);
+    this.spinCooldown = 0;
+    this.isSpinning = false;
+  }
+
+  private reinitializeWorld() {
+      // Called when Cell Size changes
+      this.ca = new CAWorld(Math.ceil(Config.WORLD_W / Config.CELL_SIZE), Math.ceil(Config.WORLD_H / Config.CELL_SIZE));
+      this.ca.seedTestPattern(Date.now());
+      // Clear bullets/enemies to prevent visual glitching
+      this.projectiles = new ProjectileSystem();
+      this.enemies = new EnemySystem();
+      this.particles = new ParticleSystem();
+  }
+
+  start() {
     this.input.attach();
     this.loop.start({
       fixedUpdate: (dt) => this.fixedUpdate(dt),
       caUpdate: () => this.caUpdate(),
-      render: (alpha, frameDtSec) => this.render(alpha, frameDtSec),
+      render: (alpha, frameDt) => this.render(alpha, frameDt),
     });
   }
 
-  stop(): void {
-    this.loop.stop();
-    this.input.detach();
-  }
-
-  private setGameOver(reason: string): void {
-      this.state = "GAME_OVER";
-      this.gameOverReason = reason;
-      console.log("GAME OVER:", reason);
-  }
-
-  private resetGame(): void {
-      this.state = "PLAY";
-      this.energy = this.energyMax;
-      this.score = 0;
-      this.invuln = 2.0; 
-      
-      this.projectiles.reset();
-      this.particles.reset();
-      this.weapons.reset();
-      this.enemies.reset();
-      this.director.reset(this.enemies); 
-      this.loot.reset(); 
-      
-      this.player.cur = v2(100, 100);
-      this.player.prev = { ...this.player.cur };
-      this.camCur = { ...this.player.cur };
-      this.camPrev = { ...this.player.cur };
-      
-      this.snake.resetAt(this.player.cur.x, this.player.cur.y);
-      this.pickups = [];
-      
-      this.seed = (Date.now() >>> 0) ^ 0xc0ffee;
-      this.r = mulberry32(this.seed);
-      this.ca.seedTestPattern(this.seed);
-      
-      if (Config.ENABLE_PHASE2) {
-          const target = (Config as any).PICKUP_MAX_ACTIVE ?? 6;
-          for (let i = 0; i < target; i++) this.spawnOnePickupNearStable();
-      }
-  }
-
-  private spawnOnePickupNearStable(): void {
-    const chunks = this.ca.getStableChunks();
-    const clamp = (x: number, y: number) => ({
-      x: Math.max(0, Math.min(Config.WORLD_W - 1, x)),
-      y: Math.max(0, Math.min(Config.WORLD_H - 1, y)),
-    });
-    const fallback = () =>
-      clamp(randInt(this.r, 0, Config.WORLD_W - 1), randInt(this.r, 0, Config.WORLD_H - 1));
-
-    if (chunks.length === 0) {
-      this.pickups.push(fallback());
-      return;
+  private fixedUpdate(dt: number) {
+    // Toggle Dev Mode using 'B' key
+    if (this.input.wasPressed("KeyB")) { 
+        this.isDevOpen = !this.isDevOpen;
     }
-    const c = chunks[randInt(this.r, 0, chunks.length - 1)];
-    const x0 = c.cx * (Config as any).CHUNK_SIZE;
-    const y0 = c.cy * (Config as any).CHUNK_SIZE;
-    const tries = (Config as any).PICKUP_SPAWN_TRIES ?? 60;
 
-    for (let t = 0; t < tries; t++) {
-      const x = x0 + randInt(this.r, 1, (Config as any).CHUNK_SIZE - 2);
-      const y = y0 + randInt(this.r, 1, (Config as any).CHUNK_SIZE - 2);
-      if (this.ca.isAlive(x, y)) {
-        this.pickups.push(clamp(x, y));
-        return;
-      }
+    if (this.input.wasPressed("KeyI")) {
+        this.devParams.godMode = !this.devParams.godMode;
     }
-    const x = x0 + randInt(this.r, 2, (Config as any).CHUNK_SIZE - 3);
-    const y = y0 + randInt(this.r, 2, (Config as any).CHUNK_SIZE - 3);
-    this.pickups.push(clamp(x, y));
-  }
 
-  private fixedUpdate(dtSec: number): void {
-    if (this.input.wasPressed("KeyP")) this.paused = !this.paused;
-    if (this.input.wasPressed("Period")) this.stepFixed++;
-    if (this.input.wasPressed("Comma")) this.stepCA++;
+    if (this.isDevOpen) {
+        this.devUI.updateInput(this.input, this.devParams, {
+            onSizeChange: () => this.reinitializeWorld(),
+            onSpeedChange: () => this.loop.setCAHz(this.devParams.genSpeed)
+        });
+    }
 
     if (this.state === "GAME_OVER") {
-        this.particles.update(dtSec);
-        if (this.input.wasPressed("KeyY")) this.resetGame();
-        if (this.input.wasPressed("KeyN")) this.stop();
-        return; 
+      if (this.input.wasPressed("KeyY")) this.resetGame();
+      this.input.postUpdate();
+      return;
     }
 
-    if (this.paused) {
-      if (this.stepFixed <= 0) return;
-      this.stepFixed--;
-    }
+    // Apply Time Scale
+    const scaledDt = dt * this.devParams.timeScale;
 
-    const t0 = performance.now();
-    this.fixedTicks++;
+    this.handleMovement(scaledDt);
+    this.director.update(scaledDt, this.enemies);
+    this.weapons.update(scaledDt);
+    this.weapons.updatePrimary(scaledDt, this.lmbDown, this.projectiles, this.player.cur, this.aim, this.effects);
+    
+    const takeDamage = (damage: number) => {
+          if (this.devParams.godMode) return; // Invincibility check
 
-    this.player.prev = { ...this.player.cur };
-    this.camPrev = { ...this.camCur };
+          this.energy -= damage;
+          this.damageFlash = 1.0;
+          if (this.energy <= 0) {
+              this.energy = 0;
+              this.state = "GAME_OVER";
+          }
+    };
 
-    // --- Movement ---
-    let dx = 0, dy = 0;
-    if (this.input.isDown("KeyA") || this.input.isDown("ArrowLeft")) dx -= 1;
-    if (this.input.isDown("KeyD") || this.input.isDown("ArrowRight")) dx += 1;
-    if (this.input.isDown("KeyW") || this.input.isDown("ArrowUp")) dy -= 1;
-    if (this.input.isDown("KeyS") || this.input.isDown("ArrowDown")) dy += 1;
+    // Enemy Update
+    this.score += this.enemies.update(
+      scaledDt, 
+      this.player, 
+      this.ca, 
+      this.particles, 
+      this.projectiles.getBullets(), 
+      this.loot,
+      takeDamage,
+      this.projectiles // Pass projectile system for turrets to fire
+    );
+    
+    this.score += this.projectiles.update(scaledDt, this.ca, this.particles, this.loot, this.camera, this.effects, this.enemies, this.player.cur, takeDamage);
+    const upgrades = this.loot.update(scaledDt, this.player.cur);
 
-    const l = Math.hypot(dx, dy) || 1;
-    dx /= l; dy /= l;
-
-    this.player.cur.x += dx * Config.PLAYER_SPEED * dtSec;
-    this.player.cur.y += dy * Config.PLAYER_SPEED * dtSec;
-    this.player.cur.x = Math.max(0, Math.min(Config.WORLD_W - 1, this.player.cur.x));
-    this.player.cur.y = Math.max(0, Math.min(Config.WORLD_H - 1, this.player.cur.y));
-
-    this.camCur = { x: this.player.cur.x, y: this.player.cur.y };
-
-    const mouse = this.input.getMouse?.();
-    if (mouse && (mouse as any).inside) {
-      const rd = this.renderer.getDebug();
-      const cell = (this.renderer as any).getCellSize?.() ?? 4;
-      this.aim.x = this.camCur.x + (mouse.x - rd.w * 0.5) / cell;
-      this.aim.y = this.camCur.y + (mouse.y - rd.h * 0.5) / cell;
-    } else {
-      this.aim.x = this.player.cur.x;
-      this.aim.y = this.player.cur.y;
-    }
-
-    this.facing = Math.atan2(this.aim.y - this.player.cur.y, this.aim.x - this.player.cur.x);
-
-    // --- DAMAGE LOGIC ---
-    if (this.invuln > 0) {
-        this.invuln -= dtSec;
-    } else {
-        const px = Math.floor(this.player.cur.x);
-        const py = Math.floor(this.player.cur.y);
-        
-        if (this.ca.isAlive(px, py)) {
-            this.energy -= this.damagePerSec * dtSec;
-            if (Math.random() < 0.3) {
-                 this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 1, "#FF0000", 50, 2);
-            }
-            if (this.energy <= 0) {
-                this.energy = 0;
-                this.setGameOver("ENERGY DEPLETED");
-                this.particles.spawnChaoticRing(this.player.cur.x, this.player.cur.y, 50, "#FF0000", 60, 4);
-            }
+    // Throw Bomb (Consume Tail)
+    if (this.input.wasPressed("Space")) {
+        if (this.snake.hasBombs()) {
+            this.snake.removeBomb();
+            this.weapons.throwBomb(this.projectiles, this.player.cur, this.aim);
         }
     }
 
-    // --- Systems Updates ---
-    this.director.update(dtSec, this.enemies); 
-    this.weapons.update(dtSec); 
-    this.weapons.updatePrimary(dtSec, this.lmbDown, this.projectiles, this.player.cur, this.aim);
+    // Snake Update
+    this.snake.update(scaledDt, this.player.cur, this.velocity);
+
+    // Spin Attack Collision
+    if (this.isSpinning) {
+        this.snake.checkWhipCollision(this.enemies, this.particles);
+    }
+
+    // Powerups
+    if (upgrades) {
+            if (upgrades.w1) this.weapons.upgradePrimary();
+            if (upgrades.w2) this.weapons.upgradeSecondary();
+            if (upgrades.hp) this.energy = Math.min(100, this.energy + 20);
+            if (upgrades.bomb) { 
+                this.snake.addBomb(); 
+                this.score += 200; 
+            }
+            this.score += 500;
+    }
+    this.particles.update(scaledDt);
+    if (this.damageFlash > 0) this.damageFlash -= scaledDt * 3;
     
-    if (this.state === "PLAY") {
-       this.score += this.enemies.update(dtSec, this.player, this.ca, this.particles, this.projectiles.getBullets(), this.loot); 
-       this.score += this.projectiles.update(dtSec, this.ca, this.particles, this.loot);
-
-       const collected = this.loot.update(dtSec, this.player.cur);
-       if (collected) {
-           if (collected === "health") {
-               this.energy = Math.min(this.energyMax, this.energy + 25);
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 5, "#00FF00", 30, 2);
-           } else if (collected === "coin") {
-               this.score += 100;
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 5, "#FFFF00", 30, 2);
-           } else if (collected === "upgrade_w1") {
-               this.weapons.upgradeW1();
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 10, "#00FFFF", 50, 3);
-           } else if (collected === "upgrade_w2") {
-               this.weapons.upgradeW2();
-               this.particles.spawnParticles(this.player.cur.x, this.player.cur.y, 10, "#FF8800", 50, 3);
-           }
-       }
-    }
-    
-    if (this.input.wasPressed("Space")) {
-        const score = this.weapons.tryFireBomb(this.aim, this.ca, this.particles, this.snake, this.loot);
-        this.score += score;
-    }
-
-    if (this.input.wasPressed("KeyT")) {
-        const x = Math.floor(this.player.cur.x);
-        const y = Math.floor(this.player.cur.y);
-        const alive = this.ca.isAlive(x, y);
-        this.ca.setAlive(x, y, !alive);
-    }
-
-    if (Config.ENABLE_PHASE2) {
-      // FIX: Posíláme this.facing do snake.update
-      this.snake.update(dtSec, this.player, this.facing);
-      this.checkPickups();
-    }
-
-    this.particles.update(dtSec);
-
-    const t1 = performance.now();
-    this.perf.onFixed(t1 - t0);
+    this.input.postUpdate();
   }
 
-  private checkPickups(): void {
-    const head = this.player.cur;
-    const r = (Config as any).PICKUP_R ?? (Config as any).PICKUP_RADIUS ?? 10;
-    for (let i = 0; i < this.pickups.length; i++) {
-      const p = this.pickups[i];
-      const d2 = (p.x - head.x) * (p.x - head.x) + (p.y - head.y) * (p.y - head.y);
-      if (d2 <= r * r) {
-        this.pickups.splice(i, 1);
-        this.snake.grow();
-        this.energy = Math.min(this.energyMax, this.energy + 20); 
-        this.spawnOnePickupNearStable();
-        break;
-      }
+  private handleMovement(dt: number) {
+    this.player.prev = { ...this.player.cur };
+    
+    // Spin Logic
+    if (this.spinCooldown > 0) this.spinCooldown -= dt;
+    
+    if (this.input.isDown("ShiftLeft") && this.spinCooldown <= 0 && !this.isSpinning) {
+        this.isSpinning = true;
+        this.spinTimer = 0.4; // Duration of spin
+        this.spinCooldown = 1.5; // Cooldown
     }
+
+    if (this.isSpinning) {
+        this.spinTimer -= dt;
+        // Forced rotation during spin (approx 2 full rotations)
+        this.facing += 30.0 * dt; 
+        if (this.spinTimer <= 0) {
+            this.isSpinning = false;
+        }
+    } else {
+        // Normal Aiming
+        const mouse = this.input.getMouse?.();
+        if (mouse) {
+            const rect = this.canvas.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                const scaleX = this.virtualW / rect.width;
+                const scaleY = this.virtualH / rect.height;
+                const mx = (mouse.x - rect.left) * scaleX;
+                const my = (mouse.y - rect.top) * scaleY;
+                
+                this.aim.x = this.player.cur.x + (mx - this.virtualW * 0.5);
+                this.aim.y = this.player.cur.y + (my - this.virtualH * 0.5);
+            }
+        }
+        this.facing = Math.atan2(this.aim.y - this.player.cur.y, this.aim.x - this.player.cur.x);
+    }
+
+    // Movement
+    let dx = 0, dy = 0;
+    if (this.input.isDown("KeyA")) dx -= 1;
+    if (this.input.isDown("KeyD")) dx += 1;
+    if (this.input.isDown("KeyW")) dy -= 1;
+    if (this.input.isDown("KeyS")) dy += 1;
+    
+    // Update velocity for elasticity
+    const speed = Config.PLAYER_SPEED;
+    if (dx !== 0 || dy !== 0) {
+        const l = Math.hypot(dx, dy);
+        this.velocity.x = (dx/l) * speed;
+        this.velocity.y = (dy/l) * speed;
+        
+        this.player.cur.x += this.velocity.x * dt;
+        this.player.cur.y += this.velocity.y * dt;
+    } else {
+        this.velocity.x = 0;
+        this.velocity.y = 0;
+    }
+    
+    this.camPos.prev = { ...this.camPos.cur };
+    this.camPos.cur = { ...this.player.cur };
   }
 
-  private caUpdate(): void {
-    if (this.paused) {
-      if (this.stepCA <= 0) return;
-      this.stepCA--;
-    }
-    const t0 = performance.now();
-    this.caTicks++;
+  private caUpdate() {
+    this.effects.process(this.ca);
     this.ca.tick();
-    const t1 = performance.now();
-    this.perf.onCA(t1 - t0);
   }
 
-  private render(alpha: number, frameDtSec: number): void {
-    this.perf.onFrameDelta(frameDtSec * 1000);
-    this.overlay.onRenderFrame(frameDtSec);
-    this.input.beginFrame();
-    const t0 = performance.now();
+  private render(alpha: number, dt: number) {
     this.renderer.clear();
-
     const p = lerpV2(this.player.prev, this.player.cur, alpha);
-    const cam = this.camera.follow(this.camPrev, this.camCur, alpha);
+    const cam = lerpV2(this.camPos.prev, this.camPos.cur, alpha);
 
-    (this.renderer as any).drawGrid?.(cam);
-    this.renderer.drawStableChunks(this.ca.getStableChunks(), cam);
     this.renderer.drawCA(this.ca, cam);
     this.renderer.drawBullets(this.projectiles.getBullets(), cam);
-
-    if (Config.ENABLE_PHASE2) {
-      this.renderer.drawSnake(this.snake.getAllSegments(), cam, this.facing);
-    }
+    
+    // Draw Snake (Bomb Tail)
+    this.renderer.drawSnake(this.snake.getSegments(), cam);
 
     const ctx = this.renderer.getContext();
-    const cellSize = (this.renderer as any).getCellSize?.() ?? 4;
-    const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    this.enemies.render(ctx, cam, cellSize);
-    this.loot.render(ctx, cam, cellSize); 
-
+    this.enemies.render(ctx, cam);
+    this.loot.render(ctx, cam);
     this.particles.render(this.renderer, cam);
-
     this.renderer.drawPlayer(p, cam, this.facing);
-    this.renderer.drawAim(this.aim as any, cam);
+    this.renderer.drawAim(this.aim, cam);
+    this.renderer.drawShootingOverlay(this.lmbDown); // Blue shooting tint
+    this.renderer.drawDamageVignette(this.damageFlash);
 
-    const wStatus = this.weapons.getStatus();
-    const waveInfo = this.director.getHUDInfo();
-
-    this.overlay.draw(ctx, [
-      `STATE: ${this.state}`,
-      `ENERGY: ${this.energy.toFixed(0)} / ${this.energyMax}`,
-      `SCORE: ${this.score}`,
-      `${waveInfo}`,
-      `----------------`,
-      this.state === "GAME_OVER" ? `GAME OVER: ${this.gameOverReason}` : "",
-      this.state === "GAME_OVER" ? `PRESS 'Y' TO RESTART` : "",
-      `----------------`,
-      `FPS: ${(1000/this.perf.lastFrameMs).toFixed(0)}`,
-      `Snake: ${this.snake.getLength()}`,
-      `Weapons:`,
-      `LMB: MG (Lvl ${wStatus.lvlW1})`,
-      `RMB: Shotgun (Lvl ${wStatus.lvlW2}) (${wStatus.w2Ready ? "READY" : wStatus.w2Cd.toFixed(1)}s)`,
-      `SPC: Bomb (${wStatus.bombReady ? "READY" : wStatus.bombCd.toFixed(1)}s) Cost: 1 Seg`,
-    ]);
-
-    const t1 = performance.now();
-    this.perf.onRender(t1 - t0);
+    if (this.state === "GAME_OVER") {
+        this.renderer.drawGameOver(this.score);
+    } else {
+        this.hud.render(ctx, this.virtualW, this.virtualH, this.energy, 100, this.score, this.director.getHUDInfo(), this.snake.getLength(), this.weapons.getStatus(), this.spinCooldown);
+        this.devUI.render(ctx, this.virtualW, this.virtualH, this.devParams, this.isDevOpen);
+    }
   }
 }

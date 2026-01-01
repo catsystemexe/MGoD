@@ -1,141 +1,155 @@
-import { Bullet } from "../types";
+import { Vec2, v2 } from "../../utils/math";
 import { Config } from "../../core/Config";
-import { CAWorld } from "../../ca/CAWorld";
-import { ParticleSystem } from "./ParticleSystem";
-import { LootSystem } from "./LootSystem"; // NOVÉ
-import { Vec2 } from "../../utils/math";
 
 export class ProjectileSystem {
-  private bullets: Bullet[] = [];
-
-  constructor() {}
-
-  reset() {
-    this.bullets = [];
+  private bullets: any[] = [];
+  
+  // Added variant parameter to distinguish weapon types
+  spawn(pos: Vec2, angle: number, speed: number, variant: 'mg' | 'shotgun' = 'mg') {
+    this.bullets.push({ 
+        type: 'bullet',
+        variant: variant,
+        pos: { ...pos }, 
+        vel: { x: Math.cos(angle)*speed, y: Math.sin(angle)*speed }, 
+        life: 2,
+        // Properties based on variant
+        knockback: variant === 'mg' ? 5 : 25, 
+        damageRadius: variant === 'mg' ? 0 : 1 // 0 = single cell, 1 = cross/area
+    });
   }
 
-  getBullets() {
-    return this.bullets;
-  }
-
-  spawnBullet(kind: "w1" | "w2", pos: Vec2, aim: Vec2, level: number = 1) {
-    const ax = aim.x - pos.x;
-    const ay = aim.y - pos.y;
-    const baseAngle = Math.atan2(ay, ax);
-
-    const speedW1 = 120;
-    const speedW2 = 90;
-
-    if (kind === "w1") {
-      const perpX = -Math.sin(baseAngle);
-      const perpY = Math.cos(baseAngle);
-      const offset = 3.0; 
-
-      if (level === 1) {
-          this.createBullet(pos.x, pos.y, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-      else if (level === 2) {
-          this.createBullet(pos.x + perpX * offset, pos.y + perpY * offset, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x - perpX * offset, pos.y - perpY * offset, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-      else {
-          this.createBullet(pos.x, pos.y, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x + perpX * offset * 2, pos.y + perpY * offset * 2, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x - perpX * offset * 2, pos.y - perpY * offset * 2, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-
-    } else {
-      let count = 1 + level; 
-      const spreadStep = 0.08; 
-      const startAngle = baseAngle - (spreadStep * (count - 1) / 2);
-
-      for(let i=0; i<count; i++) {
-        const angle = startAngle + i * spreadStep;
-        this.createBullet(
-            pos.x + Math.cos(angle) * 2, 
-            pos.y + Math.sin(angle) * 2, 
-            angle, speedW2, 0.8, 1.2, 2, "w2"
-        );
-      }
-    }
-  }
-
-  private createBullet(x: number, y: number, angle: number, speed: number, life: number, r: number, dmg: number, kind: "w1"|"w2") {
+  spawnBomb(pos: Vec2, target: Vec2) {
+      const angle = Math.atan2(target.y - pos.y, target.x - pos.x);
+      const speed = 300;
+      const dist = Math.hypot(target.x - pos.x, target.y - pos.y);
+      const life = dist / speed;
       this.bullets.push({
-        x: x,
-        y: y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life, r, dmg, kind
+          type: 'bomb',
+          pos: { ...pos },
+          vel: { x: Math.cos(angle)*speed, y: Math.sin(angle)*speed },
+          life: life
       });
   }
 
-  // PŘIDÁN LootSystem do argumentů
-  update(dtSec: number, ca: CAWorld, particles: ParticleSystem, lootSystem: LootSystem): number {
-    let scoreGained = 0;
+  spawnEnemyBomb(pos: Vec2, target: Vec2) {
+      const angle = Math.atan2(target.y - pos.y, target.x - pos.x);
+      const speed = 200;
+      const dist = Math.hypot(target.x - pos.x, target.y - pos.y);
+      const life = dist / speed;
+      this.bullets.push({
+          type: 'enemy_bomb',
+          pos: { ...pos },
+          vel: { x: Math.cos(angle)*speed, y: Math.sin(angle)*speed },
+          life: life
+      });
+  }
 
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
+  update(dt: number, ca: any, particles: any, loot: any, camera: any, effects: any, enemies: any, playerPos?: Vec2, onHitPlayer?: (dmg: number) => void) {
+    let score = 0;
+    for (let i = this.bullets.length-1; i>=0; i--) {
       const b = this.bullets[i];
-      b.life -= dtSec;
-      if (b.life <= 0) {
-        this.bullets.splice(i, 1);
-        continue;
-      }
-      b.x += b.vx * dtSec;
-      b.y += b.vy * dtSec;
+      b.pos.x += b.vel.x * dt; b.pos.y += b.vel.y * dt;
+      b.life -= dt;
+      
+      const cs = Config.CELL_SIZE;
+      const bx = Math.floor(b.pos.x / cs);
+      const by = Math.floor(b.pos.y / cs);
 
-      if (b.x < 0 || b.y < 0 || b.x >= Config.WORLD_W || b.y >= Config.WORLD_H) {
-        this.bullets.splice(i, 1);
-        continue;
-      }
-
-      const x = Math.floor(b.x);
-      const y = Math.floor(b.y);
-
-      if (ca.isAlive(x, y)) {
-        if (b.kind === "w1") {
-          ca.setAlive(x, y, false);
-          scoreGained += 1;
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 8, "rainbow", 30, 1.5, b.vx, b.vy, 0.8);
-          this.tryDropLoot(x + 0.5, y + 0.5, lootSystem); // ZKUSIT DROP
-          this.bullets.splice(i, 1);
-        } else if (b.kind === "w2") {
-          const R = 2.0;
-          const x0 = Math.floor(x - R);
-          const x1 = Math.ceil(x + R);
-          const y0 = Math.floor(y - R);
-          const y1 = Math.ceil(y + R);
-
-          for(let ky=y0; ky<=y1; ky++) {
-            for(let kx=x0; kx<=x1; kx++) {
-              if((kx-x)*(kx-x) + (ky-y)*(ky-y) <= R*R) {
-                if(ca.isAlive(kx, ky)) {
-                  ca.setAlive(kx, ky, false);
-                  scoreGained += 1;
-                  this.tryDropLoot(kx + 0.5, ky + 0.5, lootSystem); // ZKUSIT DROP
-                }
+      // --- PLAYER BOMB ---
+      if (b.type === 'bomb') {
+          if (b.life <= 0) {
+              // HUGE Particle Explosion
+              // Core blast
+              particles.add(b.pos, {x:0, y:0}, 0.8, "#FFFFFF");
+              particles.add(b.pos, {x:0, y:0}, 0.6, "#FFFFAA");
+              
+              // Expanding ring of fire
+              for(let k=0; k<60; k++) {
+                  const ang = Math.random() * Math.PI * 2;
+                  const spd = 100 + Math.random() * 400;
+                  const color = Math.random() > 0.5 ? "#FF4400" : "#FFAA00";
+                  particles.add(b.pos, {x:Math.cos(ang)*spd, y:Math.sin(ang)*spd}, 0.5 + Math.random(), color);
               }
-            }
+
+              // Destroy Terrain (scaled)
+              const radius = 3; 
+              for(let dy=-radius; dy<=radius; dy++) {
+                  for(let dx=-radius; dx<=radius; dx++) {
+                      if (dx*dx + dy*dy < radius*radius) {
+                          ca.setCell(bx+dx, by+dy, 0);
+                      }
+                  }
+              }
+              // Damage Enemies
+              score += enemies.applyAreaDamage(b.pos, 80, 10);
+              this.bullets.splice(i, 1);
           }
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 20, "#FFFFFF", 50, 2.5, b.vx, b.vy, 1.0);
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 15, "#FF8800", 35, 2.0, b.vx, b.vy, 1.2);
-          this.bullets.splice(i, 1);
+          continue;
+      }
+
+      // --- ENEMY BOMB (Turret) ---
+      if (b.type === 'enemy_bomb') {
+          if (playerPos && onHitPlayer) {
+              const distToPlayer = Math.hypot(b.pos.x - playerPos.x, b.pos.y - playerPos.y);
+              if (distToPlayer < 10) {
+                  onHitPlayer(15);
+                  particles.add(b.pos, {x:0,y:0}, 0.5, "#FF8800");
+                  this.bullets.splice(i, 1);
+                  continue;
+              }
+          }
+
+          if (b.life <= 0) {
+             particles.add(b.pos, {x:0, y:0}, 0.5, "#FF8800"); 
+             for(let k=0; k<15; k++) {
+                  particles.add(b.pos, {x:(Math.random()-0.5)*200, y:(Math.random()-0.5)*200}, 0.5, "#FFFF00");
+             }
+             ca.splashLife(bx, by, 2);
+             
+             if (playerPos && onHitPlayer) {
+                 const distToPlayer = Math.hypot(b.pos.x - playerPos.x, b.pos.y - playerPos.y);
+                 if (distToPlayer < 30) {
+                     onHitPlayer(10); 
+                 }
+             }
+             this.bullets.splice(i, 1);
+          }
+          continue;
+      }
+
+      // --- STANDARD BULLET (MG & SHOTGUN) ---
+      if (ca.isAlive(bx, by)) {
+        
+        // Destruction Logic
+        if (b.damageRadius === 0) {
+            // MG: 1 Bullet = 1 Cell
+            ca.setCell(bx, by, 0);
+        } else {
+            // Shotgun: 1 Bullet = ~5 Cells (Cross shape)
+            ca.setCell(bx, by, 0);
+            ca.setCell(bx+1, by, 0);
+            ca.setCell(bx-1, by, 0);
+            ca.setCell(bx, by+1, 0);
+            ca.setCell(bx, by-1, 0);
+        }
+        
+        b.life = 0;
+
+        // Particle Effects on Wall Hit
+        if (b.variant === 'mg') {
+             // Rainbow small shards
+             const hue = Math.floor(Math.random() * 360);
+             particles.add(b.pos, {x: (Math.random()-0.5)*50, y: (Math.random()-0.5)*50}, 0.3, `hsl(${hue}, 100%, 60%)`);
+        } else {
+             // Big shards for shotgun
+             for(let p=0; p<3; p++) {
+                particles.add(b.pos, {x: (Math.random()-0.5)*100, y: (Math.random()-0.5)*100}, 0.4, "#FFFFFF");
+             }
         }
       }
+      if (b.life <= 0) this.bullets.splice(i, 1);
     }
-    return scoreGained;
+    return score;
   }
-
-  // Velmi malá šance na drop z běžné buňky
-  private tryDropLoot(x: number, y: number, lootSystem: LootSystem) {
-      // 0.2% šance (1 z 500)
-      if (Math.random() < 0.002) {
-          const r = Math.random();
-          // Většinou to bude Coin, vzácněji Health/Upgrade
-          if (r < 0.7) lootSystem.spawnLoot(x, y, "coin");
-          else if (r < 0.85) lootSystem.spawnLoot(x, y, "health");
-          else if (r < 0.95) lootSystem.spawnLoot(x, y, "upgrade_w1");
-          else lootSystem.spawnLoot(x, y, "upgrade_w2");
-      }
-  }
+  getBullets() { return this.bullets; }
 }

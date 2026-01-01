@@ -1,211 +1,194 @@
-import { Enemy, Bullet, PlayerState } from "../types";
-import { PATTERNS } from "../patterns";
-import { CAWorld } from "../../ca/CAWorld";
-import { Config } from "../../core/Config";
-import { ParticleSystem } from "./ParticleSystem";
-import { LootSystem } from "./LootSystem"; // NOVÉ
 import { Vec2 } from "../../utils/math";
+import { Config } from "../../core/Config";
+
+type EnemyType = 'kamikaze' | 'orbiter' | 'turret';
+
+interface Enemy {
+    pos: Vec2;
+    hp: number;
+    stunned: number;
+    type: EnemyType;
+    angle: number; // For orbiting
+    timer: number; // For attack cooldown
+}
 
 export class EnemySystem {
   private enemies: Enemy[] = [];
-  private spawnTimer = 0;
-  private idCounter = 0;
-
-  public spawnRate = 3.0; 
-  public maxEnemies = 5;
-  public enabledTypes: ("skiff" | "miner")[] = ["miner"];
-  public active = false; 
-
-  constructor() {}
-
-  reset() {
-    this.enemies = [];
-    this.spawnTimer = 0;
-    this.idCounter = 0;
-    this.active = false;
-  }
-
-  setDifficulty(rate: number, max: number, types: ("skiff" | "miner")[]) {
-    this.spawnRate = rate;
-    this.maxEnemies = max;
-    this.enabledTypes = types;
-    this.active = true;
-  }
-
-  stopSpawning() {
-    this.active = false;
-  }
-
-  getCount(): number {
-    return this.enemies.length;
-  }
-
-  // PŘIDÁN LootSystem do argumentů
-  update(dtSec: number, player: PlayerState, ca: CAWorld, particles: ParticleSystem, bullets: Bullet[], lootSystem: LootSystem): number {
-    let scoreGained = 0;
-
-    if (this.active && this.enemies.length < this.maxEnemies) {
-        this.spawnTimer += dtSec;
-        if (this.spawnTimer >= this.spawnRate) {
-            this.spawnEnemy(player.cur);
-            this.spawnTimer = 0;
-        }
-    }
-
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
+  
+  spawn(x: number, y: number, type: EnemyType = 'kamikaze') { 
+      let hp = 2;
+      if (type === 'orbiter') hp = 4;
+      if (type === 'turret') hp = 5;
       
-      // Separation
-      let sepX = 0; let sepY = 0;
-      for (const other of this.enemies) {
-          if (other === e) continue;
-          const dx = e.x - other.x;
-          const dy = e.y - other.y;
-          const d2 = dx*dx + dy*dy;
-          if (d2 < 100 && d2 > 0.1) {
-              const d = Math.sqrt(d2);
-              sepX += (dx / d) * 50 * dtSec;
-              sepY += (dy / d) * 50 * dtSec;
+      this.enemies.push({ 
+          pos: { x, y }, 
+          hp, 
+          stunned: 0,
+          type,
+          angle: Math.random() * Math.PI * 2,
+          timer: 2.0 + Math.random() * 2.0
+      }); 
+  }
+  
+  applyAreaDamage(center: Vec2, radius: number, damage: number): number {
+      let score = 0;
+      for (let i = this.enemies.length-1; i>=0; i--) {
+          const e = this.enemies[i];
+          const dist = Math.hypot(e.pos.x - center.x, e.pos.y - center.y);
+          if (dist < radius) {
+              e.hp -= damage;
+              if (e.hp <= 0) {
+                  score += 100 * (e.type === 'kamikaze' ? 1 : 2);
+                  this.enemies.splice(i, 1);
+              }
           }
       }
-      e.vx += sepX; e.vy += sepY;
+      return score;
+  }
 
-      // Movement
-      const dx = player.cur.x - e.x;
-      const dy = player.cur.y - e.y;
-      const dist = Math.sqrt(dx*dx + dy*dy) || 1; 
-
-      if (e.type === "skiff") {
-        if (dist > 5) { 
-            e.vx += (dx / dist) * 20 * dtSec; 
-            e.vy += (dy / dist) * 20 * dtSec;
-        }
-        e.vx *= 0.98; e.vy *= 0.98;
-      } else {
-        e.vx += (Math.random() - 0.5) * 50 * dtSec;
-        e.vy += (Math.random() - 0.5) * 50 * dtSec;
-        e.vx *= 0.95; e.vy *= 0.95;
-      }
-
-      e.x += e.vx * dtSec;
-      e.y += e.vy * dtSec;
+  update(dt: number, player: any, ca: any, part: any, bullets: any[], loot: any, onHitPlayer: (dmg: number) => void, projectileSystem?: any) {
+    let score = 0;
+    for (let i = this.enemies.length-1; i>=0; i--) {
+      const e = this.enemies[i];
       
-      if (!Number.isFinite(e.x)) e.x = player.cur.x + 100;
-      if (!Number.isFinite(e.y)) e.y = player.cur.y + 100;
-
-      // Action
-      e.actionTimer -= dtSec;
-      if (e.actionTimer <= 0) {
-        const cx = Math.floor(e.x);
-        const cy = Math.floor(e.y);
+      // Stun Logic
+      if (e.stunned > 0) {
+          e.stunned -= dt;
+      } else {
+        // --- BEHAVIOR BY TYPE ---
         
-        if (e.type === "skiff") {
-          this.stampPattern(ca, cx, cy, PATTERNS.GLIDER);
-          particles.spawnParticles(e.x, e.y, 5, "#00FF00", 20, 1);
-          e.actionInterval = 2.0;
-        } else {
-          this.stampPattern(ca, cx, cy, PATTERNS.BLINKER);
-          particles.spawnParticles(e.x, e.y, 5, "#FFFF00", 10, 1);
-          e.actionInterval = 4.0;
+        // 1. KAMIKAZE: Moves directly at player
+        if (e.type === 'kamikaze') {
+            const dist = Math.hypot(player.cur.x - e.pos.x, player.cur.y - e.pos.y);
+            if (dist > 5) {
+                e.pos.x += (player.cur.x - e.pos.x) / dist * 80 * dt;
+                e.pos.y += (player.cur.y - e.pos.y) / dist * 80 * dt;
+            }
+            if (dist < 15) {
+                onHitPlayer(10);
+                part.add(e.pos, {x:0, y:0}, 0.5, "#FF0000"); 
+                this.enemies.splice(i, 1); 
+                continue; 
+            }
+        } 
+        
+        // 2. ORBITER: Circles player, emits Gliders
+        else if (e.type === 'orbiter') {
+            const radius = 150;
+            const speed = 0.5; // rad/s (Slower)
+            
+            // Orbit logic: Target position on the circle
+            e.angle += speed * dt;
+            const targetX = player.cur.x + Math.cos(e.angle) * radius;
+            const targetY = player.cur.y + Math.sin(e.angle) * radius;
+            
+            // Smoothly move towards target position on circle (soft follow)
+            e.pos.x += (targetX - e.pos.x) * 1.0 * dt;
+            e.pos.y += (targetY - e.pos.y) * 1.0 * dt;
+            
+            // Attack: Spawn Glider
+            e.timer -= dt;
+            if (e.timer <= 0) {
+                const ix = Math.floor(e.pos.x / Config.CELL_SIZE);
+                const iy = Math.floor(e.pos.y / Config.CELL_SIZE);
+                ca.spawnGlider(ix, iy); // Stamps a glider pattern into the world
+                part.add(e.pos, {x:0,y:0}, 0.5, "#FF00FF"); // Pulse effect
+                // 50% Faster shooting rate (was 2.0s -> ~1.33s)
+                e.timer = 1.33;
+            }
         }
-        e.actionTimer = e.actionInterval;
-      }
 
-      // Collision
-      for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
-        const b = bullets[bIdx];
-        const bdx = b.x - e.x;
-        const bdy = b.y - e.y;
-        if (bdx*bdx + bdy*bdy < (e.maxHp * 2)) { 
-           e.hp -= b.dmg;
-           bullets.splice(bIdx, 1); 
-           particles.spawnParticles(e.x, e.y, 3, "#FFFFFF", 30, 1);
-
-           if (e.hp <= 0) {
-             scoreGained += (e.type === "skiff" ? 50 : 30);
-             particles.spawnDirectionalExplosion(e.x, e.y, 15, e.color, 40, 2, e.vx, e.vy, 3.14);
-             
-             // --- LOOT DROP LOGIC ---
-             const rand = Math.random();
-             if (rand < 0.4) { // 40% chance drop
-                 if (rand < 0.1) lootSystem.spawnLoot(e.x, e.y, "health");
-                 else if (rand < 0.15) lootSystem.spawnLoot(e.x, e.y, "upgrade_w1");
-                 else if (rand < 0.20) lootSystem.spawnLoot(e.x, e.y, "upgrade_w2");
-                 else lootSystem.spawnLoot(e.x, e.y, "coin");
-             }
-
-             this.enemies.splice(i, 1);
-             break; 
-           }
+        // 3. TURRET: Static, lobs bombs
+        else if (e.type === 'turret') {
+            // Static, maybe slow rotation towards player?
+            // Attack
+            e.timer -= dt;
+            if (e.timer <= 0) {
+                if (projectileSystem) {
+                    projectileSystem.spawnEnemyBomb(e.pos, player.cur);
+                    part.add(e.pos, {x:0,y:0}, 0.3, "#FFAA00"); // Muzzle flash
+                }
+                e.timer = 3.5; // Slow fire rate
+            }
         }
       }
-    }
-
-    return scoreGained;
-  }
-
-  render(ctx: CanvasRenderingContext2D, cam: Vec2, cellSize: number) {
-    const dpr = window.devicePixelRatio || 1;
-    const logicalW = ctx.canvas.width / dpr;
-    const logicalH = ctx.canvas.height / dpr;
-    const halfW = logicalW / 2;
-    const halfH = logicalH / 2;
-
-    ctx.save();
-    for (const e of this.enemies) {
-      if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
-
-      const screenX = Math.floor((e.x - cam.x) * cellSize + halfW);
-      const screenY = Math.floor((e.y - cam.y) * cellSize + halfH);
-
-      ctx.fillStyle = e.color;
       
-      if (e.type === "skiff") {
-        ctx.beginPath();
-        ctx.moveTo(screenX, screenY - 6);
-        ctx.lineTo(screenX + 5, screenY + 6);
-        ctx.lineTo(screenX - 5, screenY + 6);
-        ctx.fill();
-      } else {
-        ctx.fillRect(screenX - 5, screenY - 5, 10, 10);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
-      }
-    }
-    ctx.restore();
-  }
+      // Collision with bullets
+      for (const b of bullets) {
+        if (b.type !== 'bomb' && b.type !== 'enemy_bomb' && b.life > 0 && Math.hypot(b.pos.x - e.pos.x, b.pos.y - e.pos.y) < (e.type==='turret'?20:15)) {
+          e.hp--; 
+          b.life = 0; // Destroy bullet
 
-  private spawnEnemy(playerPos: Vec2) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 90; 
-    const ex = playerPos.x + Math.cos(angle) * dist;
-    const ey = playerPos.y + Math.sin(angle) * dist;
+          // --- COLLISION EFFECTS ---
+          
+          // 1. KNOCKBACK
+          const knockStrength = b.knockback || 5; 
+          // Normalize bullet velocity for direction
+          const bSpeed = Math.hypot(b.vel.x, b.vel.y) || 1;
+          e.pos.x += (b.vel.x / bSpeed) * knockStrength;
+          e.pos.y += (b.vel.y / bSpeed) * knockStrength;
 
-    const type = this.enabledTypes[Math.floor(Math.random() * this.enabledTypes.length)] || "miner";
+          // 2. PARTICLE SHARDS
+          if (b.variant === 'mg') {
+              // Rainbow small shards
+              const hue = Math.floor(Math.random() * 360);
+              part.add(e.pos, {x:(Math.random()-0.5)*150, y:(Math.random()-0.5)*150}, 0.3, `hsl(${hue}, 100%, 50%)`);
+          } else if (b.variant === 'shotgun') {
+              // Big bright shards
+              for(let k=0; k<3; k++) {
+                  part.add(e.pos, {x:(Math.random()-0.5)*250, y:(Math.random()-0.5)*250}, 0.5, "#FFFFCC");
+              }
+          } else {
+              // Default
+              part.add(e.pos, {x:(Math.random()-0.5)*100, y:(Math.random()-0.5)*100}, 0.2, "#FF0000");
+          }
 
-    this.enemies.push({
-      id: this.idCounter++,
-      type: type,
-      x: ex,
-      y: ey,
-      vx: 0, vy: 0,
-      hp: type === "skiff" ? 3 : 5,
-      maxHp: type === "skiff" ? 3 : 5,
-      actionTimer: 2.0,
-      actionInterval: type === "skiff" ? 2.5 : 4.0,
-      color: type === "skiff" ? "#00FF00" : "#FF00FF"
-    });
-  }
-
-  private stampPattern(ca: CAWorld, cx: number, cy: number, pat: any) {
-    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
-
-    for (let y = 0; y < pat.h; y++) {
-      for (let x = 0; x < pat.w; x++) {
-        if (pat.data[y * pat.w + x] === 1) {
-          ca.setAlive(cx + x - 1, cy + y - 1, true);
+          if (e.hp <= 0) { 
+            score += 100 * (e.type === 'kamikaze' ? 1 : 2); 
+            if (Math.random() < 0.2) loot.spawn(e.pos);
+            this.enemies.splice(i, 1); 
+            break; 
+          }
         }
       }
+    }
+    return score;
+  }
+
+  render(ctx: any, cam: Vec2) {
+    const ox = cam.x - ctx.canvas.width/2, oy = cam.y - ctx.canvas.height/2;
+    for (const e of this.enemies) {
+        if (e.type === 'kamikaze') {
+            ctx.fillStyle = e.stunned > 0 ? "#FFFF00" : "#FF3333";
+            ctx.fillRect(e.pos.x - ox - 6, e.pos.y - oy - 6, 12, 12);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(e.pos.x - ox - 2, e.pos.y - oy - 2, 4, 4);
+        }
+        else if (e.type === 'orbiter') {
+            // Pulsing blob
+            const pulse = 1.0 + Math.sin(Date.now() * 0.01) * 0.2;
+            ctx.fillStyle = e.stunned > 0 ? "#FFFF00" : "#AA00FF";
+            ctx.beginPath();
+            ctx.arc(e.pos.x - ox, e.pos.y - oy, 10 * pulse, 0, Math.PI*2);
+            ctx.fill();
+            // Core
+            ctx.fillStyle = "#FFF";
+            ctx.beginPath();
+            ctx.arc(e.pos.x - ox, e.pos.y - oy, 4, 0, Math.PI*2);
+            ctx.fill();
+        }
+        else if (e.type === 'turret') {
+            ctx.fillStyle = e.stunned > 0 ? "#FFFF00" : "#FF8800";
+            // Base
+            ctx.fillRect(e.pos.x - ox - 10, e.pos.y - oy - 10, 20, 20);
+            // Center
+            ctx.fillStyle = "#330000";
+            ctx.fillRect(e.pos.x - ox - 5, e.pos.y - oy - 5, 10, 10);
+            // Decoration
+            ctx.strokeStyle = "#FFF";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(e.pos.x - ox - 10, e.pos.y - oy - 10, 20, 20);
+        }
     }
   }
 }
