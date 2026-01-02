@@ -67,7 +67,9 @@ export class SnakeSystem {
     getSegments() { return this.segments; }
     getLength() { return this.maxSegments; }
     hasBombs() { return this.maxSegments > 0; }
-    
+
+    getBombs() { return this.maxSegments; }
+
     removeBomb() { 
         if (this.maxSegments > 0) {
             this.maxSegments--;

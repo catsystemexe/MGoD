@@ -1,4 +1,4 @@
-export const LOGIC_WIDTH = 320;
+export const LOGIC_WIDTH = 400;
 export const LOGIC_HEIGHT = 224;
 export const FIXED_TIMESTEP = 1 / 60;
 export const Config = {

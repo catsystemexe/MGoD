@@ -1,91 +1,133 @@
+export type HUDWeapon = { name: string; cooldown01?: number; ammo?: number };
+
 export class HUD {
-  private scoreDisplay = 0;
+  render(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    energy: number,
+    maxEnergy: number,
+    mana: number,
+    maxMana: number,
+    score: number,
+    weapons: HUDWeapon[]
+  ) {
+    // ---------- helpers ----------
+    const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
-  render(ctx: CanvasRenderingContext2D, w: number, h: number, energy: number, maxEnergy: number, score: number, waveInfo: any, snakeLen: number, wStatus: any, spinCD: number) {
-    const margin = 10; 
-    
-    // Plynulé přičítání skóre
-    if (this.scoreDisplay < score) {
-        this.scoreDisplay += Math.max(1, Math.floor((score - this.scoreDisplay) * 0.1));
-    } else if (this.scoreDisplay > score) {
-        this.scoreDisplay = score;
-    }
+    const bar = (
+      x: number,
+      y: number,
+      bw: number,
+      bh: number,
+      p01: number,
+      fill: string,
+      label: string
+    ) => {
+      ctx.save();
+      ctx.globalAlpha = 0.9;
 
+      // bg
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(x, y, bw, bh);
+
+      // frame
+      ctx.strokeStyle = "rgba(0,255,102,0.9)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, bw - 1, bh - 1);
+
+      // fill
+      const innerPad = 2;
+      const iw = bw - innerPad * 2;
+      const ih = bh - innerPad * 2;
+      ctx.fillStyle = fill;
+      ctx.fillRect(x + innerPad, y + innerPad, Math.floor(iw * p01), ih);
+
+      // text
+      ctx.globalAlpha = 1;
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#00ff66";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillText(label, x + 6, y + bh / 2);
+
+      ctx.restore();
+    };
+
+    // ---------- base ----------
     ctx.save();
-    
-    // --- TOP LEFT (Energy) ---
-    const barW = 60;
-    const barH = 6;
-    const perc = Math.max(0, energy / maxEnergy);
-    
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.fillRect(margin, margin, barW + 4, barH + 12);
-    
-    ctx.fillStyle = "#111";
-    ctx.fillRect(margin + 2, margin + 10, barW, barH);
-    
-    const color = perc < 0.3 ? "#FF0055" : "#00FFFF";
-    ctx.fillStyle = color;
-    ctx.fillRect(margin + 2, margin + 10, barW * perc, barH);
-    
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 6px monospace";
-    ctx.textAlign = "left";
-    ctx.fillText("INTEGRITY", margin + 2, margin + 7);
+    ctx.imageSmoothingEnabled = false;
 
-    // --- TOP RIGHT (Score) ---
+    // ---------- layout ----------
+    const pad = 10;
+
+    // Left-top: health + mana
+    const barW = 160;
+    const barH = 12;
+    const gap = 8;
+
+    const hp01 = clamp01(maxEnergy > 0 ? energy / maxEnergy : 0);
+    bar(pad, pad, barW, barH, hp01, "#ff3b3b", "HP");
+
+    const mana01 = clamp01(maxMana > 0 ? mana / maxMana : 0);
+    bar(pad, pad + barH + gap, barW, barH, mana01, "#2aa3ff", "MP");
+
+    // Right-top: score (no box)
+    ctx.save();
+    ctx.font = "14px monospace";
+    ctx.fillStyle = "#00ff66";
     ctx.textAlign = "right";
-    ctx.font = "bold 12px monospace";
-    ctx.fillStyle = "#00FF66";
-    ctx.fillText(this.scoreDisplay.toString().padStart(6, '0'), w - margin, margin + 10);
-    
-    ctx.font = "5px monospace";
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.fillText("DATA_STREAMS", w - margin, margin + 17);
+    ctx.textBaseline = "top";
+    ctx.fillText(String(score), w - pad, pad);
+    ctx.restore();
 
-    // --- BOTTOM LEFT (Sector) ---
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 8px sans-serif";
+    // Right-bottom: weapon icons (simple boxes)
+    const icon = 38;
+    const iconGap = 8;
+    const totalW = weapons.length * icon + Math.max(0, weapons.length - 1) * iconGap;
+    const wx = w - pad - totalW;
+    const wy = h - pad - icon;
 
-    ctx.font = "5px monospace";
-    ctx.fillStyle = "#00FFFF";
-   
-    
-    // Show Spin Cooldown state
-    ctx.font = "5px monospace";
-    if (spinCD > 0) {
-        ctx.fillStyle = "#555";
-        ctx.fillText(`SPIN_RECHARGE ${Math.ceil(spinCD * 10) / 10}s`, w - margin, h - margin);
-    } else {
-        ctx.fillStyle = "#00FF00";
-        ctx.fillText("SPIN_READY [SHIFT]", w - margin, h - margin);
-    }
+    for (let i = 0; i < weapons.length; i++) {
+      const it = weapons[i];
+      const x = wx + i * (icon + iconGap);
+      const y = wy;
 
-    // --- WEAPON HUD (Center Bottom) ---
-    if (wStatus) {
-       this.drawWeaponIcon(ctx, w/2 - 12, h - 18, "P", wStatus.w1Level, true, "#00FFFF");
-       this.drawWeaponIcon(ctx, w/2 + 12, h - 18, "S", wStatus.w2Level, wStatus.w2Ready, "#FF8800");
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(x, y, icon, icon);
+
+      ctx.strokeStyle = "rgba(0,255,102,0.9)";
+      ctx.strokeRect(x + 0.5, y + 0.5, icon - 1, icon - 1);
+
+      // cooldown overlay
+      const cd = clamp01(it.cooldown01 ?? 0);
+      if (cd > 0) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = "rgba(0,0,0,0.9)";
+        const ch = Math.floor(icon * cd);
+        ctx.fillRect(x, y + (icon - ch), icon, ch);
+      }
+
+      // label
+      ctx.globalAlpha = 1;
+      ctx.font = "9px monospace";
+      ctx.fillStyle = "#00ff66";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(it.name.slice(0, 3).toUpperCase(), x + icon / 2, y + 4);
+
+      // ammo
+      if (typeof it.ammo === "number") {
+        ctx.textBaseline = "bottom";
+        ctx.textAlign = "right";
+        ctx.fillText(String(it.ammo), x + icon - 4, y + icon - 3);
+      }
+
+      ctx.restore();
     }
 
     ctx.restore();
-  }
-
-  private drawWeaponIcon(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, lvl: number, ready: boolean, color: string) {
-    const size = 16;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = ready ? color : "#333";
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.strokeRect(x - size/2, y - size/2, size, size);
-    ctx.fillRect(x - size/2, y - size/2, size, size);
-    
-    ctx.textAlign = "center";
-    ctx.fillStyle = ready ? "#fff" : "#444";
-    ctx.font = "bold 7px monospace";
-    ctx.fillText(label, x, y + 1);
-    
-    ctx.font = "4px monospace";
-    ctx.fillStyle = ready ? color : "#222";
-    ctx.fillText(`L${lvl}`, x, y + size/2 - 2);
   }
 }

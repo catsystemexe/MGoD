@@ -1,0 +1,12 @@
+{
+  "image": "/assets/sprites/player/ship.png",
+  "cellW": 40,
+  "cellH": 48,
+  "pivotX": 0.5,
+  "pivotY": 0.85,
+  "anims": {
+    "idle":  { "fps": 30, "frames": [0,1,2,3,4,5] },
+    "left":  { "fps": 30, "frames": [6,7,8,9] },
+    "right": { "fps": 30, "frames": [10,11,12,13] }
+  }
+}

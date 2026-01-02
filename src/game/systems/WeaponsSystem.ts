@@ -1,5 +1,6 @@
 import type { EventBus } from "../../core/EventBus";
 import type { GameEvents } from "../../core/events";
+import type { HUDWeapon } from "../../ui/HUD"; // ✅ přidat
 
 import { Vec2 } from "../../utils/math";
 
@@ -39,12 +40,8 @@ export class WeaponsSystem {
       const angle = Math.atan2(aim.y - pos.y, aim.x - pos.x);
       const refire = Math.max(0.05, 0.15 - this.level * 0.02);
 
-      // Spawn 'mg' variant
       projectiles.spawn(pos, angle, 600, "mg");
-
-      // ✅ truth event: fired
       this.bus?.emit("weapon.primary.fired", {});
-
       this.timer = refire;
     }
   }
@@ -56,7 +53,6 @@ export class WeaponsSystem {
       const angle = Math.atan2(aim.y - pos.y, aim.x - pos.x);
 
       for (let i = 0; i < 5 + this.secLevel * 2; i++) {
-        // Spawn 'shotgun' variant
         projectiles.spawn(
           pos,
           angle + (Math.random() - 0.5) * 0.5,
@@ -65,27 +61,35 @@ export class WeaponsSystem {
         );
       }
 
-      // ✅ truth event: fired
       this.bus?.emit("weapon.secondary.fired", {});
-
       this.secTimer = 1.0;
     }
   }
 
-  // Helper to spawn bomb projectile
   throwBomb(projectiles: any, pos: Vec2, aim: Vec2) {
     projectiles.spawnBomb(pos, aim);
   }
 
-  upgradePrimary() {
-    this.level++;
-  }
-
-  upgradeSecondary() {
-    this.secLevel++;
-  }
+  upgradePrimary() { this.level++; }
+  upgradeSecondary() { this.secLevel++; }
 
   getStatus() {
     return { w1Level: this.level, w2Level: this.secLevel, w2Ready: this.secTimer <= 0 };
+  }
+
+  // ✅ HUD helper
+  getHUDStatus(): HUDWeapon[] {
+    const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+
+    const primaryRefire = Math.max(0.05, 0.15 - this.level * 0.02);
+    const secondaryRefire = 1.0;
+
+    const pri = clamp01(primaryRefire > 0 ? this.timer / primaryRefire : 0);
+    const sec = clamp01(secondaryRefire > 0 ? this.secTimer / secondaryRefire : 0);
+
+    return [
+      { name: "PRI", cooldown01: pri },
+      { name: "SEC", cooldown01: sec },
+    ];
   }
 }
