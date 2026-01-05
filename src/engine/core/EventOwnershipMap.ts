@@ -6,27 +6,28 @@
  *  - Same-tick routing emerges naturally: events stay in qNow until their owner drains them.
  */
 
-import { Phase } from "./EventBus";
+import { Phase, type OwnershipMap } from "./EventBus";
 import { EventType, type CMEventMap } from "./events";
-import type { OwnershipMap } from "./EventBus";
 
 /**
  * Ownership rationale (v3.1):
- * - SPAWN_* are "requests" created by Director/Player etc, but ONLY SpawnSystem (Phase 1) owns execution.
- * - *_HIT_* are detection results from Collision (Phase 3) but are consumed/processed by Impact (Phase 4).
- * - Impact emits CA_CELLS_KILLED + ENTITY_DAMAGED (owned by Impact itself).
- * - Flow owns meta outcomes like ENTITY_KILLED/GAME_OVER (score/game state transitions).
- * - Audio owns AUDIO_PLAY (or it can derive from Flow/Impact events directly and not need AUDIO_PLAY).
+ * - SPAWN_* are "requests" (often emitted from Simulation), executed by SpawnSystem in Phase.Director.
+ *   => ownership = Director (so SpawnSystem drains them).
+ * - *_HIT_* are detections from Collision, but processed in Impact.
+ *   => ownership = Impact.
+ * - Impact "produces" results (e.g., CA_CELLS_KILLED, ENTITY_DAMAGED), but Flow "consumes" them.
+ *   => ownership = Flow (so Flow drains them).
+ * - Flow owns meta outcomes like ENTITY_KILLED/GAME_OVER (score/state transitions).
+ * - Audio owns AUDIO_PLAY (optional; can also derive directly from Flow/Impact events).
  */
 export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
-  // ---- Phase 1: Director/Spawn ----
+  // ---- Phase 1: Director/Spawn (requests executed by SpawnSystem) ----
   [EventType.SPAWN_ENEMY]: Phase.Director,
   [EventType.SPAWN_PROJECTILE]: Phase.Director,
+  [EventType.SPAWN_BOMB]: Phase.Director,
   [EventType.SPAWN_PICKUP]: Phase.Director,
 
   // ---- Phase 2: Simulation (optional telemetry/action events) ----
-  // We keep these owned by Simulation so a later phase could still see them by remapping,
-  // but in MVP they can be ignored or used by Audio via explicit AUDIO_PLAY events.
   [EventType.PLAYER_FIRE_PRIMARY]: Phase.Simulation,
   [EventType.PLAYER_FIRE_BOMB]: Phase.Simulation,
 
@@ -36,15 +37,13 @@ export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
   [EventType.PLAYER_HIT_ENEMY]: Phase.Impact,
   [EventType.PLAYER_HIT_CA]: Phase.Impact,
 
-  // ---- Phase 4: Impact results ----
+  // ---- Phase 5: Flow consumes Impact results & owns meta ----
   [EventType.CA_CELLS_KILLED]: Phase.Flow,
   [EventType.ENTITY_DAMAGED]: Phase.Flow,
-
-  // ---- Phase 5: Flow/meta outcomes ----
   [EventType.ENTITY_KILLED]: Phase.Flow,
   [EventType.GAME_OVER]: Phase.Flow,
   [EventType.LEVEL_COMPLETED]: Phase.Flow,
 
-  // ---- Phase 6: Audio (explicit audio requests) ----
+  // ---- Phase 6: Audio ----
   [EventType.AUDIO_PLAY]: Phase.Audio,
 };

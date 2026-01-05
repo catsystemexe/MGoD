@@ -88,4 +88,14 @@ export class EntityStore<T extends BaseEntity> {
       flags: 0,
     } as T;
   }
+  // DEV/DEBUG helper – safe iteration over alive entities.
+  // Useful for smoke tests and DevUI overlays.
+  public debugForEachAlive(fn: (ref: { slot: number; gen: number }, e: T) => void): void {
+    for (let slot = 0; slot < this.capacity; slot++) {
+      const e = this.entities[slot];
+      if (!e) continue;
+      if (!e.alive) continue;
+      fn({ slot, gen: e.gen }, e);
+    }
+  }
 }

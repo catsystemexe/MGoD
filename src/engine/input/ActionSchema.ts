@@ -1,6 +1,14 @@
+export type Vec2 = { x: number; y: number };
+
 export type PlayerActions = {
-  move: { x: number; y: number }; // normalized-ish (-1..1)
-  firePrimary: boolean;           // hold
-  fireBomb: boolean;              // trigger (buffered)
-  pause: boolean;                 // trigger (buffered)
+  move: Vec2;          // normalized
+
+  // Aim point in logic/WU space (cursor target)
+  aimTarget: Vec2;
+
+  firePrimary: boolean;   // LMB hold
+  fireSecondary: boolean; // RMB hold
+
+  bombPressed: boolean;   // Space buffered trigger
+  bombTarget: Vec2;       // captured aimTarget at press time (deterministic)
 };

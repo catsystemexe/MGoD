@@ -20,7 +20,15 @@
 ,
     "smoke:loop": "tsx src/engine/core/Loop.smoke.ts"
 ,
-    "smoke:loop": "tsx src/engine/core/Loop.smoke.ts"
+    "smoke:player": "tsx src/game/systems/PlayerSystem.smoke.ts"
+,
+    "smoke:weapons": "tsx src/game/systems/WeaponSystem.smoke.ts"
+,
+      "smoke:spawn": "tsx src/game/systems/SpawnSystem.smoke.ts"
+,
+      "smoke:projectiles": "tsx src/game/systems/ProjectileSystem.smoke.ts"
+,
+      "smoke:loop": "tsx src/engine/core/Loop.smoke.ts"
   },
   "devDependencies": {
     "tsx": "^4.0.0"
