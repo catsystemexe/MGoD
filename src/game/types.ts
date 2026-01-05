@@ -1,1 +1,0 @@
-export type UpgradeType = "w1" | "w2" | "hp" | "bomb";

@@ -1,15 +1,28 @@
 {
-  "name": "game-of-death",
+  "name": "captain-meow",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
-    "preview": "vite preview"
+    "smoke:eventbus": "tsx src/engine/core/EventBus.smoke.ts",
+    "smoke:spawn": "tsx src/engine/systems/SpawnSystem.smoke.ts"
+,
+    "smoke:collision": "tsx src/engine/systems/CollisionSystem.smoke.ts"
+,
+    "smoke:input": "tsx src/engine/input/InputManager.smoke.ts"
+,
+    "smoke:entity": "tsx src/engine/ecs/EntityStore.smoke.ts"
+,
+    "smoke:damage": "tsx src/engine/systems/DamageSystem.smoke.ts"
+,
+    "smoke:caimpact": "tsx src/game/impact/CAImpactSystem.smoke.ts"
+,
+    "smoke:flow": "tsx src/game/systems/Flow.smoke.ts"
+,
+    "smoke:loop": "tsx src/engine/core/Loop.smoke.ts"
+,
+    "smoke:loop": "tsx src/engine/core/Loop.smoke.ts"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "tsx": "^4.0.0"
   }
 }
