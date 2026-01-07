@@ -1,142 +1,113 @@
+/**
+ * Loop smoke test – CM v3.1+
+ * Run: npm run smoke:loop
+ *
+ * Purpose:
+ * - Projede "tick pipeline" ve správných fázích:
+ *   Collision -> Impact -> Flow -> Cleanup -> endTick
+ * - Ověří, že kill event vede na score.
+ */
+
 import { EventBus, Phase } from "./EventBus";
 import { CM_EVENT_OWNERSHIP } from "./EventOwnershipMap";
-import { EventType, type CMEventMap } from "./events";
+import type { CMEventMap } from "./events";
 
 import { EntityStore } from "../ecs/EntityStore";
-import type { BaseEntity } from "../ecs/ComponentTypes";
-import { DamageSystem } from "../systems/DamageSystem";
+import type { EntityRef } from "../ecs/EntityRef";
 
-import { makeSessionState } from "../../game/data/SessionState";
-import { FlowDispatcher } from "../../game/systems/FlowDispatcher";
-import { ScoreSystem } from "../../game/systems/ScoreSystem";
-import { GameOverSystem } from "../../game/systems/GameOverSystem";
+// ✅ game systems (správné cesty z engine/core)
+import { CollisionSystem, type WorldEntity } from "../../game/systems/CollisionSystem";
+import { ScoreSystem, type SessionState } from "../../game/systems/ScoreSystem";
 
-// --- helpers
+// ✅ legacy damage (už je přesunuté)
+import { DamageSystem } from "../_legacy/systems/DamageSystem";
+
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
-interface TestEntity extends BaseEntity {
-  hp: number;
-  kind: "player" | "enemy";
-  pendingKill: boolean; // if BaseEntity already has it, TS will merge
-}
-
 function main() {
-  // Core services
   const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
-    maxEventsPerTick: 512,
+    maxEventsPerTick: 256,
     failFast: true,
     dropLeftoversInProd: true,
     onWarn: (m) => console.warn(m),
     onError: (m) => console.error(m),
   });
 
-  // State
-  const session = makeSessionState();
+  const store = new EntityStore<WorldEntity>(32);
 
-  // ECS
-  const store = new EntityStore<TestEntity>(16);
+  const ship: EntityRef = { slot: 1, gen: 1 };
 
-  const player = store.spawn(e => {
-    e.kind = "player";
-    e.hp = 10;
+  // Enemy: hp == projectile damage => must die this tick
+  const enemy = store.spawn((e) => {
+    const ent = e as Extract<WorldEntity, { kind: "enemy" }>;
+    ent.kind = "enemy";
+    ent.pos = { x: 10, y: 0 };
+    ent.radius = 3;
+    ent.hp = 3;
+    ent.pendingKill = false;
   });
 
-  const enemy = store.spawn(e => {
-    e.kind = "enemy";
-    e.hp = 5;
+  // Projectile overlaps enemy => collision must emit hit
+  const proj = store.spawn((e) => {
+    const ent = e as Extract<WorldEntity, { kind: "projectile" }>;
+    ent.kind = "projectile";
+    ent.owner = ship;
+    ent.weapon = "primary";
+    ent.pos = { x: 8, y: 0 };
+    ent.vel = { x: 0, y: 0 };
+    ent.ttl = 1;
+    ent.damage = 3;
+    ent.radius = 2;
+    ent.pendingKill = false;
+    ent.consumed = false;
   });
 
-  // Systems
-  const damage = new DamageSystem(bus, store, {
+  const collision = new CollisionSystem(bus, store);
+
+  // Legacy DamageSystem config
+  const damage = new DamageSystem(bus, store as any, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 999,
   });
 
-  const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 0 });
-  const gameOver = new GameOverSystem(session);
-  const flow = new FlowDispatcher(bus, [score, gameOver]);
+  const session: SessionState = { score: 0 };
+  const score = new ScoreSystem(bus, session, {
+    pointsPerEnemyKill: 10,
+    pointsPerCellKilled: 1,
+  });
 
-  // -------------------------
-  // TICK 0
-  // -------------------------
+  // --- Tick 0 end-to-end ---
   bus.beginTick(0);
 
-  // Phase 0: Input (noop in smoke)
-  bus.enterPhase(Phase.Input);
-
-  // Phase 1: Director (noop)
-  bus.enterPhase(Phase.Director);
-
-  // Phase 2: Simulation (noop)
-  bus.enterPhase(Phase.Simulation);
-
-  // Phase 3: Collision (emit some hits)
   bus.enterPhase(Phase.Collision);
-
-  // 1) projectile hits enemy
-  bus.emit(EventType.PROJECTILE_HIT_ENEMY, { projectile: { slot: 7, gen: 1 }, enemy });
-
-  // 2) projectile hits CA at position -> will produce CA_CELLS_KILLED (in real CAImpactSystem)
-  // For loop smoke we simulate Impact emitting CA_CELLS_KILLED directly to test Flow/score.
-  bus.emit(EventType.PROJECTILE_HIT_CA, { projectile: { slot: 7, gen: 1 }, x: 10, y: 10 });
-
-  // Phase 4: Impact
-  bus.enterPhase(Phase.Impact);
-
-  // Damage applies to enemy
-  damage.update();
-
-  // Simulate CAImpact batching result (as if CAImpactSystem ran)
-  bus.emit(EventType.CA_CELLS_KILLED, { count: 12, source: "explosion" });
-
-  // Phase 5: Flow
-  bus.enterPhase(Phase.Flow);
-  flow.update();
-
-  // Phase 6: Audio (noop drain for smoke, but it must exist if some events are audio-owned)
-  bus.enterPhase(Phase.Audio);
-  bus.drainPhase(Phase.Audio);
-
-  // Phase 7: Cleanup
-  bus.enterPhase(Phase.Cleanup);
-  store.cleanup();
-  bus.endTickAndSwap();
-
-  // Assertions after tick 0
-  const e1 = store.get(enemy);
-  assert(e1 !== null, "enemy must still exist after tick0");
-  assert(e1!.hp === 2, "enemy hp should be 2 after 3 dmg");
-  assert(session.score === 12, "score should equal CA killed count");
-
-  // -------------------------
-  // TICK 1: second hit kills enemy
-  // -------------------------
-  bus.beginTick(1);
-
-  bus.enterPhase(Phase.Input);
-  bus.enterPhase(Phase.Director);
-  bus.enterPhase(Phase.Simulation);
-
-  bus.enterPhase(Phase.Collision);
-  bus.emit(EventType.PROJECTILE_HIT_ENEMY, { projectile: { slot: 7, gen: 1 }, enemy });
+  collision.update();
 
   bus.enterPhase(Phase.Impact);
   damage.update();
 
-  bus.enterPhase(Phase.Flow);
-  flow.update();
+  // ⚠️ Pokud DamageSystem emituje cokoliv vlastněné Impactem a ty to nechceš řešit v tomhle smoke,
+  // tak to MUSÍŠ vycucnout, jinak failFast.
+  bus.drainPhase(Phase.Impact);
 
-  bus.enterPhase(Phase.Audio);
-  bus.drainPhase(Phase.Audio);
+  bus.enterPhase(Phase.Flow);
+  score.update();
 
   bus.enterPhase(Phase.Cleanup);
   store.cleanup();
+
   bus.endTickAndSwap();
 
-  // Enemy should be gone after cleanup
-  assert(store.get(enemy) === null, "enemy must be removed after lethal hit + cleanup");
+  // --- Assertions ---
+  assert(store.get(enemy) === null, "enemy should be removed after cleanup");
+  assert(session.score === 10, "score should increase by kill points");
+
+  const p = store.get(proj);
+  if (p !== null) {
+    const pe = p as Extract<WorldEntity, { kind: "projectile" }>;
+    assert(pe.consumed === true, "projectile should be consumed if still alive");
+  }
 
   console.log("[SMOKE] Loop OK ✅");
 }

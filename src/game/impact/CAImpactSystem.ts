@@ -1,6 +1,8 @@
+// src/game/impact/CAImpactSystem.ts
+
 /**
  * CAImpactSystem (CM v3.1)
- * Phase 4 (Impact):
+ * Phase.Impact:
  * - drains Phase.Impact hit events that involve CA
  * - applies CA operators
  * - batches into ONE CA_CELLS_KILLED event per tick
@@ -19,7 +21,7 @@ export type CAWorld = {
 };
 
 export type CAImpactRules = {
-  explosionRadius: number; // MVP fixed; later based on projectile defId
+  explosionRadius: number; // MVP fixed
 };
 
 export class CAImpactSystem {
@@ -30,6 +32,7 @@ export class CAImpactSystem {
   ) {}
 
   update(): void {
+    // optional runtime safety
     if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Impact) {
       throw new Error("[CAImpactSystem] update() must run in Phase.Impact");
     }
@@ -41,15 +44,13 @@ export class CAImpactSystem {
     for (const e of events) {
       if (e.type !== EventType.PROJECTILE_HIT_CA) continue;
 
-      const { x, y } = e.payload as { projectile: any; x: number; y: number };
+      const { x, y } = e.payload as CMEventMap[typeof EventType.PROJECTILE_HIT_CA];
 
-      // MVP: explosion operator
-      const killed = this.ca.applyExplosion(x, y, this.rules.explosionRadius);
-      killedTotal += killed;
+      killedTotal += this.ca.applyExplosion(x, y, this.rules.explosionRadius);
     }
 
-    // Batch output
     if (killedTotal > 0) {
+      // Owned by Flow (podle tvého OwnershipMap)
       this.bus.emit(EventType.CA_CELLS_KILLED, {
         count: killedTotal,
         source: "caImpact",

@@ -7,12 +7,12 @@
  * - emits ENTITY_DAMAGED / ENTITY_KILLED (ownership decides where they get drained)
  */
 
-import type { EventBus } from "../core/EventBus";
-import { Phase } from "../core/EventBus";
-import { EventType, type CMEventMap } from "../core/events";
-import type { EntityRef } from "../ecs/EntityRef";
-import type { BaseEntity } from "../ecs/ComponentTypes";
-import { EntityStore } from "../ecs/EntityStore";
+import type { EventBus } from "../../core/EventBus";
+import { Phase } from "../../core/EventBus";
+import { EventType, type CMEventMap } from "../../core/events";
+import type { EntityRef } from "../../ecs/EntityRef";
+import type { BaseEntity } from "../../ecs/ComponentTypes";
+import { EntityStore } from "../../ecs/EntityStore";
 
 export type Damageable = BaseEntity & {
   hp: number;

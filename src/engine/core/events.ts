@@ -2,27 +2,26 @@
 import type { EntityRef } from "../ecs/EntityRef";
 import type { Vec2 } from "../math/Vec2";
 
-// ---------- EventType (string literal "enum") ----------
 export const EventType = {
-  // Phase 1 (Director/Spawns) – requests
   SPAWN_ENEMY: "SPAWN_ENEMY",
   SPAWN_PROJECTILE: "SPAWN_PROJECTILE",
   SPAWN_BOMB: "SPAWN_BOMB",
   SPAWN_PICKUP: "SPAWN_PICKUP",
 
-  // Phase 3 (Collision) – detections
-  PROJECTILE_HIT_ENEMY: "PROJECTILE_HIT_ENEMY",
+  PLAYER_FIRE_PRIMARY: "PLAYER_FIRE_PRIMARY",
+  PLAYER_FIRE_BOMB: "PLAYER_FIRE_BOMB",
 
-  // Phase 4 (Impact) – results
+  PROJECTILE_HIT_ENEMY: "PROJECTILE_HIT_ENEMY",
+  PROJECTILE_HIT_CA: "PROJECTILE_HIT_CA",
+
+  CA_CELLS_KILLED: "CA_CELLS_KILLED",
   ENTITY_DAMAGED: "ENTITY_DAMAGED",
   ENTITY_KILLED: "ENTITY_KILLED",
 } as const;
 
 export type EventType = (typeof EventType)[keyof typeof EventType];
 
-// ---------- Event payload map ----------
 export type CMEventMap = {
-  // Requests (Director owns)
   [EventType.SPAWN_PROJECTILE]: {
     owner: EntityRef;
     origin: Vec2;
@@ -36,21 +35,28 @@ export type CMEventMap = {
     target: Vec2;
   };
 
-  // Collision
-  [EventType.PROJECTILE_HIT_ENEMY]: {
-    projectile: EntityRef;
-    enemy: EntityRef;
-  };
+  [EventType.SPAWN_ENEMY]: { typeId: string };
+  [EventType.SPAWN_PICKUP]: { defId: string; pos: Vec2 };
 
-  // Impact
+  [EventType.PLAYER_FIRE_PRIMARY]: { owner: EntityRef };
+  [EventType.PLAYER_FIRE_BOMB]: { owner: EntityRef; target: Vec2 };
+
+  [EventType.PROJECTILE_HIT_ENEMY]: { projectile: EntityRef; enemy: EntityRef };
+  [EventType.PROJECTILE_HIT_CA]: { projectile: EntityRef; x: number; y: number };
+
+  [EventType.CA_CELLS_KILLED]: { count: number; source: string };
+
+  // ✅ sjednoceno dle Flow.smoke.ts
   [EventType.ENTITY_DAMAGED]: {
-    entity: EntityRef;
+    target: EntityRef;
     amount: number;
-    source: string;
+    hpAfter: number;
   };
 
+  // ✅ sjednoceno dle Flow.smoke.ts
   [EventType.ENTITY_KILLED]: {
-    entity: EntityRef;
+    target: EntityRef;
     source: string;
+    isPlayer: boolean;
   };
 };

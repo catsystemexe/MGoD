@@ -1,14 +1,16 @@
+// src/engine/input/ActionSchema.ts
 export type Vec2 = { x: number; y: number };
 
 export type PlayerActions = {
-  move: Vec2;          // normalized
+  move: Vec2;
 
-  // Aim point in logic/WU space (cursor target)
-  aimTarget: Vec2;
+  // Aim point in LOGIC coords (same as bomb target space)
+  aim: Vec2;
 
-  firePrimary: boolean;   // LMB hold
-  fireSecondary: boolean; // RMB hold
+  firePrimary: boolean;
+  fireSecondary: boolean;
 
-  bombPressed: boolean;   // Space buffered trigger
-  bombTarget: Vec2;       // captured aimTarget at press time (deterministic)
+  // Bomb is a one-tick pulse (buffered)
+  bombPressed: boolean;
+  bombTarget: Vec2;
 };

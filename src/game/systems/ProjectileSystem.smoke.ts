@@ -1,15 +1,29 @@
 import { EventBus, Phase } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import type { CMEventMap } from "../../engine/core/events";
+
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
-
-import type { SpawnableEntity } from "./SpawnSystem";
 import { ProjectileSystem } from "./ProjectileSystem";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
+
+type TestEntity =
+  | {
+      kind: "projectile";
+      owner: EntityRef;
+      weapon: "primary";
+      pos: { x: number; y: number };
+      vel: { x: number; y: number };
+      ttl: number;
+      damage: number;
+      radius: number;
+      pendingKill: boolean;
+      consumed: boolean;
+    }
+  | { kind: "enemy"; pos: { x: number; y: number }; radius: number; hp: number; pendingKill: boolean };
 
 function main() {
   const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
@@ -20,56 +34,73 @@ function main() {
     onError: (m) => console.error(m),
   });
 
-  const store = new EntityStore<SpawnableEntity>(16);
+  const store = new EntityStore<TestEntity>(16);
+  const sys = new ProjectileSystem(bus, store);
 
-  const owner: EntityRef = { slot: 1, gen: 1 };
+  const ship: EntityRef = { slot: 1, gen: 1 };
 
-  const projRef = store.spawn(e => {
+  const p1 = store.spawn(e => {
     e.kind = "projectile";
-    e.owner = owner;
+    e.owner = ship;
     e.weapon = "primary";
     e.pos = { x: 0, y: 0 };
-    e.vel = { x: 10, y: 0 };
-    e.ttl = 0.05;
+    e.vel = { x: 60, y: 0 };
+    e.ttl = 1.0;
     e.damage = 3;
     e.radius = 2;
     e.pendingKill = false;
+    e.consumed = false;
   });
 
-  const sys = new ProjectileSystem(bus, store, {
-    enabled: true,
-    min: { x: -100, y: -100 },
-    max: { x: 100, y: 100 },
+  const p2 = store.spawn(e => {
+    e.kind = "projectile";
+    e.owner = ship;
+    e.weapon = "primary";
+    e.pos = { x: 0, y: 0 };
+    e.vel = { x: 0, y: 0 };
+    e.ttl = 1.0;
+    e.damage = 3;
+    e.radius = 2;
+    e.pendingKill = false;
+    e.consumed = true; // will be killed immediately
   });
 
-  // Tick 0: move a bit, still alive
+  const p3 = store.spawn(e => {
+    e.kind = "projectile";
+    e.owner = ship;
+    e.weapon = "primary";
+    e.pos = { x: 0, y: 0 };
+    e.vel = { x: 0, y: 0 };
+    e.ttl = 0.01; // will expire
+    e.damage = 3;
+    e.radius = 2;
+    e.pendingKill = false;
+    e.consumed = false;
+  });
+
   bus.beginTick(0);
   bus.enterPhase(Phase.Simulation);
-  sys.update(0.016);
 
-  const p1 = store.get(projRef);
-  assert(p1 !== null, "projectile still exists");
-  assert(p1!.pos.x > 0, "projectile moved");
-  assert(p1!.pendingKill === false, "not killed yet");
+  sys.update(1 / 60);
 
-  bus.enterPhase(Phase.Cleanup);
-  store.cleanup();
-  bus.endTickAndSwap();
+  const a = store.get(p1)!;
+  const b = store.get(p2)!;
+  const c = store.get(p3)!;
 
-  // Tick 1: advance enough to exceed ttl -> pendingKill
-  bus.beginTick(1);
-  bus.enterPhase(Phase.Simulation);
-  sys.update(0.050);
+  assert(a.kind === "projectile" && a.pos.x > 0, "p1 should move forward");
+  assert(b.kind === "projectile" && b.pendingKill === true, "p2 consumed => pendingKill");
+  // p3 may or may not expire at 1/60 depending on ttl; force 2nd update
+  sys.update(1 / 60);
 
-  const p2 = store.get(projRef);
-  assert(p2 !== null, "projectile still accessible before cleanup");
-  assert(p2!.pendingKill === true, "projectile marked pendingKill after ttl");
+  const c2 = store.get(p3)!;
+  assert(c2.kind === "projectile" && c2.pendingKill === true, "p3 ttl <= 0 => pendingKill");
 
   bus.enterPhase(Phase.Cleanup);
   store.cleanup();
   bus.endTickAndSwap();
 
-  assert(store.get(projRef) === null, "projectile removed after cleanup");
+  assert(store.get(p2) === null, "p2 removed after cleanup");
+  assert(store.get(p3) === null, "p3 removed after cleanup");
 
   console.log("[SMOKE] ProjectileSystem OK ✅");
 }

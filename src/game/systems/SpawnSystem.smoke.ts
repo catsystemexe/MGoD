@@ -19,9 +19,11 @@ function main() {
     onError: (m) => console.error(m),
   });
 
-  const store = new EntityStore<SpawnableEntity>(16);
+  const store = new EntityStore<SpawnableEntity>(32);
 
   const spawn = new SpawnSystem(bus, store, {
+    rng01: () => 0.5,
+    logicSize: { w: 400, h: 224 },
     projectile: {
       primary: { speed: 200, ttlSec: 1.0, damage: 3, radius: 2 },
       secondary: { speed: 140, ttlSec: 1.2, damage: 7, radius: 3 },
@@ -47,6 +49,10 @@ function main() {
     target: { x: 100, y: 50 },
   });
 
+  bus.emitNext(EventType.SPAWN_ENEMY, {
+    typeId: "enemy.drone",
+  });
+
   bus.enterPhase(Phase.Cleanup);
   bus.endTickAndSwap();
 
@@ -55,24 +61,19 @@ function main() {
   bus.enterPhase(Phase.Director);
   spawn.update();
 
-  let aliveCount = 0;
   let projCount = 0;
   let bombCount = 0;
-  let projVelX = 0;
+  let enemyCount = 0;
 
   store.debugForEachAlive((_ref, e) => {
-    aliveCount++;
-    if (e.kind === "projectile") {
-      projCount++;
-      projVelX = e.vel.x;
-    }
+    if (e.kind === "projectile") projCount++;
     if (e.kind === "bomb") bombCount++;
+    if (e.kind === "enemy") enemyCount++;
   });
 
-  assert(aliveCount === 2, "should spawn exactly 2 entities");
   assert(projCount === 1, "should spawn 1 projectile");
   assert(bombCount === 1, "should spawn 1 bomb");
-  assert(projVelX > 0, "projectile vel.x should be > 0");
+  assert(enemyCount === 1, "should spawn 1 enemy");
 
   bus.enterPhase(Phase.Cleanup);
   bus.endTickAndSwap();

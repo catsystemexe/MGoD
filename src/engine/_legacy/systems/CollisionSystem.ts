@@ -5,11 +5,11 @@
  * - Priority: Enemy > CA when both would be hit in same tick.
  */
 
-import type { EventBus } from "../core/EventBus";
-import { Phase } from "../core/EventBus";
-import { EventType, type CMEventMap } from "../core/events";
-import type { EntityRef } from "../ecs/EntityRef";
-import { EntityFlag } from "../ecs/ComponentTypes";
+import type { EventBus } from "../../core/EventBus";
+import { Phase } from "../../core/EventBus";
+import { EventType, type CMEventMap } from "../../core/events";
+import type { EntityRef } from "../../ecs/EntityRef";
+import { EntityFlag } from "../../ecs/ComponentTypes";
 
 // Minimal data needed for collision
 export type CollidableProjectile = {

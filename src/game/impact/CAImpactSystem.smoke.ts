@@ -18,32 +18,29 @@ function main() {
 
   // CA stub: each explosion kills 10 cells
   const ca = {
-    applyExplosion: () => 10,
+    applyExplosion: (_x: number, _y: number, _r: number) => 10,
   };
 
   const sys = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
   bus.beginTick(0);
 
-  // Two CA hits in same tick
+  // ✅ emit detections (owned by Impact, but emitted during Collision)
   bus.enterPhase(Phase.Collision);
   bus.emit(EventType.PROJECTILE_HIT_CA, { projectile: { slot: 1, gen: 1 }, x: 10, y: 10 });
   bus.emit(EventType.PROJECTILE_HIT_CA, { projectile: { slot: 2, gen: 1 }, x: 11, y: 11 });
 
+  // ✅ process in Impact
   bus.enterPhase(Phase.Impact);
   sys.update();
 
-  // We expect ONE batched CA_CELLS_KILLED event (count 20)
-  // Depending on ownership map, this event may be owned by Flow or Impact.
-  // We'll check by draining BOTH phases if needed (safe for smoke).
+  // ✅ CA_CELLS_KILLED owned by Flow => drain in Flow
+  bus.enterPhase(Phase.Flow);
   const flowEvents = bus.drainPhase(Phase.Flow);
-  const impactEvents = bus.drainPhase(Phase.Impact);
 
-  const all = [...flowEvents, ...impactEvents];
-  const killed = all.filter(e => e.type === EventType.CA_CELLS_KILLED);
-
+  const killed = flowEvents.filter((e) => e.type === EventType.CA_CELLS_KILLED);
   assert(killed.length === 1, "Must emit exactly one CA_CELLS_KILLED event");
-  assert((killed[0].payload as any).count === 20, "Batched count must be 20");
+  assert(killed[0].payload.count === 20, "Batched count must be 20");
 
   console.log("[SMOKE] CAImpactSystem OK ✅");
 }
