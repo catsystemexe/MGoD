@@ -1,11 +1,6 @@
-/**
- * Game SpawnSystem (CM v3.1)
- * - ONLY place that turns SPAWN_* events into real entities (game-layer entities).
- * - Must be run in Phase.Director.
- */
-
-import { Phase, type EventBus } from "../../engine/core/EventBus";
+// src/game/systems/SpawnSystem.ts
 import { EventType, type CMEventMap } from "../../engine/core/events";
+import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
@@ -16,25 +11,11 @@ import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 export type WeaponId = "primary" | "secondary";
 
 export interface SpawnSystemConfig {
-  rng01: () => number; // deterministic 0..1
+  rng01: () => number;
   logicSize: { w: number; h: number };
 
-  projectile: Record<
-    WeaponId,
-    {
-      speed: number;
-      ttlSec: number;
-      damage: number;
-      radius: number;
-    }
-  >;
-
-  bomb: {
-    travelSec: number;
-    damage: number;
-    radius: number;
-    ttlSec: number;
-  };
+  projectile: Record<WeaponId, { speed: number; ttlSec: number; damage: number; radius: number }>;
+  bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
 }
 
 export interface ProjectileEntity {
@@ -76,34 +57,24 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
 
 export class SpawnSystem {
   constructor(
-    private readonly bus: EventBus<CMEventMap>,
     private readonly store: EntityStore<SpawnableEntity>,
     private readonly cfg: SpawnSystemConfig,
   ) {
-    // Fail-fast (reálně ti šetří čas)
     if (typeof this.cfg?.rng01 !== "function") {
-      throw new Error(
-        `[SpawnSystem] cfg.rng01 must be a function. Got ${typeof (this.cfg as any)?.rng01}. Keys=${Object.keys(
-          (this.cfg ?? {}) as any,
-        ).join(",")}`,
-      );
+      throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
     }
     if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
-      throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}. Got=${JSON.stringify(this.cfg.logicSize)}`);
+      throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
     }
   }
 
-  /** Must be called only when bus is in Phase.Director */
-  update(): void {
-    const events = this.bus.drainPhase(Phase.Director);
-
+  /** Phase.Director handler (Loop provides events) */
+  update(_ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
     for (const e of events) {
       switch (e.type) {
         case EventType.SPAWN_PROJECTILE: {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
-
-          const weapon = p.weapon;
-          const wcfg = this.cfg.projectile[weapon];
+          const wcfg = this.cfg.projectile[p.weapon];
 
           const dx = p.dir.x;
           const dy = p.dir.y;
@@ -111,75 +82,71 @@ export class SpawnSystem {
           const nx = dx / len;
           const ny = dy / len;
 
-          const vx = nx * wcfg.speed;
-          const vy = ny * wcfg.speed;
-
           this.store.spawn((ent) => {
-            ent.kind = "projectile";
-            ent.owner = p.owner;
-            ent.weapon = weapon;
-            ent.pos = { x: p.origin.x, y: p.origin.y };
-            ent.vel = { x: vx, y: vy };
-            ent.ttl = wcfg.ttlSec;
-            ent.damage = wcfg.damage;
-            ent.radius = wcfg.radius;
-            ent.pendingKill = false;
-            ent.consumed = false;
+            (ent as any).kind = "projectile";
+            (ent as any).owner = p.owner;
+            (ent as any).weapon = p.weapon;
+            (ent as any).pos = { x: p.origin.x, y: p.origin.y };
+            (ent as any).vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
+            (ent as any).ttl = wcfg.ttlSec;
+            (ent as any).damage = wcfg.damage;
+            (ent as any).radius = wcfg.radius;
+            (ent as any).pendingKill = false;
+            (ent as any).consumed = false;
           });
-
           break;
         }
 
-          case EventType.SPAWN_BOMB: {
-            const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
-            const b = this.cfg.bomb;
+        case EventType.SPAWN_BOMB: {
+          const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
+          const b = this.cfg.bomb;
 
-            // ✅ origin může chybět -> fallback (MVP: spawn na origin=target)
-            const origin = p.origin ?? { x: p.target.x, y: p.target.y };
+          const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
+          const vx = b.travelSec > 0 ? to.x / b.travelSec : 0;
+          const vy = b.travelSec > 0 ? to.y / b.travelSec : 0;
 
-            const to = { x: p.target.x - origin.x, y: p.target.y - origin.y };
-            const vx = b.travelSec > 0 ? to.x / b.travelSec : 0;
-            const vy = b.travelSec > 0 ? to.y / b.travelSec : 0;
-
-            this.store.spawn((ent) => {
-              ent.kind = "bomb";
-              ent.owner = p.owner;
-              ent.pos = { x: origin.x, y: origin.y };
-              ent.vel = { x: vx, y: vy };
-              ent.ttl = Math.max(0.001, b.travelSec);
-              ent.damage = b.damage;
-              ent.radius = b.radius;
-              ent.pendingKill = false;
-              ent.target = { x: p.target.x, y: p.target.y };
-            });
-
-            break;
-          }
+          this.store.spawn((ent) => {
+            (ent as any).kind = "bomb";
+            (ent as any).owner = p.owner;
+            (ent as any).pos = { x: p.origin.x, y: p.origin.y };
+            (ent as any).vel = { x: vx, y: vy };
+            (ent as any).ttl = Math.max(0.001, b.travelSec);
+            (ent as any).damage = b.damage;
+            (ent as any).radius = b.radius;
+            (ent as any).pendingKill = false;
+            (ent as any).target = { x: p.target.x, y: p.target.y };
+          });
+          break;
+        }
 
         case EventType.SPAWN_ENEMY: {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
 
-          const def = ENEMY_DEFS[p.typeId];
+          const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
           const spawnPos = this.pickEdgeSpawn();
-          const vel = { x: 0, y: def.speed }; // MVP drift down
+          const vel = { x: 0, y: def.speed };
 
           this.store.spawn((ent) => {
-            ent.kind = "enemy";
-            ent.typeId = p.typeId;
-            ent.pos = spawnPos;
-            ent.vel = vel;
-            ent.hp = def.hp;
-            ent.radius = def.radius;
-            ent.pendingKill = false;
+            (ent as any).kind = "enemy";
+            (ent as any).typeId = p.typeId as EnemyTypeId;
+            (ent as any).pos = spawnPos;
+            (ent as any).vel = vel;
+            (ent as any).hp = def.hp;
+            (ent as any).radius = def.radius;
+            (ent as any).pendingKill = false;
           });
-
           break;
         }
 
+        case EventType.SPAWN_PICKUP:
+          // MVP: ignore, nebo implementuj později
+          break;
+
         default:
-          throw new Error(`[SpawnSystem] Unexpected event in Director drain: ${String(e.type)}`);
+          // Director phase může mít v budoucnu další requesty => netvrdit error
+          break;
       }
     }
   }

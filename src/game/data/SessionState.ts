@@ -1,10 +1,10 @@
+// src/game/data/SessionState.ts
 export type SessionState = {
   tick: number;
   timeSec: number;
-
   score: number;
-
-  // MVP: life state
+  lives: number;
+  wave: number;
   gameOver: boolean;
 };
 
@@ -13,6 +13,8 @@ export function makeSessionState(): SessionState {
     tick: 0,
     timeSec: 0,
     score: 0,
+    lives: 3,
+    wave: 1,
     gameOver: false,
   };
 }

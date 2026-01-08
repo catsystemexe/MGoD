@@ -1,20 +1,24 @@
+
 import { EventBus, Phase } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
-import { EventType, type CMEventMap } from "../../engine/core/events";
-
+import type { TickContext } from "../../engine/core/Loop";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
 import { CollisionSystem, type WorldEntity } from "./CollisionSystem";
 import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
-import { ScoreSystem, type SessionState } from "./ScoreSystem";
+
+import { FlowDispatcher } from "../systems/FlowDispatcher";
+import { FlowSystem } from "../systems/FlowSystem";
+import { ScoreSystem } from "../systems/ScoreSystem";
+import { makeSessionState } from "../data/SessionState";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
 function main() {
-  const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
+  const bus = new EventBus(CM_EVENT_OWNERSHIP, {
     maxEventsPerTick: 256,
     failFast: true,
     dropLeftoversInProd: true,
@@ -28,40 +32,42 @@ function main() {
 
   // Enemy: hp == projectile damage => must die this tick
   const enemy = store.spawn(e => {
-    e.kind = "enemy";
-    e.pos = { x: 10, y: 0 };
-    e.radius = 3;
-    e.hp = 3;
-    e.pendingKill = false;
+    (e as any).kind = "enemy";
+    (e as any).pos = { x: 10, y: 0 };
+    (e as any).radius = 3;
+    (e as any).hp = 3;
+    (e as any).pendingKill = false;
   });
 
   // Projectile overlaps enemy => collision must emit hit
   const proj = store.spawn(e => {
-    e.kind = "projectile";
-    e.owner = ship;
-    e.weapon = "primary";
-    e.pos = { x: 8, y: 0 };
-    e.vel = { x: 0, y: 0 };
-    e.ttl = 1;
-    e.damage = 3;
-    e.radius = 2;
-    e.pendingKill = false;
-    e.consumed = false;
+    (e as any).kind = "projectile";
+    (e as any).owner = ship;
+    (e as any).weapon = "primary";
+    (e as any).pos = { x: 8, y: 0 };
+    (e as any).vel = { x: 0, y: 0 };
+    (e as any).ttl = 1;
+    (e as any).damage = 3;
+    (e as any).radius = 2;
+    (e as any).pendingKill = false;
+    (e as any).consumed = false;
   });
 
-  const collision = new CollisionSystem(bus, store);
+  const collision = new CollisionSystem(bus as any, store as any);
 
-  // NOTE: pokud máš DamageSystem typovaný jinak, uprav jen config.
-  const damage = new DamageSystem(bus, store as any, {
+  // Legacy DamageSystem – config only
+  const damage = new DamageSystem(bus as any, store as any, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 999,
   });
 
-  const session: SessionState = { score: 0 };
-  const score = new ScoreSystem(bus, session, {
-    pointsPerEnemyKill: 10,
-    pointsPerCellKilled: 1,
-  });
+  // --- Flow pipeline (aktuální architektura)
+  const session = makeSessionState();
+  const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
+  const flowDispatcher = new FlowDispatcher([score]);
+  const flow = new FlowSystem(flowDispatcher);
+
+  const ctx: TickContext = { tick: 0, dt: 1 / 60 };
 
   // --- Tick 0 end-to-end ---
   bus.beginTick(0);
@@ -73,7 +79,8 @@ function main() {
   damage.update();
 
   bus.enterPhase(Phase.Flow);
-  score.update();
+  const flowEvents = bus.drainPhase(Phase.Flow) as any[];
+  flow.update(ctx, flowEvents as any);
 
   bus.enterPhase(Phase.Cleanup);
   store.cleanup();

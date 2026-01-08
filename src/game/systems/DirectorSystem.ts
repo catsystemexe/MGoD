@@ -1,32 +1,30 @@
-import { Phase, type EventBus } from "../../engine/core/EventBus";
+// src/game/systems/DirectorSystem.ts
+import type { EventBus } from "../../engine/core/EventBus";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { DirectorDefs, SpawnWave } from "../defs/DirectorDefs";
 
 export interface DirectorState {
-  timeSec: number;     // session time (accumulated by Loop)
-  tick: number;        // current tick
+  timeSec: number; // session time (accumulated by Loop)
+  tick: number;    // current tick
 }
 
 export interface DirectorRuntime {
-  enabled: boolean;    // DevUI toggle later
+  enabled: boolean; // DevUI toggle later
 }
 
 export class DirectorSystem {
   private lastSpawnAtSec = -999;
 
   constructor(
-    private bus: EventBus<CMEventMap>,
-    private store: EntityStore<any>,
-    private defs: DirectorDefs,
-    private runtime: DirectorRuntime = { enabled: true },
+    private readonly bus: EventBus<CMEventMap>,
+    private readonly store: EntityStore<any>,
+    private readonly defs: DirectorDefs,
+    private readonly runtime: DirectorRuntime = { enabled: true },
   ) {}
 
-  /** Must run in Phase.Director */
+  /** Must run in Phase.Director (Loop enforces phase) */
   update(state: DirectorState): void {
-    // Optional guard (pokud bus umí phase check)
-    // if (this.bus.getPhase?.() !== Phase.Director) throw new Error("Director must run in Phase.Director");
-
     if (!this.runtime.enabled) return;
 
     const wave = this.pickWave(state.timeSec);
@@ -41,17 +39,17 @@ export class DirectorSystem {
 
     this.lastSpawnAtSec = state.timeSec;
 
-    // Emit spawn request (owned by Phase.Director)
-    this.bus.emit(EventType.SPAWN_ENEMY, {
+    // IMPORTANT:
+    // Loop drains Phase.Director BEFORE calling update(), so same-tick emissions would be missed.
+    // Therefore spawn requests must go to next tick:
+    this.bus.emitNext(EventType.SPAWN_ENEMY, {
       typeId: wave.enemy,
-      // MVP: spawn position decides SpawnSystem (random edges etc.)
-      // we keep Director ignorant of coordinates, unless you want patterns.
     });
   }
 
   private pickWave(t: number): SpawnWave | null {
     for (const w of this.defs.waves) {
-      if (t >= w.startSec && t < (w.startSec + w.durationSec)) return w;
+      if (t >= w.startSec && t < w.startSec + w.durationSec) return w;
     }
     return null;
   }

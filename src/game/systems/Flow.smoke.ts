@@ -23,7 +23,7 @@ function main() {
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 0 });
   const gameOver = new GameOverSystem(session);
 
-  const flow = new FlowDispatcher(bus, [score, gameOver]);
+  const flow = new FlowDispatcher([score, gameOver]);
 
   bus.beginTick(0);
 
@@ -35,7 +35,8 @@ function main() {
 
   // Flow drains and dispatches
   bus.enterPhase(Phase.Flow);
-  flow.update();
+  const flowEvents = bus.drainPhase(Phase.Flow);
+  flow.dispatch(flowEvents as any);
 
   assert(session.score === 12, "score must equal CA killed count in MVP");
   assert(session.gameOver === false, "gameOver should remain false");
@@ -45,7 +46,8 @@ function main() {
   bus.emit(EventType.ENTITY_KILLED, { target: { slot: 1, gen: 1 }, source: "contact", isPlayer: true });
 
   bus.enterPhase(Phase.Flow);
-  flow.update();
+  const flowEvents2 = bus.drainPhase(Phase.Flow);
+  flow.dispatch(flowEvents2 as any);
 
   assert(session.gameOver === true, "gameOver must become true after player kill");
 

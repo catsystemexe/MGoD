@@ -32,7 +32,9 @@ export class ProjectileSystem {
       if (e.pendingKill) return;
 
       // Move
-      e.pos = { x: e.pos.x + e.vel.x * dtSec, y: e.pos.y + e.vel.y * dtSec };
+      // Move (in-place)
+      e.pos.x += e.vel.x * dtSec;
+      e.pos.y += e.vel.y * dtSec;
 
       // Lifetime
       e.ttl -= dtSec;

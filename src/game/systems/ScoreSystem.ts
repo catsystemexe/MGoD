@@ -1,4 +1,4 @@
-import { Phase, type EventBus } from "../../engine/core/EventBus";
+// src/game/systems/ScoreSystem.ts
 import { EventType, type CMEventMap } from "../../engine/core/events";
 
 export interface SessionState {
@@ -18,14 +18,9 @@ export type ScoreConfigSmoke = {
 
 type AnyCMEvent = { type: keyof CMEventMap; payload: CMEventMap[keyof CMEventMap] };
 
-function isBus(x: unknown): x is EventBus<CMEventMap> {
-  return !!x && typeof (x as any).drainPhase === "function" && typeof (x as any).enterPhase === "function";
-}
-
 function normalizeCfg(cfg: ScoreConfig | ScoreConfigSmoke): ScoreConfig {
   const c: any = cfg;
 
-  // smoke style
   if ("pointsPerCell" in c || "pointsPerEntityKill" in c) {
     return {
       pointsPerEnemyKill: Number(c.pointsPerEntityKill ?? 0),
@@ -33,7 +28,6 @@ function normalizeCfg(cfg: ScoreConfig | ScoreConfigSmoke): ScoreConfig {
     };
   }
 
-  // new style
   return {
     pointsPerEnemyKill: Number(c.pointsPerEnemyKill ?? 0),
     pointsPerCellKilled: Number(c.pointsPerCellKilled ?? 0),
@@ -41,26 +35,12 @@ function normalizeCfg(cfg: ScoreConfig | ScoreConfigSmoke): ScoreConfig {
 }
 
 export class ScoreSystem {
-  private readonly bus: EventBus<CMEventMap> | null;
   private readonly session: SessionState;
   private readonly cfg: ScoreConfig;
 
-  // Overload A: dispatcher/smoke
-  constructor(session: SessionState, cfg: ScoreConfigSmoke);
-  // Overload B: standalone
-  constructor(bus: EventBus<CMEventMap>, session: SessionState, cfg: ScoreConfig);
-  constructor(a: any, b: any, c?: any) {
-    if (isBus(a)) {
-      // (bus, session, cfg)
-      this.bus = a;
-      this.session = b as SessionState;
-      this.cfg = normalizeCfg(c as ScoreConfig);
-    } else {
-      // (session, cfg)
-      this.bus = null;
-      this.session = a as SessionState;
-      this.cfg = normalizeCfg(b as ScoreConfigSmoke);
-    }
+  constructor(session: SessionState, cfg: ScoreConfig | ScoreConfigSmoke) {
+    this.session = session;
+    this.cfg = normalizeCfg(cfg);
   }
 
   /** FlowDispatcher listener API */
@@ -69,7 +49,7 @@ export class ScoreSystem {
       switch (e.type) {
         case EventType.ENTITY_KILLED: {
           const p = e.payload as any;
-          if (p && typeof p.isPlayer === "boolean" && p.isPlayer) break; // nepočítat smrt hráče
+          if (p?.isPlayer === true) break; // nepočítat smrt hráče
           this.session.score += this.cfg.pointsPerEnemyKill;
           break;
         }
@@ -80,23 +60,9 @@ export class ScoreSystem {
           break;
         }
 
-        case EventType.ENTITY_DAMAGED:
-          break;
-
         default:
-          // nefailovat na budoucí flow eventy
           break;
       }
     }
-  }
-
-  /** Standalone režim (jen pokud byl předán bus) */
-  update(): void {
-    if (!this.bus) throw new Error("[ScoreSystem] update() requires bus (construct with bus, session, cfg)");
-    if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Flow) {
-      throw new Error("[ScoreSystem] update() must run in Phase.Flow");
-    }
-    const events = this.bus.drainPhase(Phase.Flow) as AnyCMEvent[];
-    if (events.length) this.onFlowEvents(events);
   }
 }
