@@ -1,30 +1,7 @@
 {
-  "name": "captain-meow",
-  "private": true,
   "type": "module",
   "scripts": {
-    "smoke:eventbus": "tsx src/engine/core/EventBus.smoke.ts",
-    "smoke:entity": "tsx src/engine/ecs/EntityStore.smoke.ts",
-    "smoke:input": "tsx src/engine/input/InputManager.smoke.ts",
-    "smoke:loop": "tsx src/engine/core/Loop.smoke.ts",
-
-    "smoke:game:caimpact": "tsx src/game/impact/CAImpactSystem.smoke.ts",
-    "smoke:game:player": "tsx src/game/systems/PlayerSystem.smoke.ts",
-    "smoke:game:weapons": "tsx src/game/systems/WeaponSystem.smoke.ts",
-    "smoke:game:spawn": "tsx src/game/systems/SpawnSystem.smoke.ts",
-    "smoke:game:projectiles": "tsx src/game/systems/ProjectileSystem.smoke.ts",
-    "smoke:game:collision": "tsx src/game/systems/CollisionSystem.smoke.ts",
-    "smoke:game:director": "tsx src/game/systems/DirectorSystem.smoke.ts",
-    "smoke:game:flow": "tsx src/game/systems/Flow.smoke.ts",
-    "smoke:game:combat": "tsx src/game/systems/CombatLoop.smoke.ts",
-
-    "smoke:legacy:spawn": "tsx src/engine/_legacy/systems/SpawnSystem.smoke.ts",
-    "smoke:legacy:damage": "tsx src/engine/_legacy/systems/DamageSystem.smoke.ts",
-    "smoke:legacy:collision": "tsx src/engine/_legacy/systems/CollisionSystem.smoke.ts",
-
-    "smoke:all": "npm run smoke:eventbus && npm run smoke:entity && npm run smoke:input && npm run smoke:loop && npm run smoke:game:caimpact && npm run smoke:game:player && npm run smoke:game:weapons && npm run smoke:game:spawn && npm run smoke:game:projectiles && npm run smoke:game:collision && npm run smoke:game:director && npm run smoke:game:flow && npm run smoke:game:combat"
-  },
-  "devDependencies": {
-    "tsx": "^4.0.0"
+    "dev": "vite",
+    "build": "vite build"
   }
 }
