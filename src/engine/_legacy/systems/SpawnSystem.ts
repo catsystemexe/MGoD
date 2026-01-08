@@ -65,6 +65,10 @@ export class SpawnSystem<T extends BaseEntity> {
           break;
 
         case EventType.SPAWN_PROJECTILE:
+        
+          
+          console.log("SPAWN tick", (window as any).__CM?.loop?.getTick?.(), p.dir);
+          
           this.factory.spawnProjectile(this.store, e.payload as SpawnProjectilePayload);
           break;
 

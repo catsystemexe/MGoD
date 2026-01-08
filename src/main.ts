@@ -1,69 +1,205 @@
+export {};
+
 console.log("[BOOT] main.ts running");
 
-// hard fallback UI (uvidíš i když se další importy rozbijou)
+document.body.style.userSelect = "none";
+(document.body.style as any).webkitUserSelect = "none";
+(document.body.style as any).webkitTouchCallout = "none";
 document.body.style.margin = "0";
 document.body.style.background = "black";
-document.body.innerHTML = `<div id="boot" style="color:white;font:16px monospace;padding:12px">BOOT OK</div>`;
+document.body.style.height = "100vh";
+document.body.style.display = "grid";
+document.body.style.placeItems = "center";
+
+declare global {
+  interface Window {
+    __CM?: any;
+  }
+}
+window.__CM = window.__CM || {};
+
+const root = document.createElement("div");
+root.id = "root";
+root.style.position = "relative";
+root.style.display = "inline-block";
+document.body.appendChild(root);
+
+const boot = document.createElement("div");
+boot.id = "boot";
+boot.style.cssText =
+  "color:white;font:16px monospace;padding:12px;position:fixed;left:0;top:0;z-index:9999";
+boot.textContent = "BOOT OK";
+document.body.appendChild(boot);
 
 window.addEventListener("error", (e) => {
-  console.error("[BOOT] window.error", e.error || e.message);
-  const el = document.getElementById("boot");
-  if (el) el.innerHTML = "BOOT ERROR (window.error): " + String(e.error || e.message);
+  console.error("[BOOT] window.error", (e as any).error || (e as any).message);
+  boot.textContent = "BOOT ERROR: " + String((e as any).error || (e as any).message);
 });
-
 window.addEventListener("unhandledrejection", (e) => {
-  console.error("[BOOT] unhandledrejection", e.reason);
-  const el = document.getElementById("boot");
-  if (el) el.innerHTML = "BOOT ERROR (promise): " + String(e.reason);
+  console.error("[BOOT] unhandledrejection", (e as any).reason);
+  boot.textContent = "BOOT ERROR: " + String((e as any).reason);
 });
 
-const LOGIC_W = 224;
-const LOGIC_H = 256;
-const SCALE = 2;
-
-function ensureCanvas(): HTMLCanvasElement {
+function ensureWebGLCanvas(): HTMLCanvasElement {
   let c = document.querySelector("canvas#game") as HTMLCanvasElement | null;
   if (!c) {
     c = document.createElement("canvas");
     c.id = "game";
-    document.body.appendChild(c);
+    c.style.display = "block";
+    c.style.background = "black";
+    c.style.imageRendering = "pixelated";
+    root.appendChild(c);
   }
-  c.width = LOGIC_W * SCALE;
-  c.height = LOGIC_H * SCALE;
-  c.style.width = `${LOGIC_W * SCALE}px`;
-  c.style.height = `${LOGIC_H * SCALE}px`;
+  return c;
+}
+
+function ensureHUDCanvas(): HTMLCanvasElement {
+  let c = document.querySelector("canvas#hud2d") as HTMLCanvasElement | null;
+  if (!c) {
+    c = document.createElement("canvas");
+    c.id = "hud2d";
+    c.style.position = "absolute";
+    c.style.left = "0";
+    c.style.top = "0";
+    c.style.pointerEvents = "none";
+    c.style.imageRendering = "pixelated";
+    root.appendChild(c);
+  }
   return c;
 }
 
 async function main() {
-  // ✅ importy až po BOOT OK, ať vidíš chybu i když import spadne
+  const canvas = ensureWebGLCanvas();
+  const hud = ensureHUDCanvas();
+  const hudCtx = hud.getContext("2d");
+  if (!hudCtx) throw new Error("Canvas2D not supported");
+
+  const { Graphics } = await import("./graphics/Graphics");
+  const gfx = new Graphics(canvas, "classic_400x224");
+
+  const LOGIC_W = 400;
+  const LOGIC_H = 224;
+
   const { createGame } = await import("./game/boot/createGame");
+  const game = await createGame(() => canvas, LOGIC_W, LOGIC_H);
+  console.log("[BOOT] createGame() ->", game);
+
+  if (!game || !game.loop || !game.store) {
+    throw new Error("createGame() must return { loop, store, ... }");
+  }
+
+  const loop = game.loop;
+  const store = game.store;
+
+  window.__CM.loop = loop;
+  window.__CM.store = store;
+  window.__CM.game = game;
+
   const { RenderSystem } = await import("./game/render/RenderSystem");
+  const render2d = new RenderSystem(hudCtx, store as any, LOGIC_W, LOGIC_H);
 
-  const canvas = ensureCanvas();
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas2D not supported");
+  function syncHudToGameCanvas() {
+    hud.width = canvas.width;
+    hud.height = canvas.height;
+    hud.style.width = canvas.style.width;
+    hud.style.height = canvas.style.height;
+  }
 
-  const { loop, store } = createGame();
-  const render = new RenderSystem(ctx, store as any, LOGIC_W, LOGIC_H, SCALE);
+  function resize() {
+    const cssW = window.innerWidth;
+    const cssH = window.innerHeight;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-  let last = performance.now();
+    gfx.resize(cssW, cssH, dpr);
+    syncHudToGameCanvas();
 
-  function frame(now: number) {
-    const dtSec = (now - last) / 1000;
-    last = now;
+    const pr = (gfx as any).getPresentRect?.();
+    if (pr && game?.inputMgr?.setPresentRect) {
+      game.inputMgr.setPresentRect(pr.x / dpr, pr.y / dpr, pr.w / dpr, pr.h / dpr);
+    }
+  }
 
-    loop.step(dtSec);
-    render.render();
+  window.addEventListener("resize", resize);
+  resize();
+
+  setInterval(() => {
+    const alive = window.__CM?.store?.getAliveCount?.();
+    console.log("[DBG] alive", alive);
+  }, 1000);
+
+    let last = performance.now();
+
+    function frame(now: number) {
+      try {
+        const dt = (now - last) / 1000;
+        last = now;
+
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+        // ✅ udržuj present rect i během běhu (InputManager chce CSS px)
+        const d = (gfx as any).getPresentRect?.();
+        if (d && game?.inputMgr?.setPresentRect) {
+          game.inputMgr.setPresentRect(d.x / dpr, d.y / dpr, d.w / dpr, d.h / dpr);
+        }
+
+        // ✅ per-frame aim (odstraní pocit lagu při fixed-tick loopu)
+        if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
+          const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
+          const dx = t.x - game.playerEnt.pos.x;
+          const dy = t.y - game.playerEnt.pos.y;
+          const len = Math.hypot(dx, dy) || 1;
+
+          game.playerEnt.aimDir.x = dx / len;
+          game.playerEnt.aimDir.y = dy / len;
+
+          // drž i snapshot konzistentní
+          game.inputRt.actions.aimTarget.x = t.x;
+          game.inputRt.actions.aimTarget.y = t.y;
+        }
+
+        // --- debug aim (jen log, žádný druhý step)
+        if (Math.random() < 0.02) {
+          console.log(
+            "[AIM]",
+            "mouse→",
+            game.inputRt.actions.aimTarget.x.toFixed(1),
+            game.inputRt.actions.aimTarget.y.toFixed(1),
+            "dir→",
+            game.playerEnt.aimDir.x.toFixed(2),
+            game.playerEnt.aimDir.y.toFixed(2)
+          );
+        }
+
+        const before = { x: game.playerEnt.aimDir.x, y: game.playerEnt.aimDir.y };
+
+        loop.step(dt);
+
+        const after = { x: game.playerEnt.aimDir.x, y: game.playerEnt.aimDir.y };
+
+        if (Math.random() < 0.02) console.log("[AIM DIR]", before, after);
+
+        // render
+        gfx.renderScene();
+        gfx.present();
+
+        const pr = (gfx as any).getPresentRect
+          ? (gfx as any).getPresentRect()
+          : { x: 0, y: 0, w: canvas.width, h: canvas.height, scale: 1 };
+
+        render2d.render(pr);
+
+        boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
+        requestAnimationFrame(frame);
+      } catch (err) {
+        console.error("[BOOT] frame() crashed", err);
+        boot.textContent = "BOOT ERROR (frame): " + String((err as any)?.stack || err);
+      }
+    }
 
     requestAnimationFrame(frame);
   }
 
-  requestAnimationFrame(frame);
-}
-
-main().catch((err) => {
-  console.error("[BOOT] main() failed", err);
-  const el = document.getElementById("boot");
-  if (el) el.innerHTML = "BOOT ERROR (main): " + String(err?.stack || err);
-});
+  main().catch((err) => {
+    console.error("[BOOT] main() failed", err);
+    boot.textContent = "BOOT ERROR (main): " + String((err as any)?.stack || err);
+  });

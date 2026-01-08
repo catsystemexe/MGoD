@@ -30,7 +30,9 @@ export class Loop<EM extends EventMap> {
   private tick = 0;
   private readonly dt = 1 / 60;
 
-  constructor(private deps: LoopDeps<EM>) {}
+  constructor(private deps: LoopDeps<EM>) {
+    if (!deps?.eventBus) throw new Error("[Loop] eventBus missing");
+  }
 
   public step(frameDtSec: number): void {
     const capped = Math.min(frameDtSec, 0.25);
@@ -57,7 +59,7 @@ export class Loop<EM extends EventMap> {
   ): void {
     const bus = this.deps.eventBus;
     bus.enterPhase(phase);
-    const events = bus.drainPhase(phase) as AnyEvent<EM>[]; // ✅ jediný drain v celé hře
+    const events = bus.drainPhase(phase) as AnyEvent<EM>[];
     fn?.(ctx, events);
   }
 
@@ -67,10 +69,7 @@ export class Loop<EM extends EventMap> {
 
     bus.beginTick(this.tick);
 
-    // Phase 0: Input
     this.runPhase(Phase.Input, ctx, (c) => this.deps.input?.sample(c));
-
-    // Phase 1..7
     this.runPhase(Phase.Director, ctx, (c, e) => this.deps.director?.update(c, e));
     this.runPhase(Phase.Simulation, ctx, (c, e) => this.deps.simulation?.update(c, e));
     this.runPhase(Phase.Collision, ctx, (c, e) => this.deps.collision?.update(c, e));

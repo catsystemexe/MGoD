@@ -1,8 +1,15 @@
-import type { Vec2 } from "../../engine/input/ActionSchema";
+import type { Vec2 } from "../../engine/math/Vec2";
 
 export type PlayerData = {
-  pos: Vec2;     // WU
-  vel: Vec2;     // WU/s
-  aimDir: Vec2;  // unit vector, sticky
-  speed: number; // WU/s
+  kind: "player";
+  pos: Vec2;
+  vel: Vec2;
+  aimDir: Vec2;     // unit-ish
+  speed: number;    // WU/sec
+  radius: number;
+  alive: boolean;
+  pendingKill: boolean;
+  gen: number;
+  id: number;
+  flags: number;
 };

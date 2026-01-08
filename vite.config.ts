@@ -1,17 +1,18 @@
-// vite.config.ts
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "./",
-
   server: {
-    host: true,
-    port: Number(process.env.PORT) || 80,
+    host: "0.0.0.0",
+    port: Number(process.env.PORT ?? 80),
     strictPort: true,
 
+    // Replit preview hosty (subdomain wildcard)
     allowedHosts: [
+      ".replit.dev",
+      ".replit.app",
+      ".repl.co",
       "localhost",
-      ".replit.dev", // ✅ povolí VŠECHNY replit preview hosty
+      "127.0.0.1",
     ],
   },
 });

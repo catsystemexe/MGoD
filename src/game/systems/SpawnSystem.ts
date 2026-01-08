@@ -4,9 +4,11 @@ import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
-import type { Vec2 } from "../../engine/math/Vec2";
+import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
+
+type Vec2 = { x: number; y: number };
 
 export type WeaponId = "primary" | "secondary";
 
@@ -18,7 +20,7 @@ export interface SpawnSystemConfig {
   bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
 }
 
-export interface ProjectileEntity {
+export interface ProjectileEntity extends BaseEntity {
   kind: "projectile";
   owner: EntityRef;
   weapon: WeaponId;
@@ -27,11 +29,10 @@ export interface ProjectileEntity {
   ttl: number;
   damage: number;
   radius: number;
-  pendingKill: boolean;
   consumed: boolean;
 }
 
-export interface BombEntity {
+export interface BombEntity extends BaseEntity {
   kind: "bomb";
   owner: EntityRef;
   pos: Vec2;
@@ -39,18 +40,16 @@ export interface BombEntity {
   ttl: number;
   damage: number;
   radius: number;
-  pendingKill: boolean;
   target: Vec2;
 }
 
-export interface EnemyEntity {
+export interface EnemyEntity extends BaseEntity {
   kind: "enemy";
   typeId: EnemyTypeId;
   pos: Vec2;
   vel: Vec2;
   hp: number;
   radius: number;
-  pendingKill: boolean;
 }
 
 export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
@@ -63,7 +62,11 @@ export class SpawnSystem {
     if (typeof this.cfg?.rng01 !== "function") {
       throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
     }
-    if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
+    if (
+      !this.cfg.logicSize ||
+      typeof this.cfg.logicSize.w !== "number" ||
+      typeof this.cfg.logicSize.h !== "number"
+    ) {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
     }
   }
@@ -82,17 +85,17 @@ export class SpawnSystem {
           const nx = dx / len;
           const ny = dy / len;
 
-          this.store.spawn((ent) => {
-            (ent as any).kind = "projectile";
-            (ent as any).owner = p.owner;
-            (ent as any).weapon = p.weapon;
-            (ent as any).pos = { x: p.origin.x, y: p.origin.y };
-            (ent as any).vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
-            (ent as any).ttl = wcfg.ttlSec;
-            (ent as any).damage = wcfg.damage;
-            (ent as any).radius = wcfg.radius;
-            (ent as any).pendingKill = false;
-            (ent as any).consumed = false;
+          this.store.spawn((ent: any) => {
+            ent.kind = "projectile";
+            ent.owner = p.owner;
+            ent.weapon = p.weapon;
+            ent.pos = { x: p.origin.x, y: p.origin.y };
+            ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
+            ent.ttl = wcfg.ttlSec;
+            ent.damage = wcfg.damage;
+            ent.radius = wcfg.radius;
+            ent.consumed = false;
+            ent.pendingKill = false; // BaseEntity má pendingKill v runtime shape (EntityStore ho používá)
           });
           break;
         }
@@ -105,16 +108,16 @@ export class SpawnSystem {
           const vx = b.travelSec > 0 ? to.x / b.travelSec : 0;
           const vy = b.travelSec > 0 ? to.y / b.travelSec : 0;
 
-          this.store.spawn((ent) => {
-            (ent as any).kind = "bomb";
-            (ent as any).owner = p.owner;
-            (ent as any).pos = { x: p.origin.x, y: p.origin.y };
-            (ent as any).vel = { x: vx, y: vy };
-            (ent as any).ttl = Math.max(0.001, b.travelSec);
-            (ent as any).damage = b.damage;
-            (ent as any).radius = b.radius;
-            (ent as any).pendingKill = false;
-            (ent as any).target = { x: p.target.x, y: p.target.y };
+          this.store.spawn((ent: any) => {
+            ent.kind = "bomb";
+            ent.owner = p.owner;
+            ent.pos = { x: p.origin.x, y: p.origin.y };
+            ent.vel = { x: vx, y: vy };
+            ent.ttl = Math.max(0.001, b.travelSec);
+            ent.damage = b.damage;
+            ent.radius = b.radius;
+            ent.target = { x: p.target.x, y: p.target.y };
+            ent.pendingKill = false;
           });
           break;
         }
@@ -125,35 +128,35 @@ export class SpawnSystem {
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
-          const spawnPos = this.pickEdgeSpawn();
+          const spawnPos = this.pickEdgeSpawn(def.radius ?? 4);
           const vel = { x: 0, y: def.speed };
 
-          this.store.spawn((ent) => {
-            (ent as any).kind = "enemy";
-            (ent as any).typeId = p.typeId as EnemyTypeId;
-            (ent as any).pos = spawnPos;
-            (ent as any).vel = vel;
-            (ent as any).hp = def.hp;
-            (ent as any).radius = def.radius;
-            (ent as any).pendingKill = false;
+          this.store.spawn((ent: any) => {
+            ent.kind = "enemy";
+            ent.typeId = p.typeId as EnemyTypeId;
+            ent.pos = spawnPos;
+            ent.vel = vel;
+            ent.hp = def.hp;
+            ent.radius = def.radius;
+            ent.pendingKill = false;
           });
           break;
         }
 
         case EventType.SPAWN_PICKUP:
-          // MVP: ignore, nebo implementuj později
+          // MVP: ignore
           break;
 
         default:
-          // Director phase může mít v budoucnu další requesty => netvrdit error
           break;
       }
     }
   }
 
-  private pickEdgeSpawn(): Vec2 {
+  private pickEdgeSpawn(radius: number): Vec2 {
     const w = this.cfg.logicSize.w;
     const x = this.cfg.rng01() * (w - 1);
-    return { x, y: -4 };
+    // spawn těsně nad obrazem, podle radiusu
+    return { x, y: -(Math.max(1, radius) + 1) };
   }
 }

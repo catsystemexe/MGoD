@@ -42,7 +42,9 @@ export class EntityStore<T extends BaseEntity> {
   /** Safe access */
   get(ref: EntityRef): T | null {
     const e = this.entities[ref.slot];
-    if (!e.alive || e.gen !== ref.gen) return null;
+    if (!e) return null;
+    if (!e.alive) return null;
+    if (e.gen !== ref.gen) return null;
     return e;
   }
 
@@ -88,8 +90,8 @@ export class EntityStore<T extends BaseEntity> {
       flags: 0,
     } as T;
   }
+
   // DEV/DEBUG helper – safe iteration over alive entities.
-  // Useful for smoke tests and DevUI overlays.
   public debugForEachAlive(fn: (ref: { slot: number; gen: number }, e: T) => void): void {
     for (let slot = 0; slot < this.capacity; slot++) {
       const e = this.entities[slot];

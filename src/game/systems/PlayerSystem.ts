@@ -1,26 +1,10 @@
-/**
- * PlayerSystem (CM v3.1)
- * Phase 2: Simulation
- *
- * Responsibilities (MVP):
- * - Move the ship based on actions.move (normalized)
- * - Update sticky aimDir based on actions.aimTarget and ship position
- * - No spawning, no collisions, no damage here
- *
- * Determinism:
- * - Pure math, no Date.now, no random
- * - Same seed + input tape -> same output
- */
-
 import type { PlayerActions } from "../../engine/input/ActionSchema";
 import type { EventBus } from "../../engine/core/EventBus";
 import { Phase } from "../../engine/core/EventBus";
 import type { CMEventMap } from "../../engine/core/events";
-import { computeAimDir } from "../../engine/core/aim";
 import type { PlayerData } from "../entities/PlayerTypes";
 
 type PlayerBounds = {
-  // logic-space bounds (WU) the player is allowed to occupy
   minX: number;
   minY: number;
   maxX: number;
@@ -35,6 +19,14 @@ function clamp(v: number, a: number, b: number): number {
   return v < a ? a : v > b ? b : v;
 }
 
+function readAimTarget(actions: PlayerActions, fallback: { x: number; y: number }) {
+  const a: any = actions as any;
+  const t = a.aimTarget ?? a.aim ?? a.mouse ?? fallback;
+  const x = typeof t?.x === "number" ? t.x : fallback.x;
+  const y = typeof t?.y === "number" ? t.y : fallback.y;
+  return { x, y };
+}
+
 export class PlayerSystem {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
@@ -47,8 +39,12 @@ export class PlayerSystem {
       throw new Error("[PlayerSystem] update() must run in Phase.Simulation");
     }
 
-    // --- Aim dir (sticky)
-    this.player.aimDir = computeAimDir(this.player.pos, actions.aimTarget, this.player.aimDir);
+    // --- Aim dir (instant, no lag)
+    // const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
+    // const dx = aimTarget.x - this.player.pos.x;
+    // const dy = aimTarget.y - this.player.pos.y;
+    // const len = Math.hypot(dx, dy) || 1;
+    // this.player.aimDir = { x: dx / len, y: dy / len };
 
     // --- Movement
     const vx = actions.move.x * this.player.speed;
@@ -60,8 +56,10 @@ export class PlayerSystem {
     const nx = this.player.pos.x + vx * dtSec;
     const ny = this.player.pos.y + vy * dtSec;
 
-    // clamp to bounds
-    this.player.pos.x = clamp(nx, this.cfg.bounds.minX, this.cfg.bounds.maxX);
-    this.player.pos.y = clamp(ny, this.cfg.bounds.minY, this.cfg.bounds.maxY);
+    // clamp to bounds, respecting radius
+    const r = this.player.radius ?? 0;
+
+    this.player.pos.x = clamp(nx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
+    this.player.pos.y = clamp(ny, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
   }
 }
