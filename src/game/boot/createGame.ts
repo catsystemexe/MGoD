@@ -20,7 +20,7 @@ import { Phase } from "../../engine/core/EventBus";
 import { InputManager } from "../../engine/input/InputManager";
 import { makeInputRuntime } from "../data/InputRuntime";
 import { CAImpactSystem } from "../impact/CAImpactSystem";
-
+import { EnemySystem } from "../systems/EnemySystem";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
@@ -111,48 +111,56 @@ export async function createGame(
 
   const weaponSystem = new WeaponSystem(bus as any, weaponsCfg);
   const projectileSystem = new ProjectileSystem(bus as any, store as any);
-
+  const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
   // ---- Impact
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
   const impact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
-  const loop = new Loop<CMEventMap>({
-    eventBus: bus,
-    input: {
-      sample: (_ctx) => {
-        inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
+    const loop = new Loop<CMEventMap>({
+      eventBus: bus,
+
+      input: {
+        sample: (_ctx) => {
+          inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
+        },
       },
-    },
-    director: {
-      update: (ctx, events) => {
-        directorPhase.update(ctx, events);
+
+      director: {
+        update: (ctx, events) => {
+          directorPhase.update(ctx, events);
+        },
       },
-    },
 
-    simulation: {
-  
-      update: (ctx, events) => {
-         playerSystem.update(ctx.dt, inputRt.actions as any);
+      simulation: {
+        update: (ctx, events) => {
+          // 1) player
+          playerSystem.update(ctx.dt, inputRt.actions as any);
 
-         weaponSystem.update(ctx.dt, inputRt.actions as any, {
-           shipPos: { ...playerEnt.pos },
-           aimDir: { ...playerEnt.aimDir },
-           shipRef: playerRef,
-         } as any);
-       // ✅ vem eventy z Loop + to, co WeaponSystem emitnul během této fáze
-        const spawnedNow = bus.drainPhase(Phase.Simulation) as any;
-        const all = ([] as any[]).concat(events as any, spawnedNow as any);
-        spawn.update(ctx, all);
+          // 2) weapons emit spawn requests (next tick)
+          weaponSystem.update(ctx.dt, inputRt.actions as any, {
+            shipPos: { ...playerEnt.pos },
+            aimDir: { ...playerEnt.aimDir },
+            shipRef: playerRef,
+          } as any);
 
-         projectileSystem.update(ctx.dt);
-       },
-    },
+          // 3) apply spawns that arrived for this phase (events are provided by Loop)
+          spawn.update(ctx, events as any);
 
-    collision: { update: (_ctx, _events) => collision.update() },
-    impact: { update: (ctx, events) => (impact as any).update(ctx, events as any) },
-    flow: { update: (ctx, events) => flow.update(ctx, events as any) },
-    cleanup: { update: (_ctx, _events) => store.cleanup() },
-  });
+          // 4) move projectiles
+          projectileSystem.update(ctx.dt);
 
+          // 5) move + cull enemies
+          enemySystem.update(ctx.dt);
+        },
+      },
+
+      collision: { update: (_ctx, _events) => collision.update() },
+
+      impact: { update: (ctx, events) => (impact as any).update(ctx, events as any) },
+
+      flow: { update: (ctx, events) => flow.update(ctx, events as any) },
+
+      cleanup: { update: (_ctx, _events) => store.cleanup() },
+    });
   return { loop, bus, store, session, inputRt, playerRef, inputMgr, playerEnt, logicW: LOGIC_W, logicH: LOGIC_H };
 }

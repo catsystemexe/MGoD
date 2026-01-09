@@ -71,7 +71,7 @@ export class WeaponSystem {
 
     // Bomb trigger (buffered already in InputManager)
     if (actions.bombPressed && this.st.cdBomb <= 0) {
-      this.bus.emit(EventType.SPAWN_BOMB, {
+      this.bus.emitNext(EventType.SPAWN_BOMB, {
         owner: snap.shipRef,
         origin: { ...snap.shipPos },     // captured at press time
         target: { ...actions.bombTarget }
@@ -83,7 +83,7 @@ export class WeaponSystem {
   private emitProjectile(weapon: WeaponId, owner: EntityRef, origin: Vec2, dir: Vec2): void {
    
     console.log("FIRE tick", (window as any).__CM?.loop?.getTick?.(), dir);
-    this.bus.emit(EventType.SPAWN_PROJECTILE, {
+    this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       weapon,
       owner,
       origin: { ...origin },
