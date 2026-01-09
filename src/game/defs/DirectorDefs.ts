@@ -15,10 +15,19 @@ export interface DirectorDefs {
 
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
   waves: [
-    { startSec: 0,  durationSec: 30, spawnEverySec: 2.0, maxAlive: 6,  enemy: "enemy.drone" },
-    { startSec: 30, durationSec: 60, spawnEverySec: 1.2, maxAlive: 10, enemy: "enemy.drone" },
-
-    // 90s+ : endless
-    { startSec: 90, durationSec: 999999, spawnEverySec: 1.0, maxAlive: 12, enemy: "enemy.drone" },
+    {
+      startSec: 0,
+      durationSec: 20,
+      spawnEverySec: 2.0,
+      maxAlive: 6,
+      enemy: "enemy.drone",
+    },
+    {
+      startSec: 20,
+      durationSec: 9999, // endless
+      spawnEverySec: 1.4,
+      maxAlive: 10,
+      enemy: "enemy.sine",
+    },
   ],
 };

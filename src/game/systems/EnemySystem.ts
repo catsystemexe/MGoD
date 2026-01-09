@@ -1,15 +1,10 @@
 // src/game/systems/EnemySystem.ts
 import type { EntityStore } from "../../engine/ecs/EntityStore";
+import type { TickContext } from "../../engine/core/Loop";
+import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
 
-type Vec2 = { x: number; y: number };
-
-export interface EnemyLike {
-  kind: "enemy";
-  pos: Vec2;
-  vel: Vec2;
-  radius?: number;
-  pendingKill: boolean;
-}
+const isBadNum = (n: any) => typeof n !== "number" || !Number.isFinite(n);
+const DEV = (globalThis as any).__DEV__ ?? false;
 
 export class EnemySystem {
   constructor(
@@ -18,25 +13,50 @@ export class EnemySystem {
     private readonly logicH: number,
   ) {}
 
-  /** Phase.Simulation: move enemies + cull offscreen */
-  update(dtSec: number): void {
+  update(ctx: TickContext): void {
+    const dt = ctx.dt;
     const H = this.logicH;
 
-    this.store.debugForEachAlive((ref, e: EnemyLike) => {
+    this.store.debugForEachAlive((ref, e: any) => {
       if (!e || e.kind !== "enemy") return;
       if (e.pendingKill) return;
 
-      // move
-      if (e.pos && e.vel) {
-        e.pos.x += (e.vel.x ?? 0) * dtSec;
-        e.pos.y += (e.vel.y ?? 0) * dtSec;
+      // mandatory components
+      if (!e.pos) {
+        console.error("[EnemySystem] enemy without pos", e);
+        this.store.markKill(ref);
+        return;
+      }
+      if (!e.vel) e.vel = { x: 0, y: 0 };
+      if (!e.bState) e.bState = { t: 0 };
+
+      const behavior = EnemyBehaviorDB[e.behaviorId] ?? EnemyBehaviorDB["none"];
+
+      try {
+        behavior?.update?.(e, ctx);
+      } catch (err) {
+        console.error("[EnemyBehavior crash]", e.behaviorId, err, e);
+        this.store.markKill(ref);
+        return;
       }
 
-      // offscreen cull (below screen)
-      const r = typeof e.radius === "number" ? e.radius : 4;
-      if ((e.pos?.y ?? 0) > H + r + 8) {
+      // sanitize numbers AFTER behavior
+      if (
+        isBadNum(e.pos.x) || isBadNum(e.pos.y) ||
+        isBadNum(e.vel.x) || isBadNum(e.vel.y)
+      ) {
+        if (DEV) console.error("[EnemyBehavior] NaN/Inf pos/vel", e.behaviorId, e);
         this.store.markKill(ref);
+        return;
       }
+
+      // integrate movement here (single authority)
+      e.pos.x += e.vel.x * dt;
+      e.pos.y += e.vel.y * dt;
+
+      // global offscreen cull
+      const r = (typeof e.radius === "number" && Number.isFinite(e.radius)) ? e.radius : 4;
+      if (e.pos.y > H + r + 8) this.store.markKill(ref);
     });
   }
 }

@@ -150,7 +150,7 @@ export async function createGame(
           projectileSystem.update(ctx.dt);
 
           // 5) move + cull enemies
-          enemySystem.update(ctx);
+          enemySystem.update(ctx.dt);
         },
       },
 

@@ -6,7 +6,15 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
-import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
+import type {
+  EnemyBehaviorId,
+  EnemyBehaviorParams,
+  EnemyBehaviorRuntime,
+} from "../enemies/EnemyBehaviorDB";
+import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
+
+import { ENEMY_DEFS } from "../defs/EnemyDefs";
+import type { EnemyTypeId } from "../defs/EnemyDefs";
 
 type Vec2 = { x: number; y: number };
 
@@ -50,6 +58,10 @@ export interface EnemyEntity extends BaseEntity {
   vel: Vec2;
   hp: number;
   radius: number;
+
+  behaviorId: EnemyBehaviorId;
+  behavior: EnemyBehaviorParams;
+  bState: EnemyBehaviorRuntime;
 }
 
 export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
@@ -80,7 +92,7 @@ export class SpawnSystem {
   update(ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
     // Throttled debug (every ~60 ticks)
     this.dbgEvery = (this.dbgEvery + 1) | 0;
-    if ((this.dbgEvery % 60) === 0) {
+    if (this.dbgEvery % 60 === 0) {
       console.log("[SPAWN] tick", (ctx as any).tick ?? "(no ctx.tick)", "events", events.length);
     }
 
@@ -129,7 +141,6 @@ export class SpawnSystem {
             ent.owner = p.owner;
             ent.pos = { x: p.origin.x, y: p.origin.y };
             ent.vel = { x: vx, y: vy };
-            // ttl = how long the entity lives; travelSec = movement time
             ent.ttl = Math.max(0.001, b.ttlSec ?? b.travelSec);
             ent.damage = b.damage;
             ent.radius = b.radius;
@@ -147,41 +158,55 @@ export class SpawnSystem {
             throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
           }
 
-          const r = (def.radius ?? 4);
+          const r = def.radius ?? 4;
           const spawnPos = this.pickEdgeSpawn(r);
-          const vel = { x: 0, y: def.speed };
-
-          // optional debug (very throttled)
-          if ((this.dbgEvery % 120) === 0) {
-            console.log("[SPAWN] enemy", String(p.typeId), "at", spawnPos.x.toFixed(1), spawnPos.y.toFixed(1));
-          }
 
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
             ent.pos = spawnPos;
-            ent.vel = vel;
+
+            
+            
+            // default vel: behavior decides movement
+            ent.vel = { x: 0, y: 0 };
+
             ent.hp = def.hp;
-            ent.radius = def.radius ?? 4;
+            ent.radius = def.radius;
+            const id = (def.behaviorId ?? "none") as EnemyBehaviorId;
+            const beh = EnemyBehaviorDB[id] ?? EnemyBehaviorDB["none"];
+
+            if (!EnemyBehaviorDB[id]) {
+              console.warn("[SPAWN] Unknown behaviorId, fallback to none:", String(id));
+            }
+
+            ent.behaviorId = (EnemyBehaviorDB[id] ? id : "none") as EnemyBehaviorId;
+            ent.bParams = { ...(def.behavior ?? {}) }; // neměnné
+            ent.bState = { t: 0 };                     // mutovatelné
+
+            beh?.init?.(ent);
+
             ent.pendingKill = false;
           });
           break;
         }
 
-        case EventType.SPAWN_PICKUP:
+        case EventType.SPAWN_PICKUP: {
           // MVP: ignore
           break;
+        }
 
         default:
           break;
       }
     }
   }
+
   private pickEdgeSpawn(radius: number): Vec2 {
     const w = this.cfg.logicSize.w;
     const r = Math.max(1, radius);
-    const x = this.cfg.rng01() * (w - 2 * r) + r;   // r..w-r
-    const y = -r - 1;                               // těsně nad obrazem
+    const x = this.cfg.rng01() * (w - 2 * r) + r; // r..w-r
+    const y = -r - 1; // just above the screen
     return { x, y };
   }
 }
