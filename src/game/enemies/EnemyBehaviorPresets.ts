@@ -1,34 +1,63 @@
 // src/game/enemies/EnemyBehaviorPresets.ts
+import { CONTENT } from "../content/CONTENT";
 import type { EnemyBehaviorId, EnemyBehaviorParams } from "./EnemyBehaviorTypes";
 
-export type EnemyBehaviorPresetId =
-  | "none"
-  | "straight.basic"
-  | "sine.basic";
+export type EnemyBehaviorPresetId = string;
 
 export type EnemyBehaviorPreset = {
+  id: EnemyBehaviorPresetId;
   behaviorId: EnemyBehaviorId;
   params: EnemyBehaviorParams;
 };
 
-export const EnemyBehaviorPresets: Record<EnemyBehaviorPresetId, EnemyBehaviorPreset> = {
-  none: {
-    behaviorId: "none",
-    params: {},
-  },
+function isObj(x: unknown): x is Record<string, any> {
+  return !!x && typeof x === "object";
+}
 
-  "straight.basic": {
-    behaviorId: "straight",
-    // params jsou volitelné; straight může klidně jet jen na defaultních hodnotách
-    params: { speed: 40 },
-  },
+function isStr(x: unknown): x is string {
+  return typeof x === "string" && x.length > 0;
+}
 
-  "sine.basic": {
-    behaviorId: "sine",
-    params: {
-      speed: 30,     // base fall speed
-      amp: 24,       // amplitude
-      freq: 1.25,    // Hz-ish (záleží na implementaci)
-    },
-  },
-};
+function isBehaviorId(x: unknown): x is EnemyBehaviorId {
+  return x === "none" || x === "straight" || x === "sine";
+}
+
+/**
+ * Single source of truth:
+ *  - src/game/content/behaviorPresets.json (přes CONTENT.behaviorPresets)
+ */
+export const EnemyBehaviorPresets: Record<EnemyBehaviorPresetId, EnemyBehaviorPreset> = (() => {
+  const out: Record<string, EnemyBehaviorPreset> = {};
+
+  const list: any[] = (CONTENT as any)?.behaviorPresets ?? [];
+  if (!Array.isArray(list)) {
+    console.error("[EnemyBehaviorPresets] CONTENT.behaviorPresets is not an array:", (CONTENT as any)?.behaviorPresets);
+    // hard fallback
+    out["none.basic"] = { id: "none.basic", behaviorId: "none", params: {} };
+    return out;
+  }
+
+  for (const raw of list) {
+    const id = isStr(raw?.id) ? raw.id : "";
+    if (!id) {
+      console.warn("[EnemyBehaviorPresets] preset missing id:", raw);
+      continue;
+    }
+
+    const behaviorIdRaw = raw?.behaviorId;
+    const behaviorId: EnemyBehaviorId = isBehaviorId(behaviorIdRaw) ? behaviorIdRaw : "none";
+
+    const params = isObj(raw?.params) ? raw.params : {};
+
+    out[id] = { id, behaviorId, params };
+  }
+
+  // ensure required default exists
+  if (!out["none.basic"]) {
+    out["none.basic"] = { id: "none.basic", behaviorId: "none", params: {} };
+  }
+
+  console.log("[EnemyBehaviorPresets] loaded:", Object.keys(out));
+
+  return out;
+})();

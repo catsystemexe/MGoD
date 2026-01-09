@@ -1,12 +1,7 @@
 {
   "waves": [
-    { "id": "wave.1", "startSec": 0,  "durationSec": 30, "spawnEverySec": 2.0, "maxAlive": 33,  "enemyTypeId": "red" },
-   
-    
-    { "id": "wave.2", "startSec": 5, "durationSec": 60, "spawnEverySec": 1.2, "maxAlive": 10, "enemyTypeId": "red" },
-   
-    
-    
+    { "id": "wave.1", "startSec": 0,  "durationSec": 30, "spawnEverySec": 2.0, "maxAlive": 33, "enemyTypeId": "red" },
+    { "id": "wave.2", "startSec": 5,  "durationSec": 60, "spawnEverySec": 1.2, "maxAlive": 10, "enemyTypeId": "red" },
     { "id": "wave.endless", "startSec": 20, "durationSec": 999999, "spawnEverySec": 0.9, "maxAlive": 14, "enemyTypeId": "green" }
   ]
 }

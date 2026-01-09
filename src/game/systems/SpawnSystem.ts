@@ -147,8 +147,8 @@ export class SpawnSystem {
           const spawnPos = this.pickEdgeSpawn(r);
 
           // preset resolution
-          const presetId = (def.behaviorPreset ?? "none") as EnemyBehaviorPresetId;
-          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none"];
+          const presetId = (def.behaviorPreset ?? "none.basic") as EnemyBehaviorPresetId;
+          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.basic"];
 
           if ((this.dbgEvery % 120) === 0) {
             console.log("[SPAWN_ENEMY] typeId", p.typeId, "preset", presetId, "behavior", preset.behaviorId);
