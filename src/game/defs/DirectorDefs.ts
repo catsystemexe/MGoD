@@ -1,33 +1,26 @@
-export type EnemyTypeId = "enemy.drone"; // MVP jen jeden typ
+// src/game/defs/DirectorDefs.ts
+import { CONTENT } from "../content/CONTENT";
+
+export type EnemyTypeId = string;
 
 export interface SpawnWave {
-  startSec: number;          // kdy začne tato vlna
-  durationSec: number;       // jak dlouho trvá
-  spawnEverySec: number;     // interval spawnů
-  maxAlive: number;          // cap (aby se hra neutopila)
-  enemy: EnemyTypeId;
+  startSec: number;
+  durationSec: number;
+  spawnEverySec: number;
+  maxAlive: number;
+  enemy: EnemyTypeId; // runtime validace probíhá v loadContent()
 }
 
 export interface DirectorDefs {
   waves: SpawnWave[];
-  // později: difficulty ramps, elite chances, etc.
 }
 
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
-  waves: [
-    {
-      startSec: 0,
-      durationSec: 20,
-      spawnEverySec: 2.0,
-      maxAlive: 6,
-      enemy: "enemy.drone",
-    },
-    {
-      startSec: 20,
-      durationSec: 9999, // endless
-      spawnEverySec: 1.4,
-      maxAlive: 10,
-      enemy: "enemy.sine",
-    },
-  ],
+  waves: CONTENT.waves.map((w) => ({
+    startSec: w.startSec,
+    durationSec: w.durationSec,
+    spawnEverySec: w.spawnEverySec,
+    maxAlive: w.maxAlive,
+    enemy: w.enemyTypeId,
+  })),
 };

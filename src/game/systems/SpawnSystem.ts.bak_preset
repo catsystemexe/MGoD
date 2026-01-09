@@ -6,11 +6,15 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
-import type { EnemyBehaviorId, EnemyBehaviorParams, EnemyBehaviorRuntime } from "../enemies/EnemyBehaviorTypes";
+import type {
+  EnemyBehaviorId,
+  EnemyBehaviorParams,
+  EnemyBehaviorRuntime,
+} from "../enemies/EnemyBehaviorDB";
 import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
-import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/EnemyBehaviorPresets";
 
-import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
+import { ENEMY_DEFS } from "../defs/EnemyDefs";
+import type { EnemyTypeId } from "../defs/EnemyDefs";
 
 type Vec2 = { x: number; y: number };
 
@@ -63,24 +67,33 @@ export interface EnemyEntity extends BaseEntity {
 export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
 
 export class SpawnSystem {
-  private dbgEvery = 0;
+  private dbgEvery = 0; // simple throttling counter
 
   constructor(
     private readonly store: EntityStore<SpawnableEntity>,
     private readonly cfg: SpawnSystemConfig,
   ) {
-    if (typeof this.cfg?.rng01 !== "function") throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
-    if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
+    if (typeof this.cfg?.rng01 !== "function") {
+      throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
+    }
+    if (
+      !this.cfg.logicSize ||
+      typeof this.cfg.logicSize.w !== "number" ||
+      typeof this.cfg.logicSize.h !== "number"
+    ) {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
     }
-    if (!this.cfg.projectile || !this.cfg.bomb) throw new Error(`[SpawnSystem] cfg.projectile and cfg.bomb must be defined`);
+    if (!this.cfg.projectile || !this.cfg.bomb) {
+      throw new Error(`[SpawnSystem] cfg.projectile and cfg.bomb must be defined`);
+    }
   }
 
   /** Phase.Simulation handler (Loop provides events already filtered for this phase). */
   update(ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
+    // Throttled debug (every ~60 ticks)
     this.dbgEvery = (this.dbgEvery + 1) | 0;
-    if ((this.dbgEvery % 120) === 0) {
-      console.log("[SPAWN] events", events.length);
+    if (this.dbgEvery % 60 === 0) {
+      console.log("[SPAWN] tick", (ctx as any).tick ?? "(no ctx.tick)", "events", events.length);
     }
 
     for (const e of events) {
@@ -128,7 +141,7 @@ export class SpawnSystem {
             ent.owner = p.owner;
             ent.pos = { x: p.origin.x, y: p.origin.y };
             ent.vel = { x: vx, y: vy };
-            ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
+            ent.ttl = Math.max(0.001, b.ttlSec ?? b.travelSec);
             ent.damage = b.damage;
             ent.radius = b.radius;
             ent.target = { x: p.target.x, y: p.target.y };
@@ -141,57 +154,47 @@ export class SpawnSystem {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
 
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
-          if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
+          if (!def) {
+            throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
+          }
 
           const r = def.radius ?? 4;
           const spawnPos = this.pickEdgeSpawn(r);
-
-          // preset resolution
-          const presetId = (def.behaviorPreset ?? "none") as EnemyBehaviorPresetId;
-          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none"];
-
-          if ((this.dbgEvery % 120) === 0) {
-            console.log("[SPAWN_ENEMY] typeId", p.typeId, "preset", presetId, "behavior", preset.behaviorId);
-          }
-
-          if (!EnemyBehaviorPresets[presetId]) {
-            console.warn("[SPAWN] Unknown behaviorPreset, fallback to none:", String(presetId));
-          }
-
-          const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
-          const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
-
-          if (!EnemyBehaviorDB[behaviorId]) {
-            console.warn("[SPAWN] Unknown behaviorId in preset, fallback to none:", String(behaviorId));
-          }
 
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
             ent.pos = spawnPos;
 
-            // default vel: behavior decides movement (enemySystem will apply vel->pos each tick)
+            
+            
+            // default vel: behavior decides movement
             ent.vel = { x: 0, y: 0 };
 
             ent.hp = def.hp;
             ent.radius = def.radius;
+            const id = (def.behaviorId ?? "none") as EnemyBehaviorId;
+            const beh = EnemyBehaviorDB[id] ?? EnemyBehaviorDB["none"];
 
-            ent.render = def.render ? { ...def.render } : undefined;
+            if (!EnemyBehaviorDB[id]) {
+              console.warn("[SPAWN] Unknown behaviorId, fallback to none:", String(id));
+            }
 
-            ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
-            ent.behavior = { ...(preset.params ?? {}) };
-            ent.bState = { t: 0 };
+            ent.behaviorId = (EnemyBehaviorDB[id] ? id : "none") as EnemyBehaviorId;
+            ent.bParams = { ...(def.behavior ?? {}) }; // neměnné
+            ent.bState = { t: 0 };                     // mutovatelné
 
             beh?.init?.(ent);
+
             ent.pendingKill = false;
           });
-
           break;
         }
 
-        case EventType.SPAWN_PICKUP:
-          // MVP ignore
+        case EventType.SPAWN_PICKUP: {
+          // MVP: ignore
           break;
+        }
 
         default:
           break;
@@ -202,8 +205,8 @@ export class SpawnSystem {
   private pickEdgeSpawn(radius: number): Vec2 {
     const w = this.cfg.logicSize.w;
     const r = Math.max(1, radius);
-    const x = this.cfg.rng01() * (w - 2 * r) + r;
-    const y = -r - 1;
+    const x = this.cfg.rng01() * (w - 2 * r) + r; // r..w-r
+    const y = -r - 1; // just above the screen
     return { x, y };
   }
 }

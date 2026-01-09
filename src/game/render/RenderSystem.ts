@@ -57,7 +57,7 @@ export class RenderSystem {
 
       if (kind === "enemy") {
         const r = ((e.radius ?? 3) * s) | 0;
-        ctx.fillStyle = "#f00";
+        ctx.fillStyle = e.render?.color ?? "#f00";
         ctx.fillRect((x - r) | 0, (y - r) | 0, (2 * r) | 0, (2 * r) | 0);
         return;
       }
@@ -81,5 +81,28 @@ export class RenderSystem {
     // debug border of viewport rect
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.strokeRect(ox + 0.5, oy + 0.5, view.w - 1, view.h - 1);
+    // --- DEBUG TEXT (top-left)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "12px monospace";
+
+    let enemies = 0;
+    let sample: any = null;
+
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (e?.kind === "enemy") {
+        enemies++;
+        if (!sample) sample = e;
+      }
+    });
+
+    ctx.fillText(`ENEMIES: ${enemies}`, 8, 16);
+    if (sample) {
+      const by = String(sample.behaviorId ?? "?");
+      const y = (sample.pos?.y ?? NaN).toFixed?.(2) ?? "NaN";
+      const vy = (sample.vel?.y ?? NaN).toFixed?.(2) ?? "NaN";
+      ctx.fillText(`SAMPLE: b=${by} y=${y} vy=${vy}`, 8, 32);
+    
+    }
+   }
   }
-}

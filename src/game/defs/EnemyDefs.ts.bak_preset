@@ -1,0 +1,33 @@
+import { loadContent } from "../content/loadContent";
+import type { EnemyBehaviorId, EnemyBehaviorParams } from "../enemies/EnemyBehaviorTypes";
+
+export type EnemyTypeId = string;
+
+export interface EnemyDef {
+  hp: number;
+  radius: number;
+  scoreOnKill: number;
+  behaviorId: EnemyBehaviorId;
+  behavior: EnemyBehaviorParams;
+}
+
+// Build at module load (fail fast)
+const content = loadContent();
+
+const presetById = new Map(content.behaviorPresets.map(p => [p.id, p]));
+export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = Object.fromEntries(
+  content.enemyTypes.map(t => {
+    const preset = presetById.get(t.behaviorPresetId);
+    if (!preset) throw new Error(`[EnemyDefs] Missing preset ${t.behaviorPresetId} for type ${t.id}`);
+    return [
+      t.id,
+      {
+        hp: t.hp,
+        radius: t.radius,
+        scoreOnKill: t.scoreOnKill,
+        behaviorId: preset.behaviorId,
+        behavior: preset.params ?? {}
+      }
+    ];
+  })
+) as any;

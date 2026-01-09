@@ -4,11 +4,24 @@ type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
 type HasRadius = { radius?: number };
-
+type HasRender = { render?: { color?: string } };
 function readKind(e: any): string | null {
   const k = e as HasKind;
   return (k.kind ?? k.type ?? k.tag ?? null) as any;
 }
+
+
+function hexToRgb01(hex: string): [number, number, number] | null {
+  const h = String(hex).trim();
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(h);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  return [r, g, b];
+}
+
 
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type);
@@ -141,41 +154,47 @@ export class WebGLSceneRenderer {
 
     gl.uniform2f(this.uLogic, this.logicW, this.logicH);
 
-    this.store.debugForEachAlive((_ref, e: any) => {
-      if (!e) return;
+this.store.debugForEachAlive((_ref, e: any) => {
+  if (!e) return;
 
-      const kind = readKind(e);
-      const pos = (e as HasPos).pos;
-      if (!pos || !kind) return;
+  const kind = readKind(e);
+  const pos = (e as HasPos).pos;
+  if (!pos || !kind) return;
 
-      let w = 6, h = 6;
-      const r = (e as HasRadius).radius;
+  let w = 6, h = 6;
+  const r = (e as HasRadius).radius;
 
-      if (kind === "player") {
-        w = 6; h = 6;
-        gl.uniform4f(this.uColor, 1, 1, 1, 1);
-      } else if (kind === "enemy") {
-        const rr = (typeof r === "number" ? r : 4);
-        w = rr * 2; h = rr * 2;
-        gl.uniform4f(this.uColor, 1, 0, 0, 1);
-      } else if (kind === "projectile") {
-        w = 3; h = 2;
-        gl.uniform4f(this.uColor, 0, 1, 0, 1);
-      } else if (kind === "bomb") {
-        const rr = (typeof r === "number" ? r : 6);
-        w = rr * 2; h = rr * 2;
-        gl.uniform4f(this.uColor, 1, 1, 0, 1);
-      } else {
-        w = 4; h = 4;
-        gl.uniform4f(this.uColor, 0, 1, 1, 1);
-      }
+  if (kind === "player") {
+    w = 6;
+    h = 6;
+    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+  } else if (kind === "enemy") {
+    const rr = (typeof r === "number" ? r : 4);
+    w = rr * 2;
+    h = rr * 2;
 
-      gl.uniform2f(this.uPos, pos.x, pos.y);
-      gl.uniform2f(this.uSize, w, h);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    });
-
-    gl.bindVertexArray(null);
-    gl.useProgram(null);
+    const col = (e as HasRender).render?.color;
+    const rgb = (typeof col === "string") ? hexToRgb01(col) : null;
+    if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
+    else gl.uniform4f(this.uColor, 1, 0, 0, 1);
+  } else if (kind === "projectile") {
+    w = 3;
+    h = 2;
+    gl.uniform4f(this.uColor, 0, 1, 0, 1);
+  } else if (kind === "bomb") {
+    const rr = (typeof r === "number" ? r : 6);
+    w = rr * 2;
+    h = rr * 2;
+    gl.uniform4f(this.uColor, 1, 1, 0, 1);
+  } else {
+    w = 4;
+    h = 4;
+    gl.uniform4f(this.uColor, 0, 1, 1, 1);
   }
-}
+
+  gl.uniform2f(this.uPos, pos.x, pos.y);
+  gl.uniform2f(this.uSize, w, h);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+});
+     }
+   }

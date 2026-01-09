@@ -111,7 +111,8 @@ export async function createGame(
 
   const weaponSystem = new WeaponSystem(bus as any, weaponsCfg);
   const projectileSystem = new ProjectileSystem(bus as any, store as any);
-  const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H, () => ({ x: playerEnt.pos.x, y: playerEnt.pos.y }));
+  // createGame.ts
+  const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
   // ---- Impact
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
   const impact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });

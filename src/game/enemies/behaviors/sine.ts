@@ -1,41 +1,52 @@
 // src/game/enemies/behaviors/sine.ts
 import type { EnemyBehavior } from "../EnemyBehaviorTypes";
 
-const num = (v: any, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+function num(v: any, fallback: number): number {
+  const n = typeof v === "number" ? v : fallback;
+  return Number.isFinite(n) ? n : fallback;
+}
 
 export const sineBehavior: EnemyBehavior = {
-  init: (e: any) => {
-    if (!e.vel) e.vel = { x: 0, y: 0 };
+  init: (e) => {
     if (!e.bState) e.bState = { t: 0 };
 
-    // defaults
-    const speed = num(e.behavior?.speed, 40);
-    const amp   = num(e.behavior?.amp,  20);
-    const freq  = num(e.behavior?.freq, 1.2);
+    const p = e.behavior ?? {};
+    // params:
+    // speedY: base falling speed
+    // ampX: sine amplitude in logic units
+    // freq: cycles per second
+    // driftX: optional constant X drift
+    const speedY = num(p.speedY, 35);
+    const driftX = num(p.driftX, 0);
 
-    e.behavior = { ...(e.behavior ?? {}), speed, amp, freq };
-
-    // remember spawn x (critical)
+    // runtime: store base
     e.bState.t = 0;
-    e.bState.baseX = num(e.pos?.x, 0);
+    e.bState.baseSpeedY = speedY;
+    e.bState.driftX = driftX;
 
-    // vertical drift always on (so it actually enters screen)
-    e.vel.y = speed;
-    e.vel.x = 0;
+    if (!e.vel) e.vel = { x: 0, y: 0 };
+    e.vel.x = driftX;
+    e.vel.y = speedY;
   },
 
-  update: (e: any, ctx: any) => {
-    const dt = num(ctx?.dt, 0);
-    e.bState.t = num(e.bState.t, 0) + dt;
+  update: (e, ctx) => {
+    if (!e.bState) e.bState = { t: 0 };
+    e.bState.t += ctx.dt;
 
-    const amp  = num(e.behavior?.amp, 20);
-    const freq = num(e.behavior?.freq, 1.2);
-    const baseX = num(e.bState?.baseX, num(e.pos?.x, 0));
+    const p = e.behavior ?? {};
+    const ampX = num(p.ampX, 18);
+    const freq = num(p.freq, 0.8); // Hz
 
-    // Option A: set pos.x directly (simple & stable)
-    e.pos.x = baseX + Math.sin(e.bState.t * (Math.PI * 2) * freq) * amp;
+    // vX is derivative of sine position; we use velocity directly (simple + stable)
+    const t = e.bState.t;
+    const omega = Math.PI * 2 * freq;
+    const vxSine = ampX * omega * Math.cos(omega * t);
 
-    // vel.y stays from init (or allow override)
-    // e.vel.y = num(e.behavior?.speed, e.vel.y);
+    const driftX = num(e.bState.driftX, 0);
+    const vy = num(e.bState.baseSpeedY, 35);
+
+    if (!e.vel) e.vel = { x: 0, y: 0 };
+    e.vel.x = driftX + vxSine;
+    e.vel.y = vy;
   },
 };

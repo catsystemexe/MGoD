@@ -43,10 +43,11 @@ export class DirectorSystem {
   }
 
   private pickWave(t: number): SpawnWave | null {
+    let picked: SpawnWave | null = null;
     for (const w of this.defs.waves) {
-      if (t >= w.startSec && t < w.startSec + w.durationSec) return w;
+      if (t >= w.startSec && t < w.startSec + w.durationSec) picked = w;
     }
-    return null;
+    return picked;
   }
 
   private countAliveEnemies(): number {

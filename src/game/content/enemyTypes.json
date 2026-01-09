@@ -1,0 +1,20 @@
+{
+  "enemyTypes": [
+    {
+      "id": "red",
+      "hp": 6,
+      "radius": 4,
+      "scoreOnKill": 10,
+      "behaviorPresetId": "straight.basic",
+      "render": { "color": "#ff3333" }
+    },
+    {
+      "id": "green",
+      "hp": 5,
+      "radius": 4,
+      "scoreOnKill": 12,
+      "behaviorPresetId": "sine.basic",
+      "render": { "color": "#33a3ff" }
+    }
+  ]
+}

@@ -176,8 +176,6 @@ export class SpawnSystem {
             ent.hp = def.hp;
             ent.radius = def.radius;
 
-            ent.render = def.render ? { ...def.render } : undefined;
-
             ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
             ent.behavior = { ...(preset.params ?? {}) };
             ent.bState = { t: 0 };
