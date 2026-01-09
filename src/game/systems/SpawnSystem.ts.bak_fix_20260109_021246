@@ -55,8 +55,6 @@ export interface EnemyEntity extends BaseEntity {
 export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
 
 export class SpawnSystem {
-  private dbgEvery = 0; // simple throttling counter
-
   constructor(
     private readonly store: EntityStore<SpawnableEntity>,
     private readonly cfg: SpawnSystemConfig,
@@ -71,28 +69,18 @@ export class SpawnSystem {
     ) {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
     }
-    if (!this.cfg.projectile || !this.cfg.bomb) {
-      throw new Error(`[SpawnSystem] cfg.projectile and cfg.bomb must be defined`);
-    }
   }
 
-  /** Phase.Simulation handler (Loop provides events already filtered for this phase). */
-  update(ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
-    // Throttled debug (every ~60 ticks)
-    this.dbgEvery = (this.dbgEvery + 1) | 0;
-    if ((this.dbgEvery % 60) === 0) {
-      console.log("[SPAWN] tick", (ctx as any).tick ?? "(no ctx.tick)", "events", events.length);
-    }
-
+  /** Phase.Director handler (Loop provides events) */
+  update(_ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
+    
+    console.log("[SPAWN] update tick", this.bus.getTick?.());
+    
     for (const e of events) {
       switch (e.type) {
         case EventType.SPAWN_PROJECTILE: {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
           const wcfg = this.cfg.projectile[p.weapon];
-          if (!wcfg) {
-            console.warn("[SPAWN] unknown weapon id", p.weapon);
-            break;
-          }
 
           const dx = p.dir.x;
           const dy = p.dir.y;
@@ -106,11 +94,11 @@ export class SpawnSystem {
             ent.weapon = p.weapon;
             ent.pos = { x: p.origin.x, y: p.origin.y };
             ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
-            ent.ttl = Math.max(0.001, wcfg.ttlSec);
+            ent.ttl = wcfg.ttlSec;
             ent.damage = wcfg.damage;
             ent.radius = wcfg.radius;
             ent.consumed = false;
-            ent.pendingKill = false;
+            ent.pendingKill = false; // BaseEntity má pendingKill v runtime shape (EntityStore ho používá)
           });
           break;
         }
@@ -120,17 +108,15 @@ export class SpawnSystem {
           const b = this.cfg.bomb;
 
           const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
-          const travel = Math.max(0.001, b.travelSec);
-          const vx = to.x / travel;
-          const vy = to.y / travel;
+          const vx = b.travelSec > 0 ? to.x / b.travelSec : 0;
+          const vy = b.travelSec > 0 ? to.y / b.travelSec : 0;
 
           this.store.spawn((ent: any) => {
             ent.kind = "bomb";
             ent.owner = p.owner;
             ent.pos = { x: p.origin.x, y: p.origin.y };
             ent.vel = { x: vx, y: vy };
-            // ttl = how long the entity lives; travelSec = movement time
-            ent.ttl = Math.max(0.001, b.ttlSec ?? b.travelSec);
+            ent.ttl = Math.max(0.001, b.travelSec);
             ent.damage = b.damage;
             ent.radius = b.radius;
             ent.target = { x: p.target.x, y: p.target.y };
@@ -143,26 +129,18 @@ export class SpawnSystem {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
 
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
-          if (!def) {
-            throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
-          }
+          if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
-          const r = (def.radius ?? 4);
-          const spawnPos = this.pickEdgeSpawn(r);
+          const spawnPos = this.pickEdgeSpawn(def.radius ?? 4);
           const vel = { x: 0, y: def.speed };
-
-          // optional debug (very throttled)
-          if ((this.dbgEvery % 120) === 0) {
-            console.log("[SPAWN] enemy", String(p.typeId), "at", spawnPos.x.toFixed(1), spawnPos.y.toFixed(1));
-          }
 
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
-            ent.typeId = p.typeId as EnemyTypeId;
+            ent.typeId = p.typeId as EnemyTypeId; 
             ent.pos = spawnPos;
             ent.vel = vel;
             ent.hp = def.hp;
-            ent.radius = def.radius ?? 4;
+            ent.radius = def.radius;
             ent.pendingKill = false;
           });
           break;
@@ -177,11 +155,11 @@ export class SpawnSystem {
       }
     }
   }
+
   private pickEdgeSpawn(radius: number): Vec2 {
     const w = this.cfg.logicSize.w;
-    const r = Math.max(1, radius);
-    const x = this.cfg.rng01() * (w - 2 * r) + r;   // r..w-r
-    const y = -r - 1;                               // těsně nad obrazem
-    return { x, y };
+    const x = this.cfg.rng01() * (w - 1);
+    // spawn těsně nad obrazem, podle radiusu
+    return { x, y: -(Math.max(1, radius) + 1) };
   }
 }

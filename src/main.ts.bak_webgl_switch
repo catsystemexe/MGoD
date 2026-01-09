@@ -1,4 +1,3 @@
-import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
 console.log("[BOOT] main.ts running");
@@ -54,7 +53,6 @@ function ensureWebGLCanvas(): HTMLCanvasElement {
   return c;
 }
 
-// keep (not used yet, but harmless)
 function ensureHUDCanvas(): HTMLCanvasElement {
   let c = document.querySelector("canvas#hud2d") as HTMLCanvasElement | null;
   if (!c) {
@@ -72,10 +70,12 @@ function ensureHUDCanvas(): HTMLCanvasElement {
 
 async function main() {
   const canvas = ensureWebGLCanvas();
+  const hud = ensureHUDCanvas();
+  const hudCtx = hud.getContext("2d");
+  if (!hudCtx) throw new Error("Canvas2D not supported");
 
   const { Graphics } = await import("./graphics/Graphics");
   const gfx = new Graphics(canvas, "classic_400x224");
-  const gl = gfx.getGL();
 
   const LOGIC_W = 400;
   const LOGIC_H = 224;
@@ -95,7 +95,15 @@ async function main() {
   window.__CM.store = store;
   window.__CM.game = game;
 
-  const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
+  const { RenderSystem } = await import("./game/render/RenderSystem");
+  const render2d = new RenderSystem(hudCtx, store as any, LOGIC_W, LOGIC_H);
+
+  function syncHudToGameCanvas() {
+    hud.width = canvas.width;
+    hud.height = canvas.height;
+    hud.style.width = canvas.style.width;
+    hud.style.height = canvas.style.height;
+  }
 
   function resize() {
     const cssW = window.innerWidth;
@@ -103,8 +111,8 @@ async function main() {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     gfx.resize(cssW, cssH, dpr);
+    syncHudToGameCanvas();
 
-    // keep present rect for input (CSS px)
     const pr = (gfx as any).getPresentRect?.();
     if (pr && game?.inputMgr?.setPresentRect) {
       game.inputMgr.setPresentRect(pr.x / dpr, pr.y / dpr, pr.w / dpr, pr.h / dpr);
@@ -114,83 +122,84 @@ async function main() {
   window.addEventListener("resize", resize);
   resize();
 
-  let last = performance.now();
+  setInterval(() => {
+    const alive = window.__CM?.store?.getAliveCount?.();
+    console.log("[DBG] alive", alive);
+  }, 1000);
 
-  function frame(now: number) {
-    try {
-      const dt = (now - last) / 1000;
-     
+    let last = performance.now();
 
-      ;(window as any).__frameCount = ((window as any).__frameCount ?? 0) + 1;
-      if (((window as any).__frameCount % 30) === 0) {
-        boot.textContent = `FRAME ${ (window as any).__frameCount } | dt=${dt.toFixed(3)}s`;
-      }
+    function frame(now: number) {
+      try {
+        const dt = (now - last) / 1000;
+        last = now;
 
-       last = now;
-      if (Math.random() < 0.01) console.log("[FRAME] ok");
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-      
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
+        // ✅ udržuj present rect i během běhu (InputManager chce CSS px)
+        const d = (gfx as any).getPresentRect?.();
+        if (d && game?.inputMgr?.setPresentRect) {
+          game.inputMgr.setPresentRect(d.x / dpr, d.y / dpr, d.w / dpr, d.h / dpr);
+        }
 
-      // keep present rect for input during runtime too
-      const pr = (gfx as any).getPresentRect?.();
-      if (pr && game?.inputMgr?.setPresentRect) {
-        game.inputMgr.setPresentRect(pr.x / dpr, pr.y / dpr, pr.w / dpr, pr.h / dpr);
-      }
+        // ✅ per-frame aim (odstraní pocit lagu při fixed-tick loopu)
+        if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
+          const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
+          const dx = t.x - game.playerEnt.pos.x;
+          const dy = t.y - game.playerEnt.pos.y;
+          const len = Math.hypot(dx, dy) || 1;
 
-      // per-frame aim (optional; keeps "instant aim" feel)
-      if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
-        const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
-        const dx = t.x - game.playerEnt.pos.x;
-        const dy = t.y - game.playerEnt.pos.y;
-        const len = Math.hypot(dx, dy) || 1;
+          game.playerEnt.aimDir.x = dx / len;
+          game.playerEnt.aimDir.y = dy / len;
 
-        game.playerEnt.aimDir.x = dx / len;
-        game.playerEnt.aimDir.y = dy / len;
-
-        // keep snapshot consistent if it exists
-        if (game?.inputRt?.actions?.aimTarget) {
+          // drž i snapshot konzistentní
           game.inputRt.actions.aimTarget.x = t.x;
           game.inputRt.actions.aimTarget.y = t.y;
         }
+
+        // --- debug aim (jen log, žádný druhý step)
+        if (Math.random() < 0.02) {
+          console.log(
+            "[AIM]",
+            "mouse→",
+            game.inputRt.actions.aimTarget.x.toFixed(1),
+            game.inputRt.actions.aimTarget.y.toFixed(1),
+            "dir→",
+            game.playerEnt.aimDir.x.toFixed(2),
+            game.playerEnt.aimDir.y.toFixed(2)
+          );
+        }
+
+        const before = { x: game.playerEnt.aimDir.x, y: game.playerEnt.aimDir.y };
+
+        loop.step(dt);
+
+        const after = { x: game.playerEnt.aimDir.x, y: game.playerEnt.aimDir.y };
+
+        if (Math.random() < 0.02) console.log("[AIM DIR]", before, after);
+
+        // render
+        gfx.renderScene();
+        gfx.present();
+
+        const pr = (gfx as any).getPresentRect
+          ? (gfx as any).getPresentRect()
+          : { x: 0, y: 0, w: canvas.width, h: canvas.height, scale: 1 };
+
+        render2d.render(pr);
+
+        boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
+        requestAnimationFrame(frame);
+      } catch (err) {
+        console.error("[BOOT] frame() crashed", err);
+        boot.textContent = "BOOT ERROR (frame): " + String((err as any)?.stack || err);
       }
-
-      loop.step(dt);
-
-      // ---- DEBUG COUNTS (on-screen, survives "no console")
-      let nEnemy = 0, nProj = 0, nBomb = 0, nPlayer = 0;
-      store.debugForEachAlive((_r: any, e: any) => {
-        if (!e || !e.kind) return;
-        if (e.kind === "enemy") nEnemy++;
-        else if (e.kind === "projectile") nProj++;
-        else if (e.kind === "bomb") nBomb++;
-        else if (e.kind === "player") nPlayer++;
-      });
-
-      boot.textContent =
-        `tick=${loop.getTick?.() ?? "?"} dt=${dt.toFixed(3)} ` +
-        `alive=${store.getAliveCount?.() ?? "?"} ` +
-        `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`;
-
-
-
-      
-      // render: SceneRT -> present
-      gfx.renderScene(() => renderer.render());
-      gfx.present();
-
-  //      boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
-      requestAnimationFrame(frame);
-    } catch (err) {
-      console.error("[BOOT] frame() crashed", err);
-      boot.textContent = "BOOT ERROR (frame): " + String((err as any)?.stack || err);
     }
+
+    requestAnimationFrame(frame);
   }
 
-  requestAnimationFrame(frame);
-}
-
-main().catch((err) => {
-  console.error("[BOOT] main() failed", err);
-  boot.textContent = "BOOT ERROR (main): " + String((err as any)?.stack || err);
-});
+  main().catch((err) => {
+    console.error("[BOOT] main() failed", err);
+    boot.textContent = "BOOT ERROR (main): " + String((err as any)?.stack || err);
+  });

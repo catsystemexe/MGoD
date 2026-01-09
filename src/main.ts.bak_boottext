@@ -157,29 +157,11 @@ async function main() {
 
       loop.step(dt);
 
-      // ---- DEBUG COUNTS (on-screen, survives "no console")
-      let nEnemy = 0, nProj = 0, nBomb = 0, nPlayer = 0;
-      store.debugForEachAlive((_r: any, e: any) => {
-        if (!e || !e.kind) return;
-        if (e.kind === "enemy") nEnemy++;
-        else if (e.kind === "projectile") nProj++;
-        else if (e.kind === "bomb") nBomb++;
-        else if (e.kind === "player") nPlayer++;
-      });
-
-      boot.textContent =
-        `tick=${loop.getTick?.() ?? "?"} dt=${dt.toFixed(3)} ` +
-        `alive=${store.getAliveCount?.() ?? "?"} ` +
-        `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`;
-
-
-
-      
       // render: SceneRT -> present
       gfx.renderScene(() => renderer.render());
       gfx.present();
 
-  //      boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
+      boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
       requestAnimationFrame(frame);
     } catch (err) {
       console.error("[BOOT] frame() crashed", err);

@@ -3,7 +3,7 @@ import { Phase, type OwnershipMap } from "./EventBus";
 import { EventType, type CMEventMap } from "./events";
 
 export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
-  [EventType.SPAWN_ENEMY]: Phase.Director,
+  [EventType.SPAWN_ENEMY]: Phase.Simulation,
   [EventType.SPAWN_PROJECTILE]: Phase.Simulation,
   [EventType.SPAWN_BOMB]: Phase.Simulation,
   [EventType.SPAWN_PICKUP]: Phase.Director,

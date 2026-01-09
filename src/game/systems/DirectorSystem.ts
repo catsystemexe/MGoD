@@ -38,7 +38,8 @@ export class DirectorSystem {
     if (state.timeSec - this.lastSpawnAtSec < interval) return;
 
     this.lastSpawnAtSec = state.timeSec;
-
+    console.log("[DIR] emitNext SPAWN_ENEMY", { enemy: wave.enemy, t: state.timeSec.toFixed(2), tick: state.tick });
+    this.bus.emitNext(EventType.SPAWN_ENEMY, { typeId: wave.enemy });
     // IMPORTANT:
     // Loop drains Phase.Director BEFORE calling update(), so same-tick emissions would be missed.
     // Therefore spawn requests must go to next tick:

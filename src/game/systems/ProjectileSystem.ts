@@ -27,28 +27,25 @@ export class ProjectileSystem {
    *  - Only updates alive && !pendingKill projectiles
    */
   update(dtSec: number): void {
-    this.store.debugForEachAlive((_ref, e: ProjectileLike) => {
-      if (e.kind !== "projectile") return;
-      if (e.pendingKill) return;
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (!e || e.pendingKill) return;
 
-      // Move
-      // Move (in-place)
-      e.pos.x += e.vel.x * dtSec;
-      e.pos.y += e.vel.y * dtSec;
-
-      // Lifetime
-      e.ttl -= dtSec;
-
-      // Deterministic kill conditions
-      if (e.consumed) {
-        e.pendingKill = true;
-        return;
+      // ---- MOVEMENT for anything with pos+vel
+      const pos = e.pos;
+      const vel = e.vel;
+      if (pos && vel) {
+        pos.x += vel.x * dtSec;
+        pos.y += vel.y * dtSec;
       }
 
-      if (e.ttl <= 0) {
+      // ---- PROJECTILE-only lifetime rules
+      if (e.kind !== "projectile") return;
+
+      e.ttl -= dtSec;
+
+      if (e.consumed || e.ttl <= 0) {
         e.pendingKill = true;
-        return;
       }
     });
   }
-}
+  }
