@@ -30,12 +30,12 @@ export class DamageSystem<T extends Damageable> {
     private readonly rules: DamageRules,
   ) {}
 
-  update(): void {
+  update(eventsOverride?: any[]): void {
     if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Impact) {
       throw new Error("[DamageSystem] update() must run in Phase.Impact");
     }
 
-    const events = this.bus.drainPhase(Phase.Impact);
+    const events = (eventsOverride ?? this.bus.drainPhase(Phase.Impact)) as any[];
 
     for (const e of events) {
       switch (e.type) {

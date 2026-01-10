@@ -20,6 +20,9 @@ import { Phase } from "../../engine/core/EventBus";
 import { InputManager } from "../../engine/input/InputManager";
 import { makeInputRuntime } from "../data/InputRuntime";
 import { CAImpactSystem } from "../impact/CAImpactSystem";
+import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
+import { ImpactPhaseSystem } from "../systems/ImpactPhaseSystem";
+import type { WorldEntity } from "../systems/CollisionSystem";
 import { EnemySystem } from "../systems/EnemySystem";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
@@ -148,11 +151,17 @@ const directorPhase = new DirectorPhaseSystem(
   // createGame.ts
   const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
   // ---- Impact
-  const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
-  const impact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
+    const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
+    const caImpact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
+    const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
+      projectileHitEnemyDamage: 3,
+      playerHitEnemyDamage: 999,
+    });
 
-  const collision = new CollisionSystem(bus, store as any);
+    const impact = new ImpactPhaseSystem(damage, caImpact);
+
+const collision = new CollisionSystem(bus, store as any);
 
   
     const loop = new Loop<CMEventMap>({
