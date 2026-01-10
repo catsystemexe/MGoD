@@ -3,19 +3,14 @@ import type { AnyCMEvent } from "./FlowDispatcher";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
-type SessionState = { lives: number; gameOver: boolean };
-
-type Vec2 = { x: number; y: number };
-
-function clamp(v: number, a: number, b: number): number {
-  return v < a ? a : v > b ? b : v;
-}
+type SessionState = {
+  lives: number;
+  gameOver: boolean;
+  lastDeathPos?: { x: number; y: number };
+};
 
 export class RespawnSystem {
   private respawnInTicks = 0;
-
-  // ✅ remember where player died
-  private lastDeathPos: Vec2 | null = null;
 
   constructor(
     private session: SessionState,
@@ -25,10 +20,8 @@ export class RespawnSystem {
     private logicH: number,
     private cfg = {
       respawnDelayTicks: 60, // 1s @60Hz
-      invulnSec: 1.0,        // 1 sec invincible after respawn
+      invulnSec: 1.0,        // 1 sec invincible
       spawnEnergy: 5,
-      // ✅ keep respawn safe inside arena
-      respawnMargin: 6,
     }
   ) {}
 
@@ -39,52 +32,27 @@ export class RespawnSystem {
       const p = e.payload as CMEventMap[typeof EventType.ENTITY_KILLED] & { isPlayer?: boolean };
       if (!p?.isPlayer) continue;
 
-      if (this.session.gameOver) return;
-      if (this.respawnInTicks > 0) return;
+      if (this.respawnInTicks > 0) return; // already waiting
 
-      const pref = this.getPlayerRef();
-      const ent: any = this.store.get(pref);
-
-      // ✅ snapshot death position (best effort)
-      if (ent?.pos && typeof ent.pos.x === "number" && typeof ent.pos.y === "number") {
-        this.lastDeathPos = { x: ent.pos.x, y: ent.pos.y };
-      } else {
-        this.lastDeathPos = null;
-      }
-
-      // Lives--
-      this.session.lives = Math.max(0, Number(this.session.lives ?? 0) - 1);
-
-      // freeze player immediately (even last life)
-      if (ent) {
-        ent.pendingKill = false;
-        ent.energy = 0;
-
-        ent.vel = ent.vel ?? { x: 0, y: 0 };
-        ent.vel.x = 0;
-        ent.vel.y = 0;
-
-        ent.deadT = this.cfg.respawnDelayTicks / 60;
-        ent.invulnT = Math.max(Number(ent.invulnT ?? 0), ent.deadT);
-        ent.hitFlashT = Math.max(Number(ent.hitFlashT ?? 0), 0.15);
-      }
-
-      // LAST LIFE -> GAME OVER
-      if (this.session.lives <= 0) {
-        this.session.gameOver = true;
-
-        if (ent) {
-          ent.deadT = 999999;
-          ent.invulnT = 999999;
-          ent.vel.x = 0;
-          ent.vel.y = 0;
+      // ✅ capture last death position from the current player entity (still exists until cleanup)
+      try {
+        const pref = this.getPlayerRef();
+        const pe: any = this.store.get(pref);
+        if (pe?.pos && typeof pe.pos.x === "number" && typeof pe.pos.y === "number") {
+          this.session.lastDeathPos = { x: pe.pos.x, y: pe.pos.y };
         }
+      } catch {
+        // ignore (fail-safe)
+      }
 
-        this.respawnInTicks = 0;
+      this.session.lives -= 1;
+      if (this.session.lives < 0) this.session.lives = 0;
+
+      if (this.session.lives === 0) {
+        this.session.gameOver = true;
         return;
       }
 
-      // start respawn timer
       this.respawnInTicks = this.cfg.respawnDelayTicks;
       return;
     }
@@ -102,32 +70,30 @@ export class RespawnSystem {
     const p: any = this.store.get(pref);
     if (!p) return;
 
-    const r = Number(p.radius ?? 3);
-    const m = Math.max(0, Number(this.cfg.respawnMargin ?? 0));
-
-    // ✅ choose respawn point: deathPos -> fallback
     const fallback = { x: this.logicW * 0.5, y: this.logicH * 0.8 };
-    const src = this.lastDeathPos ?? fallback;
+    const spawnPos = this.session.lastDeathPos ?? fallback;
 
-    const rx = clamp(src.x, r + m, this.logicW - r - m);
-    const ry = clamp(src.y, r + m, this.logicH - r - m);
-
-    // revive/reset
+    // ✅ reset player state in-place
     p.kind = "player";
-    p.pendingKill = false;
+    p.pos = { x: spawnPos.x, y: spawnPos.y };
+    p.vel = { x: 0, y: 0 };
 
-    p.pos = { x: rx, y: ry };
-    p.vel = p.vel ?? { x: 0, y: 0 };
-    p.vel.x = 0;
-    p.vel.y = 0;
+    p.radius = Number.isFinite(Number(p.radius)) ? Number(p.radius) : 3;
 
-    p.energyMax = Number(p.energyMax ?? this.cfg.spawnEnergy);
+    // energy
+    const max0 = Number(p.energyMax ?? this.cfg.spawnEnergy);
+    p.energyMax = Number.isFinite(max0) && max0 > 0 ? max0 : this.cfg.spawnEnergy;
     p.energy = this.cfg.spawnEnergy;
 
-    p.aimDir = p.aimDir ?? { x: 0, y: -1 };
+    p.pendingKill = false;
 
-    p.deadT = 0;
+    // aim dir keep if exists
+    if (!p.aimDir) p.aimDir = { x: 0, y: -1 };
+
+    // ✅ spawn i-frames
     p.invulnT = this.cfg.invulnSec;
-    p.hitFlashT = 0;
+
+    // ✅ clear death gate
+    p.deadT = 0;
   }
 }

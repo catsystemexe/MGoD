@@ -6,6 +6,9 @@ export type SessionState = {
   lives: number;
   wave: number;
   gameOver: boolean;
+
+  // ✅ where the player died last (for respawn)
+  lastDeathPos?: { x: number; y: number };
 };
 
 export function makeSessionState(): SessionState {
@@ -16,5 +19,6 @@ export function makeSessionState(): SessionState {
     lives: 3,
     wave: 1,
     gameOver: false,
+    lastDeathPos: undefined,
   };
 }

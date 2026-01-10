@@ -6,6 +6,7 @@ type HudRefs = {
   br: HTMLDivElement;
   pause: HTMLDivElement;
   gameOver: HTMLDivElement;
+  title: HTMLDivElement;
 };
 
 type PlayerLike = {
@@ -22,6 +23,8 @@ type SessionLike = {
   gameOver?: boolean;
 };
 
+type HudMode = "PLAY" | "TITLE" | "GAME_OVER";
+
 function mkChild(parent: HTMLElement, id: string, css: string): HTMLDivElement {
   const d = document.createElement("div");
   d.id = id;
@@ -32,7 +35,7 @@ function mkChild(parent: HTMLElement, id: string, css: string): HTMLDivElement {
 }
 
 function squares(n: number, max: number): string {
-  const on = "🟥";
+  const on = "◻️";
   const off = "➖";
   const a = Math.max(0, Math.min(max | 0, n | 0));
   const m = Math.max(0, max | 0);
@@ -55,6 +58,8 @@ function weaponLine(p: PlayerLike): string {
 }
 
 export function createHUDArcade(root: HTMLElement) {
+  let mode: HudMode = "PLAY";
+
   // HUD layer that will be positioned to match the PRESENT rect (CSS px)
   const layer = document.createElement("div");
   layer.id = "hudLayer";
@@ -80,6 +85,15 @@ export function createHUDArcade(root: HTMLElement) {
   );
   pause.textContent = "PAUSED";
 
+  // TITLE overlay
+  const title = mkChild(
+    layer,
+    "hudTitle",
+    "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
+      "text-align:center;font:20px monospace;display:none;pointer-events:none;",
+  );
+  title.textContent = "-:CAPTAN MEOW:-\n\nPRESS ENTER";
+
   // GAME OVER overlay
   const gameOver = mkChild(
     layer,
@@ -89,7 +103,14 @@ export function createHUDArcade(root: HTMLElement) {
   );
   gameOver.textContent = "GAME OVER\nTry again? Y/N";
 
-  const refs: HudRefs = { layer, tl, tc, tr, br, pause, gameOver };
+  const refs: HudRefs = { layer, tl, tc, tr, br, pause, gameOver, title };
+
+  function applyMode() {
+    refs.title.style.display = mode === "TITLE" ? "block" : "none";
+    refs.gameOver.style.display = mode === "GAME_OVER" ? "block" : "none";
+  }
+
+  applyMode();
 
   return {
     // called from main with gfx.getPresentRect() (CSS px)
@@ -107,8 +128,9 @@ export function createHUDArcade(root: HTMLElement) {
       refs.pause.style.display = on ? "block" : "none";
     },
 
-    setGameOver: (on: boolean) => {
-      refs.gameOver.style.display = on ? "block" : "none";
+    setMode: (m: HudMode) => {
+      mode = m;
+      applyMode();
     },
 
     update: (p: PlayerLike, s: SessionLike, waveText?: string) => {
@@ -120,7 +142,15 @@ export function createHUDArcade(root: HTMLElement) {
       refs.tr.textContent = `Score: ${((s.score ?? 0) | 0).toString()}`;
       refs.br.textContent = weaponLine(p);
 
-      refs.gameOver.style.display = s.gameOver ? "block" : "none";
+      // auto-switch to GAME_OVER if session says so
+      if (s.gameOver) {
+        mode = "GAME_OVER";
+        applyMode();
+      } else if (mode === "GAME_OVER") {
+        // if session got reset
+        mode = "PLAY";
+        applyMode();
+      }
     },
   };
 }

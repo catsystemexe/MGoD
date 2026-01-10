@@ -89,10 +89,11 @@ async function main() {
   }
 
   const { createHUDArcade } = await import("./ui/HUDArcade");
-  const hud = createHUDArcade(root); // ✅ HUDArcade owns PAUSE overlay internally
+  const hud = createHUDArcade(root);
 
   const loop = game.loop;
   const store = game.store;
+  const session = game.session;
 
   window.__CM.loop = loop;
   window.__CM.store = store;
@@ -119,38 +120,51 @@ async function main() {
     // ignore
   }
 
-  // ---- Pause key (P) -> HUDArcade overlay
-  window.addEventListener("keydown", (e) => {
-    if (e.code !== "KeyP") return;
-    if (e.repeat) return;
-    e.preventDefault();
+  // --- TITLE at boot
+  hud.setMode?.("TITLE");
+  loop.setPaused?.(true);
 
-    loop.togglePause();
-    const paused = !!(loop as any).isPaused?.();
-
-    // HUDArcade must expose setPaused()
-    hud.setPaused?.(paused);
-
-    console.log("[PAUSE]", paused ? "PAUSED" : "RUN", "tick=", loop.getTick?.());
-    });
-  // ---- GAME OVER: Try again? Y/N (hard reset MVP)
+  // ---- Keys: Pause (P), Start (Enter), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
-    const over = !!game?.session?.gameOver;
-    if (!over) return;
+    // Start from TITLE
+    if (e.code === "Enter") {
+      e.preventDefault();
+      hud.setMode?.("PLAY");
+      loop.setPaused?.(false);
+      return;
+    }
+
+    // Pause toggle (P)
+    if (e.code === "KeyP") {
+      e.preventDefault();
+      loop.togglePause();
+      const paused = !!(loop as any).isPaused?.();
+      hud.setPaused?.(paused);
+      console.log("[PAUSE]", paused ? "PAUSED" : "RUN", "tick=", loop.getTick?.());
+      return;
+    }
+
+    // Game over keys (Y/N)
+    if (!session?.gameOver) return;
 
     if (e.code === "KeyY") {
       e.preventDefault();
-      console.log("[GAME OVER] restart (hard reset)");
-      location.reload();
-    } else if (e.code === "KeyN") {
+      (game as any).reset?.();      // hard reset run (no reload)
+      hud.setMode?.("PLAY");
+      loop.setPaused?.(false);
+      return;
+    }
+
+    if (e.code === "KeyN") {
       e.preventDefault();
-      console.log("[GAME OVER] no restart");
-      // do nothing - freeze remains
+      // simplest: back to TITLE, paused
+      hud.setMode?.("TITLE");
+      loop.setPaused?.(true);
+      return;
     }
   });
-
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
@@ -165,10 +179,7 @@ async function main() {
     if (pr) {
       const x = pr.x / dpr, y = pr.y / dpr, w = pr.w / dpr, h = pr.h / dpr;
 
-      // input
       game?.inputMgr?.setPresentRect?.(x, y, w, h);
-
-      // HUD overlay must follow the same present rect
       hud.setRect?.(x, y, w, h);
     }
   }
@@ -185,16 +196,14 @@ async function main() {
 
       const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-      // keep present rect for input during runtime too
       const pr = (gfx as any).getPresentRect?.();
       if (pr) {
         const x = pr.x / dpr, y = pr.y / dpr, w = pr.w / dpr, h = pr.h / dpr;
-
         game?.inputMgr?.setPresentRect?.(x, y, w, h);
         hud.setRect?.(x, y, w, h);
       }
 
-      // per-frame aim (optional; keeps "instant aim" feel)
+      // per-frame aim
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
         const dx = t.x - game.playerEnt.pos.x;
@@ -219,12 +228,8 @@ async function main() {
 
       hud.update(game.playerEnt ?? {}, game.session ?? {}, waveText);
 
-      // ---- DEBUG COUNTS (top-left, DEV only)
       if (DEV) {
-        let nEnemy = 0,
-          nProj = 0,
-          nBomb = 0,
-          nPlayer = 0;
+        let nEnemy = 0, nProj = 0, nBomb = 0, nPlayer = 0;
 
         store.debugForEachAlive((_r: any, e: any) => {
           if (!e || !e.kind) return;
@@ -236,8 +241,8 @@ async function main() {
 
         setHudTop(
           `tick=${loop.getTick?.() ?? "?"} dt=${dt.toFixed(3)} ` +
-            `alive=${store.getAliveCount?.() ?? "?"} ` +
-            `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`,
+          `alive=${store.getAliveCount?.() ?? "?"} ` +
+          `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`,
         );
       }
 

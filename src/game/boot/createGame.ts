@@ -51,8 +51,8 @@ export async function createGame(
     onError: (m) => console.error(m),
   });
 
+  // IMPORTANT: keep references stable (main holds them)
   const session = makeSessionState();
-
   const inputRt = makeInputRuntime();
   const inputMgr = new InputManager(getCanvas);
 
@@ -100,7 +100,7 @@ export async function createGame(
 
   // ---- Spawn system (Director-owned requests are applied here)
   const spawnCfg = {
-    rng01: Math.random,
+    rng01: Math.random, // ✅ fresh random
     logicSize: { w: LOGIC_W, h: LOGIC_H },
     projectile: {
       primary: { speed: 220, ttlSec: 0.8, damage: 3, radius: 2 },
@@ -129,8 +129,8 @@ export async function createGame(
     return n;
   }
 
-  /// ---- Director (decides spawns for NEXT tick)
-  const director = new DirectorSystem(
+  // ---- Director (needs to be re-creatable for reset)
+  let director = new DirectorSystem(
     bus as any,
     DIRECTOR_DEFS_MVP as any,
     {
@@ -139,10 +139,7 @@ export async function createGame(
     }
   );
 
-  const directorPhase = new DirectorPhaseSystem(
-    session as any,
-    director as any,
-  );
+  let directorPhase = new DirectorPhaseSystem(session as any, director as any);
 
   // ---- Simulation systems
   const playerSystem = new PlayerSystem(bus as any, playerEnt, {
@@ -173,12 +170,65 @@ export async function createGame(
   const impact = new ImpactPhaseSystem(damage, caImpact);
   const collision = new CollisionSystem(bus, store as any);
 
+  // ---- Reset (no reload)
+  function reset(): void {
+    // reset session IN PLACE (preserve reference)
+    const fresh = makeSessionState();
+    for (const k of Object.keys(fresh) as (keyof typeof fresh)[]) {
+      (session as any)[k] = (fresh as any)[k];
+    }
+
+    // clear world except player slot (keeps playerRef valid)
+    (store as any).killAllExceptSlots?.([playerRef.slot]);
+    if (!(store as any).killAllExceptSlots) {
+      // fallback: kill everything by marking (keeps player anyway)
+      store.debugForEachAlive((ref, e: any) => {
+        if (ref.slot === playerRef.slot) return;
+        e.pendingKill = true;
+      });
+      store.cleanup();
+    }
+
+    // reset player
+    playerEnt.kind = "player";
+    playerEnt.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
+    playerEnt.vel = { x: 0, y: 0 };
+    playerEnt.aimDir = playerEnt.aimDir ?? { x: 1, y: 0 };
+    playerEnt.speed = Number(playerEnt.speed ?? 140);
+    playerEnt.radius = Number(playerEnt.radius ?? 3);
+    playerEnt.pendingKill = false;
+
+    playerEnt.energyMax = Number(playerEnt.energyMax ?? 5);
+    playerEnt.energy = Number(playerEnt.energyMax ?? 5);
+
+    playerEnt.invulnT = 0;
+    playerEnt.deadT = 0;
+    playerEnt.hitFlashT = 0;
+
+    // recreate director for a clean run
+    director = new DirectorSystem(
+      bus as any,
+      DIRECTOR_DEFS_MVP as any,
+      {
+        getAliveEnemies: countAliveEnemies,
+        getAliveEnemiesForWave: countAliveEnemiesForWave,
+      }
+    );
+    directorPhase = new DirectorPhaseSystem(session as any, director as any);
+
+    // main reads window.__CM.director, so keep returned object consistent
+    (ret as any).director = director;
+    (ret as any).directorPhase = directorPhase;
+
+    // optional
+    (session as any).lastDeathPos = undefined;
+  }
+
   const loop = new Loop<CMEventMap>({
     eventBus: bus,
 
     input: {
       sample: (_ctx) => {
-        // i při game over můžeš klidně dál sampleovat (kvůli Y/N později)
         inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
       },
     },
@@ -236,14 +286,12 @@ export async function createGame(
 
     cleanup: {
       update: (_ctx, _events) => {
-        // u game over klidně můžeš cleanup zastavit (aby svět “zamrzl”)
-        // ale teď necháme běžet – pendingKill u hráče už ruší RespawnSystem
         store.cleanup();
       }
     },
   });
 
-  return {
+  const ret = {
     loop,
     bus,
     store,
@@ -253,7 +301,11 @@ export async function createGame(
     inputMgr,
     playerEnt,
     director,
+    directorPhase,
+    reset,
     logicW: LOGIC_W,
     logicH: LOGIC_H
   };
+
+  return ret;
 }
