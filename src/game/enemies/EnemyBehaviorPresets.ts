@@ -19,7 +19,10 @@ function isStr(x: unknown): x is string {
 }
 
 function isBehaviorId(x: unknown): x is EnemyBehaviorId {
-  return x === "none" || x === "straight" || x === "sine" || x === "invaders";
+  return  x === "none" || 
+          x === "straight" ||
+          x === "sine" ||
+          x === "invaders";
 }
 
 /**

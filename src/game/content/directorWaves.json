@@ -1,27 +1,58 @@
 {
   "waves": [
-    { "id": "wave.1", "startSec": 0,  "durationSec": 30, "spawnEverySec": 2.0, "maxAlive": 33, "enemyTypeId": "red" },
-    { "id": "wave.2", "startSec": 5,  "durationSec": 60, "spawnEverySec": 1.2, "maxAlive": 10, "enemyTypeId": "red" },
-
     {
-      "id": "wave.invaders",
-      "startSec": 10,
-      "durationSec": 35,
-      "spawnEverySec": 0.35,
-      "maxAlive": 40,
+      "id": "wave.red",
+      "startSec": 0,
+      "durationSec": 25,
+      "spawnEverySec": 0.6,
+      "maxAlive": 18,
       "enemyTypeId": "red",
-      "behaviorPresetId": "invaders.basic",
+      "behaviorPresetId": "straight.basic",
       "pattern": {
         "kind": "grid",
-        "originX": 20,
-        "originY": 20,
-        "cols": 10,
+        "originX": 18,
+        "originY": 18,
+        "cols": 6,
+        "rows": 3,
+        "spacingX": 16,
+        "spacingY": 14
+      }
+    },
+    {
+      "id": "wave.green",
+      "startSec": 8,
+      "durationSec": 30,
+      "spawnEverySec": 0.5,
+      "maxAlive": 22,
+      "enemyTypeId": "green",
+      "behaviorPresetId": "sine.basic",
+      "pattern": {
+        "kind": "grid",
+        "originX": 120,
+        "originY": 22,
+        "cols": 5,
         "rows": 4,
-        "spacingX": 14,
+        "spacingX": 18,
         "spacingY": 12
       }
     },
-
-    { "id": "wave.endless", "startSec": 20, "durationSec": 999999, "spawnEverySec": 0.9, "maxAlive": 14, "enemyTypeId": "green" }
+    {
+      "id": "wave.blue",
+      "startSec": 14,
+      "durationSec": 35,
+      "spawnEverySec": 0.35,
+      "maxAlive": 32,
+      "enemyTypeId": "blue",
+      "behaviorPresetId": "invaders.basic",
+      "pattern": {
+        "kind": "grid",
+        "originX": 40,
+        "originY": 60,
+        "cols": 10,
+        "rows": 3,
+        "spacingX": 14,
+        "spacingY": 12
+      }
+    }
   ]
 }

@@ -2,7 +2,11 @@
 
 import type { TickContext } from "../../engine/core/Loop";
 
-export type EnemyBehaviorId = "none" | "straight" | "sine";
+export type EnemyBehaviorId = 
+  "none" |
+  "straight" |
+  "sine" |
+  "invaders";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
 export type EnemyBehaviorParams = Record<string, any>;

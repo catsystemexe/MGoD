@@ -20,6 +20,10 @@ declare global {
 }
 window.__CM = window.__CM || {};
 
+
+
+(window as any).__CM.topLog = (window as any).__CM.topLog ?? "";
+(window as any).__CM.topLog = (window as any).__CM.topLog ?? "";
 const root = document.createElement("div");
 root.id = "root";
 root.style.position = "relative";

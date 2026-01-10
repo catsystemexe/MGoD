@@ -16,7 +16,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string) {
 
 export class DevUI {
   private root: HTMLDivElement;
-  private visible = true;
+  private visible = false; // ✅ default OFF
   private refreshTimer: number | null = null;
 
   constructor(private getDev: () => DevAPI | null | undefined) {
@@ -28,25 +28,28 @@ export class DevUI {
       "top:8px",
       "z-index:99999",
       "color:#fff",
-      "font:12px monospace",
+      "font:10px monospace",                 // ✅ menší font
       "background:rgba(0,0,0,0.75)",
       "border:1px solid rgba(255,255,255,0.15)",
-      "padding:10px",
+      "padding:6px",                         // ✅ menší padding
       "border-radius:8px",
-      "min-width:260px",
-      "max-width:360px",
+      "min-width:220px",                     // ✅ kompaktnější
+      "max-width:340px",
       "user-select:none",
+      "display:none",                        // ✅ default hidden
     ].join(";");
 
     this.build();
     document.body.appendChild(this.root);
 
+    // ✅ FIX: jeden listener, žádné zanoření
     window.addEventListener("keydown", (e) => {
-      if (e.key === "§") this.toggle();
-      window.addEventListener("keydown", (e) => {
-      
-      });
-      });
+      // backquote je standard pro `
+      if (e.code === "Backquote" || e.key === "`" || e.key === "§") {
+        this.toggle();
+      }
+    });
+
     // auto refresh UI state
     this.refreshTimer = window.setInterval(() => this.refresh(), 250);
     this.refresh();
@@ -60,11 +63,25 @@ export class DevUI {
   private build() {
     const title = el("div");
     title.textContent = "DEV UI  (` toggles)";
-    title.style.cssText = "font-weight:700;margin-bottom:8px;opacity:0.95;";
+    title.style.cssText = "font-weight:700;margin-bottom:6px;opacity:0.95;";
     this.root.appendChild(title);
 
+    // ✅ TOP LOG uvnitř DevUI
+    const topLog = el("div");
+    topLog.id = "devui_toplog";
+    topLog.style.cssText = [
+      "white-space:pre",
+      "opacity:0.9",
+      "margin-bottom:6px",
+      "padding:4px 6px",
+      "border:1px solid rgba(255,255,255,0.10)",
+      "border-radius:6px",
+      "background:rgba(255,255,255,0.04)",
+    ].join(";");
+    this.root.appendChild(topLog);
+
     const rowBtns = el("div");
-    rowBtns.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;";
+    rowBtns.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;";
     this.root.appendChild(rowBtns);
 
     const btn = (label: string, onClick: () => void) => {
@@ -75,8 +92,10 @@ export class DevUI {
         "background:rgba(255,255,255,0.08)",
         "border:1px solid rgba(255,255,255,0.15)",
         "color:white",
-        "padding:4px 8px",
+        "padding:2px 6px",          // ✅ kompaktnější
         "border-radius:6px",
+        "font:10px monospace",      // ✅ kompaktnější
+        "line-height:12px",
       ].join(";");
       b.onclick = () => onClick();
       rowBtns.appendChild(b);
@@ -89,7 +108,7 @@ export class DevUI {
 
     // Difficulty slider
     const diffWrap = el("div");
-    diffWrap.style.cssText = "margin:8px 0 10px 0;";
+    diffWrap.style.cssText = "margin:6px 0 8px 0;";
     this.root.appendChild(diffWrap);
 
     const diffLabel = el("div");
@@ -119,12 +138,22 @@ export class DevUI {
 
     const list = el("div");
     list.id = "devui_waves";
-    list.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+    list.style.cssText = "display:flex;flex-direction:column;gap:5px;"; // ✅ menší gap
     this.root.appendChild(list);
   }
 
   private refresh() {
     const dev = this.getDev();
+
+    // ✅ top log: čte z window.__CM.topLog (setuje main.ts)
+    const top = this.root.querySelector("#devui_toplog") as HTMLDivElement | null;
+    if (top) {
+      const cm = (window as any).__CM;
+      const s = (typeof cm?.topLog === "string") ? cm.topLog : "";
+      top.textContent = s;
+      top.style.display = s ? "block" : "none";
+    }
+
     const list = this.root.querySelector("#devui_waves") as HTMLDivElement | null;
     if (!list) return;
 
@@ -138,7 +167,7 @@ export class DevUI {
         "grid-template-columns: 1fr auto",
         "gap:6px",
         "align-items:center",
-        "padding:6px",
+        "padding:5px", // ✅ menší padding
         "border:1px solid rgba(255,255,255,0.12)",
         "border-radius:6px",
         "background:rgba(255,255,255,0.04)",
@@ -166,9 +195,10 @@ export class DevUI {
           "background:rgba(255,255,255,0.08)",
           "border:1px solid rgba(255,255,255,0.15)",
           "color:white",
-          "padding:3px 7px",
+          "padding:2px 6px",      // ✅ menší
           "border-radius:6px",
-          "font:12px monospace",
+          "font:10px monospace",  // ✅ menší
+          "line-height:12px",
         ].join(";");
         b.onclick = () => fn();
         right.appendChild(b);

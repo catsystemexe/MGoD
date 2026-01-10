@@ -6,7 +6,7 @@
       "radius": 4,
       "scoreOnKill": 10,
       "behaviorPresetId": "straight.basic",
-      "render": { "color": "#ff3333" }
+      "render": { "color": "#ff4444" }
     },
     {
       "id": "green",
@@ -14,7 +14,15 @@
       "radius": 4,
       "scoreOnKill": 12,
       "behaviorPresetId": "sine.basic",
-      "render": { "color": "#33a3ff" }
+      "render": { "color": "#44ff44" }
+    },
+    {
+      "id": "blue",
+      "hp": 7,
+      "radius": 4,
+      "scoreOnKill": 14,
+      "behaviorPresetId": "invaders.basic",
+      "render": { "color": "#4488ff" }
     }
   ]
 }
