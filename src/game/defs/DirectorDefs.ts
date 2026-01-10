@@ -1,26 +1,28 @@
 // src/game/defs/DirectorDefs.ts
 import { CONTENT } from "../content/CONTENT";
-
-export type EnemyTypeId = string;
-
-export interface SpawnWave {
-  startSec: number;
-  durationSec: number;
-  spawnEverySec: number;
-  maxAlive: number;
-  enemy: EnemyTypeId; // runtime validace probíhá v loadContent()
-}
-
-export interface DirectorDefs {
-  waves: SpawnWave[];
-}
+import type { DirectorDefs } from "./DirectorTypes";
 
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
-  waves: CONTENT.waves.map((w) => ({
-    startSec: w.startSec,
-    durationSec: w.durationSec,
+  globalMaxAlive: 24,
+  waves: CONTENT.waves.map(w => ({
+    id: w.id,
+    trigger: {
+      kind: "time",
+      startSec: w.startSec,
+      endSec: w.startSec + w.durationSec,
+    },
     spawnEverySec: w.spawnEverySec,
     maxAlive: w.maxAlive,
-    enemy: w.enemyTypeId,
+    enemyTypeId: w.enemyTypeId,
+    pattern: {
+      kind: "grid",
+      cols: 10,
+      rows: 4,
+      spacingX: 24,
+      spacingY: 18,
+      originX: 40,
+      originY: 30,
+    },
+    behaviorPresetId: "invaders.basic",
   })),
 };

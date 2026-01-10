@@ -29,7 +29,8 @@ export class Loop<EM extends EventMap> {
   private acc = 0;
   private tick = 0;
   private readonly dt = 1 / 60;
-
+  private paused = false;
+  
   constructor(private deps: LoopDeps<EM>) {
     if (!deps?.eventBus) throw new Error("[Loop] eventBus missing");
   }
@@ -43,7 +44,18 @@ export class Loop<EM extends EventMap> {
       this.acc -= this.dt;
     }
   }
+  public setPaused(on: boolean): void {
+    this.paused = on;
+  }
 
+  public togglePause(): void {
+    this.paused = !this.paused;
+  }
+
+  public isPaused(): boolean {
+    return this.paused;
+  }
+  
   public stepOneTick(): void {
     this.fixedTick();
   }
@@ -73,8 +85,9 @@ export class Loop<EM extends EventMap> {
   }
 
   
-
+ 
   private fixedTick(): void {
+    if (this.paused) return;
     const ctx: TickContext = { tick: this.tick, dt: this.dt };
     const bus = this.deps.eventBus;
 

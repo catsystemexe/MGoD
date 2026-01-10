@@ -58,11 +58,7 @@ export class EnemySystem {
       // run behavior safely
       try {
         behavior?.update?.(e, ctx);
-      
-      if ((DEV as any) && ((ctx as any)?.tick % 60 === 0)) {
-        console.log("[ENEMY_TICK]", "bid", bid, "pos", e.pos, "vel", e.vel, "dtSec?", (ctx as any)?.dtSec, "dt?", (ctx as any)?.dt);
-      }
-} catch (err) {
+      } catch (err) {
         console.error("[EnemyBehavior crash]", bid, err, e);
         this.store.markKill(ref);
         return;

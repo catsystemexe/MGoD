@@ -69,6 +69,8 @@ export async function createGame(
     playerEnt = ent;
   });
 
+
+  
   if (!playerEnt) throw new Error("[createGame] playerEnt not captured");
 
   // ---- Flow
@@ -78,7 +80,7 @@ export async function createGame(
   const flow = new FlowSystem(flowDispatcher);
 
   // ---- Spawn system (Director-owned requests are applied here)
-  const spawn = new SpawnSystem(store as any, {
+  const spawnCfg = {
     rng01: Math.random,
     logicSize: { w: LOGIC_W, h: LOGIC_H },
     projectile: {
@@ -86,13 +88,45 @@ export async function createGame(
       secondary: { speed: 200, ttlSec: 0.8, damage: 2, radius: 2 },
     },
     bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
-  });
+  };
 
-  const director = new DirectorSystem(bus, store as any, DIRECTOR_DEFS_MVP);
-  const directorPhase = new DirectorPhaseSystem(session, director, spawn);
+  const spawn = new SpawnSystem(store as any, spawnCfg);
 
-  // ---- Collision
-  const collision = new CollisionSystem(bus, store as any);
+  // ---- Alive counting for caps
+  function countAliveEnemies(): number {
+    let n = 0;
+    store.debugForEachAlive((_ref, e: any) => {
+      if (e?.kind === "enemy" && !e.pendingKill) n++;
+    });
+    return n;
+  }
+
+  function countAliveEnemiesForWave(waveId: string): number {
+    let n = 0;
+    store.debugForEachAlive((_ref, e: any) => {
+      if (e?.kind !== "enemy" || e.pendingKill) return;
+      if (e.waveId === waveId) n++;
+    });
+    return n;
+  }
+
+  /// ---- Director (decides spawns for NEXT tick)
+const director = new DirectorSystem(
+  bus as any,
+  DIRECTOR_DEFS_MVP as any,
+  {
+    getAliveEnemies: countAliveEnemies,
+    getAliveEnemiesForWave: countAliveEnemiesForWave,
+  }
+);
+
+// ---- DirectorPhase (authoritative clock + applies spawn requests)
+const directorPhase = new DirectorPhaseSystem(
+  session as any,
+  director as any,
+);
+
+ 
 
   // ---- Simulation systems
   const playerSystem = new PlayerSystem(bus as any, playerEnt, {
@@ -117,6 +151,10 @@ export async function createGame(
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
   const impact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
+
+  const collision = new CollisionSystem(bus, store as any);
+
+  
     const loop = new Loop<CMEventMap>({
       eventBus: bus,
 
@@ -128,7 +166,7 @@ export async function createGame(
 
       director: {
         update: (ctx, events) => {
-          directorPhase.update(ctx, events);
+          directorPhase.update(ctx, events as any);
         },
       },
 
@@ -144,7 +182,7 @@ export async function createGame(
             shipRef: playerRef,
           } as any);
 
-          // 3) apply spawns that arrived for this phase (events are provided by Loop)
+          // ✅ 3) APPLY spawns that arrived (from last tick emitNext)
           spawn.update(ctx, events as any);
 
           // 4) move projectiles
@@ -155,6 +193,7 @@ export async function createGame(
         },
       },
 
+      
       collision: { update: (_ctx, _events) => collision.update() },
 
       impact: { update: (ctx, events) => (impact as any).update(ctx, events as any) },
@@ -163,5 +202,5 @@ export async function createGame(
 
       cleanup: { update: (_ctx, _events) => store.cleanup() },
     });
-  return { loop, bus, store, session, inputRt, playerRef, inputMgr, playerEnt, logicW: LOGIC_W, logicH: LOGIC_H };
+  return { loop, bus, store, session, inputRt, playerRef, inputMgr, playerEnt, director, logicW: LOGIC_W, logicH: LOGIC_H };
 }

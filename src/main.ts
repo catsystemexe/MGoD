@@ -1,3 +1,4 @@
+// src/main.ts
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
@@ -25,20 +26,31 @@ root.style.position = "relative";
 root.style.display = "inline-block";
 document.body.appendChild(root);
 
-const boot = document.createElement("div");
-boot.id = "boot";
-boot.style.cssText =
-  "color:white;font:16px monospace;padding:12px;position:fixed;left:0;top:0;z-index:9999";
-boot.textContent = "BOOT OK";
-document.body.appendChild(boot);
+// --- HUD: top debug (small font)
+const hudTop = document.createElement("div");
+hudTop.id = "hudTop";
+hudTop.style.cssText =
+  "color:white;font:12px monospace;padding:6px;position:fixed;left:0;top:0;z-index:9999;white-space:pre;opacity:0.9";
+hudTop.textContent = "BOOT OK";
+document.body.appendChild(hudTop);
+
+// --- HUD: centered PAUSE (overlay over canvas)
+const hudPause = document.createElement("div");
+hudPause.id = "hudPause";
+hudPause.style.cssText =
+  "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);" +
+  "color:white;font:32px monospace;z-index:10000;pointer-events:none;" +
+  "text-shadow:0 2px 0 rgba(0,0,0,0.7);display:none";
+hudPause.textContent = "PAUSED";
+root.appendChild(hudPause);
 
 window.addEventListener("error", (e) => {
   console.error("[BOOT] window.error", (e as any).error || (e as any).message);
-  boot.textContent = "BOOT ERROR: " + String((e as any).error || (e as any).message);
+  hudTop.textContent = "BOOT ERROR: " + String((e as any).error || (e as any).message);
 });
 window.addEventListener("unhandledrejection", (e) => {
   console.error("[BOOT] unhandledrejection", (e as any).reason);
-  boot.textContent = "BOOT ERROR: " + String((e as any).reason);
+  hudTop.textContent = "BOOT ERROR: " + String((e as any).reason);
 });
 
 function ensureWebGLCanvas(): HTMLCanvasElement {
@@ -48,22 +60,6 @@ function ensureWebGLCanvas(): HTMLCanvasElement {
     c.id = "game";
     c.style.display = "block";
     c.style.background = "black";
-    c.style.imageRendering = "pixelated";
-    root.appendChild(c);
-  }
-  return c;
-}
-
-// keep (not used yet, but harmless)
-function ensureHUDCanvas(): HTMLCanvasElement {
-  let c = document.querySelector("canvas#hud2d") as HTMLCanvasElement | null;
-  if (!c) {
-    c = document.createElement("canvas");
-    c.id = "hud2d";
-    c.style.position = "absolute";
-    c.style.left = "0";
-    c.style.top = "0";
-    c.style.pointerEvents = "none";
     c.style.imageRendering = "pixelated";
     root.appendChild(c);
   }
@@ -94,6 +90,40 @@ async function main() {
   window.__CM.loop = loop;
   window.__CM.store = store;
   window.__CM.game = game;
+  window.__CM.director = (game as any).director;
+
+  // ---- Dev API bridge
+  window.__CM.dev = {
+    waves: () => window.__CM.director?.getWaveStates?.(),
+    solo: (id: string) => window.__CM.director?.soloWave?.(id),
+    enableAll: () => window.__CM.director?.enableAll?.(),
+    enable: (id: string, on: boolean) => window.__CM.director?.setWaveEnabled?.(id, on),
+    trigger: (id: string) => window.__CM.director?.triggerWave?.(id),
+    stop: (id: string) => window.__CM.director?.stopWave?.(id),
+    diff: (m: number) => window.__CM.director?.setDifficulty?.(m),
+  };
+
+  // ---- DevUI (start OFF)
+  const { DevUI } = await import("./ui/DevUI");
+  (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
+  try {
+    (window as any).__CM.devui?.setVisible?.(false);
+  } catch (_e) {
+    // if DevUI doesn't expose setVisible, it should still be toggleable by its own key handler
+  }
+
+  // ---- Pause key (P) -> centered overlay
+  window.addEventListener("keydown", (e) => {
+    if (e.code !== "KeyP") return;
+    if (e.repeat) return;
+    e.preventDefault();
+
+    loop.togglePause();
+
+    const paused = !!(loop as any).isPaused?.();
+    hudPause.style.display = paused ? "block" : "none";
+    console.log("[PAUSE]", paused ? "PAUSED" : "RUN", "tick=", loop.getTick?.());
+  });
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
@@ -119,17 +149,8 @@ async function main() {
   function frame(now: number) {
     try {
       const dt = (now - last) / 1000;
-     
+      last = now;
 
-      ;(window as any).__frameCount = ((window as any).__frameCount ?? 0) + 1;
-      if (((window as any).__frameCount % 30) === 0) {
-        boot.textContent = `FRAME ${ (window as any).__frameCount } | dt=${dt.toFixed(3)}s`;
-      }
-
-       last = now;
-      if (Math.random() < 0.01) console.log("[FRAME] ok");
-
-      
       const dpr = Math.max(1, window.devicePixelRatio || 1);
 
       // keep present rect for input during runtime too
@@ -157,7 +178,7 @@ async function main() {
 
       loop.step(dt);
 
-      // ---- DEBUG COUNTS (on-screen, survives "no console")
+      // ---- DEBUG COUNTS (top-left, small font)
       let nEnemy = 0, nProj = 0, nBomb = 0, nPlayer = 0;
       store.debugForEachAlive((_r: any, e: any) => {
         if (!e || !e.kind) return;
@@ -167,30 +188,37 @@ async function main() {
         else if (e.kind === "player") nPlayer++;
       });
 
-      boot.textContent =
+      hudTop.textContent =
         `tick=${loop.getTick?.() ?? "?"} dt=${dt.toFixed(3)} ` +
         `alive=${store.getAliveCount?.() ?? "?"} ` +
         `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`;
 
-
-
-      
       // render: SceneRT -> present
       gfx.renderScene(() => renderer.render());
       gfx.present();
-
-  //      boot.textContent = `BOOT OK | dt=${dt.toFixed(3)}s`;
-      requestAnimationFrame(frame);
     } catch (err) {
       console.error("[BOOT] frame() crashed", err);
-      boot.textContent = "BOOT ERROR (frame): " + String((err as any)?.stack || err);
+      console.error("[BOOT] frame() crashed typeof=", typeof err, "value=", err);
+      console.error("[BOOT] frame() crashed stack=", (err as any)?.stack);
+      hudTop.textContent = "FRAME CRASH: " + String((err as any)?.message || err);
+    } finally {
+      requestAnimationFrame(frame);
     }
   }
 
+  window.addEventListener("error", (e) => {
+    console.error("[window.error]", e.message, e.error, (e.error as any)?.stack);
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    console.error("[unhandledrejection]", e.reason, (e.reason as any)?.stack);
+  });
+
+  // kick off RAF (only once; next frames scheduled in finally)
   requestAnimationFrame(frame);
 }
 
 main().catch((err) => {
   console.error("[BOOT] main() failed", err);
-  boot.textContent = "BOOT ERROR (main): " + String((err as any)?.stack || err);
+  hudTop.textContent = "BOOT ERROR (main): " + String((err as any)?.stack || err);
 });

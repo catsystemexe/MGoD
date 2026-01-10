@@ -14,11 +14,6 @@
       "id": "sine.basic",
       "behaviorId": "sine",
       "params": { "speedY": 32, "ampX": 18, "freq": 1.4 }
-    },
-    {
-      "id": "invaders.basic",
-      "behaviorId": "invaders",
-      "params": { "speedY": 14, "speedX": 22, "ampX": 26, "freq": 0.55, "phaseStep": 0.35 }
     }
   ]
 }

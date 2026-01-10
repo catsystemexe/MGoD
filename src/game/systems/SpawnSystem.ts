@@ -138,16 +138,20 @@ export class SpawnSystem {
         }
 
         case EventType.SPAWN_ENEMY: {
-          const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
+          const p = e.payload as any;
+            const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
 
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
           const r = def.radius ?? 4;
-          const spawnPos = this.pickEdgeSpawn(r);
+          const spawnPos = (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number") ? { x: p.spawn.x, y: p.spawn.y } : this.pickEdgeSpawn(r);
+            if ((this.dbgEvery % 60) === 0) { console.log("[SPAWN_ENEMY_POS]", "typeId", p.typeId, "waveId", waveId, "pos", spawnPos); }
 
           // preset resolution
-          const presetId = (def.behaviorPreset ?? "none.basic") as EnemyBehaviorPresetId;
+          const forcedPresetId = (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
+
+          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.basic") as any) as EnemyBehaviorPresetId;
           const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.basic"];
 
           if ((this.dbgEvery % 120) === 0) {
@@ -165,10 +169,24 @@ export class SpawnSystem {
             console.warn("[SPAWN] Unknown behaviorId in preset, fallback to none:", String(behaviorId));
           }
 
+
+
+          if (typeof DEV !== "undefined" && (DEV as any) && ((this.dbgEvery % 120) === 0)) {
+
+
+
+            console.log("[SPAWN_ENEMY]", p.typeId, "waveId", waveId, "preset", presetId, "behavior", behaviorId, "pos", spawnPos);
+
+
+
+          }
+
+          
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
-            ent.pos = spawnPos;
+            ent.waveId = waveId;
+              ent.pos = spawnPos;
 
             // default vel: behavior decides movement (enemySystem will apply vel->pos each tick)
             ent.vel = { x: 0, y: 0 };

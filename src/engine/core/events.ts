@@ -35,7 +35,12 @@ export type CMEventMap = {
     target: Vec2;
   };
 
-  [EventType.SPAWN_ENEMY]: { typeId: import("../../game/defs/EnemyDefs").EnemyTypeId };
+  [EventType.SPAWN_ENEMY]: {
+    typeId: import("../../game/defs/EnemyDefs").EnemyTypeId;
+    waveId?: string;
+    spawn?: Vec2;
+    behaviorPresetId?: string;
+  };
   [EventType.SPAWN_PICKUP]: { defId: string; pos: Vec2 };
 
   [EventType.PLAYER_FIRE_PRIMARY]: { owner: EntityRef };
