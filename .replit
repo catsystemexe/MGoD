@@ -1,18 +1,13 @@
 modules = ["nodejs-20"]
 
+run = "npm run dev"
+
 [agent]
 expertMode = true
 
 [nix]
 packages = ["tree"]
 
-[[ports]]
-localPort = 80
-externalPort = 3000
-
-[[ports]]
-localPort = 81
-externalPort = 3001
 
 [[ports]]
 localPort = 5173

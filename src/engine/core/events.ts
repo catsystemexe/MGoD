@@ -17,6 +17,8 @@ export const EventType = {
   // ✅ missing -> freeze culprit
   PLAYER_HIT_ENEMY: "PLAYER_HIT_ENEMY",
 
+  PLAYER_PICKUP: "PLAYER_PICKUP",
+  
   CA_CELLS_KILLED: "CA_CELLS_KILLED",
   ENTITY_DAMAGED: "ENTITY_DAMAGED",
   ENTITY_KILLED: "ENTITY_KILLED",
@@ -53,6 +55,8 @@ export type CMEventMap = {
   [EventType.PROJECTILE_HIT_ENEMY]: { projectile: EntityRef; enemy: EntityRef };
   [EventType.PROJECTILE_HIT_CA]: { projectile: EntityRef; x: number; y: number };
 
+  [EventType.PLAYER_PICKUP]: { player: EntityRef; pickup: EntityRef; defId: string };
+  
   // ✅ contact event
   [EventType.PLAYER_HIT_ENEMY]: { player: EntityRef; enemy: EntityRef };
 

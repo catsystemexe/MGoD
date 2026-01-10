@@ -45,6 +45,15 @@ export class SpawnSystem<T extends BaseEntity> {
     private readonly factory: SpawnFactory<T>,
   ) {}
 
+
+  export interface PickupEntity extends BaseEntity {
+    kind: "pickup";
+    defId: string;
+    pos: Vec2;
+    vel: Vec2;
+    radius: number;
+    ttl: number;
+  }
   /**
    * Must be invoked during Phase.Director.
    * Drains spawn events owned by Phase.Director and spawns entities immediately.

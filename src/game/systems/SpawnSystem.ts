@@ -22,6 +22,7 @@ export interface SpawnSystemConfig {
 
   projectile: Record<WeaponId, { speed: number; ttlSec: number; damage: number; radius: number }>;
   bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
+  pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -47,6 +48,15 @@ export interface BombEntity extends BaseEntity {
   target: Vec2;
 }
 
+export interface PickupEntity extends BaseEntity {
+  kind: "pickup";
+  defId: string;
+  pos: Vec2;
+  vel: Vec2;
+  radius: number;
+  ttl: number;
+}
+
 export interface EnemyEntity extends BaseEntity {
   kind: "enemy";
   typeId: EnemyTypeId;
@@ -60,11 +70,9 @@ export interface EnemyEntity extends BaseEntity {
   bState: EnemyBehaviorRuntime;
 }
 
-export type SpawnableEntity = ProjectileEntity | BombEntity | EnemyEntity;
+export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | EnemyEntity;
 
 export class SpawnSystem {
-  private dbgEvery = 0;
-
   constructor(
     private readonly store: EntityStore<SpawnableEntity>,
     private readonly cfg: SpawnSystemConfig,
@@ -76,22 +84,13 @@ export class SpawnSystem {
     if (!this.cfg.projectile || !this.cfg.bomb) throw new Error(`[SpawnSystem] cfg.projectile and cfg.bomb must be defined`);
   }
 
-  /** Phase.Simulation handler (Loop provides events already filtered for this phase). */
-  update(ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
-    this.dbgEvery = (this.dbgEvery + 1) | 0;
-    if ((this.dbgEvery % 120) === 0) {
-      console.log("[SPAWN] events", events.length);
-    }
-
+  update(_ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
     for (const e of events) {
       switch (e.type) {
         case EventType.SPAWN_PROJECTILE: {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
           const wcfg = this.cfg.projectile[p.weapon];
-          if (!wcfg) {
-            console.warn("[SPAWN] unknown weapon id", p.weapon);
-            break;
-          }
+          if (!wcfg) break;
 
           const dx = p.dir.x;
           const dy = p.dir.y;
@@ -139,61 +138,35 @@ export class SpawnSystem {
 
         case EventType.SPAWN_ENEMY: {
           const p = e.payload as any;
-            const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
+          const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
 
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
           const r = def.radius ?? 4;
-          const spawnPos = (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number") ? { x: p.spawn.x, y: p.spawn.y } : this.pickEdgeSpawn(r);
-            if ((this.dbgEvery % 60) === 0) { console.log("[SPAWN_ENEMY_POS]", "typeId", p.typeId, "waveId", waveId, "pos", spawnPos); }
+          const spawnPos =
+            (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
+              ? { x: p.spawn.x, y: p.spawn.y }
+              : this.pickEdgeSpawn(r);
 
-          // preset resolution
-          const forcedPresetId = (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
+          const forcedPresetId =
+            (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
 
           const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.basic") as any) as EnemyBehaviorPresetId;
           const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.basic"];
 
-          if ((this.dbgEvery % 120) === 0) {
-            console.log("[SPAWN_ENEMY] typeId", p.typeId, "preset", presetId, "behavior", preset.behaviorId);
-          }
-
-          if (!EnemyBehaviorPresets[presetId]) {
-            console.warn("[SPAWN] Unknown behaviorPreset, fallback to none:", String(presetId));
-          }
-
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          if (!EnemyBehaviorDB[behaviorId]) {
-            console.warn("[SPAWN] Unknown behaviorId in preset, fallback to none:", String(behaviorId));
-          }
-
-
-
-          if (typeof DEV !== "undefined" && (DEV as any) && ((this.dbgEvery % 120) === 0)) {
-
-
-
-            console.log("[SPAWN_ENEMY]", p.typeId, "waveId", waveId, "preset", presetId, "behavior", behaviorId, "pos", spawnPos);
-
-
-
-          }
-
-          
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
             ent.waveId = waveId;
-              ent.pos = spawnPos;
+            ent.pos = spawnPos;
 
-            // default vel: behavior decides movement (enemySystem will apply vel->pos each tick)
             ent.vel = { x: 0, y: 0 };
-
             ent.hp = def.hp;
             ent.radius = def.radius;
-
             ent.render = def.render ? { ...def.render } : undefined;
 
             ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
@@ -203,13 +176,24 @@ export class SpawnSystem {
             beh?.init?.(ent);
             ent.pendingKill = false;
           });
-
           break;
         }
 
-        case EventType.SPAWN_PICKUP:
-          // MVP ignore
+        case EventType.SPAWN_PICKUP: {
+          const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
+          const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+
+          this.store.spawn((ent: any) => {
+            ent.kind = "pickup";
+            ent.defId = String(p.defId ?? "unknown");
+            ent.pos = { x: p.pos.x, y: p.pos.y };
+            ent.vel = { x: 0, y: pcfg.fallSpeed };
+            ent.radius = pcfg.radius;
+            ent.ttl = pcfg.ttlSec;
+            ent.pendingKill = false;
+          });
           break;
+        }
 
         default:
           break;

@@ -2,7 +2,9 @@ import { EventBus } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { Loop } from "../../engine/core/Loop";
 import type { CMEventMap } from "../../engine/core/events";
-
+import { LootDropSystem } from "../systems/LootDropSystem";
+import { PowerupSystem } from "../systems/PowerupSystem";
+import { PickupSystem } from "../systems/PickupSystem";
 import { DIRECTOR_DEFS_MVP } from "../defs/DirectorDefs";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import { makeSessionState } from "../data/SessionState";
@@ -27,6 +29,8 @@ import { EnemySystem } from "../systems/EnemySystem";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
+
+
 
 // fallback config kdybys neměl WEAPONS_MVP
 const WEAPONS_FALLBACK: any = {
@@ -68,8 +72,11 @@ export async function createGame(
     ent.speed = 140;
     ent.radius = 3;
     ent.pendingKill = false;
+
     ent.energyMax = 5;
     ent.energy = 5;
+    ent.bombs = 1;
+
     ent.invulnT = 0;
     ent.deadT = 0;
     ent.hitFlashT = 0;
@@ -95,9 +102,27 @@ export async function createGame(
     }
   );
 
-  const flowDispatcher = new FlowDispatcher([score, respawn]);
-  const flow = new FlowSystem(flowDispatcher);
+  // ⚠️ MUSÍ BÝT PŘED FlowDispatcher
+  const lootDrop = new LootDropSystem(
+    bus as any,
+    store as any,
+    { dropChance: 0.25, rng01: Math.random }
+  );
 
+  const powerups = new PowerupSystem(
+    session as any,
+    store as any,
+    () => playerRef
+  );
+
+  const flowDispatcher = new FlowDispatcher([
+    score,
+    respawn,
+    lootDrop,
+    powerups,
+  ]);
+
+  const flow = new FlowSystem(flowDispatcher);
   // ---- Spawn system (Director-owned requests are applied here)
   const spawnCfg = {
     rng01: Math.random, // ✅ fresh random
@@ -109,6 +134,10 @@ export async function createGame(
     bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
   };
 
+ 
+  const pickupSystem = new PickupSystem(store as any);
+
+  
   const spawn = new SpawnSystem(store as any, spawnCfg);
 
   // ---- Alive counting for caps
@@ -129,8 +158,8 @@ export async function createGame(
     return n;
   }
 
-  // ---- Director (needs to be re-creatable for reset)
-  let director = new DirectorSystem(
+  // ---- Director
+  const director = new DirectorSystem(
     bus as any,
     DIRECTOR_DEFS_MVP as any,
     {
@@ -139,7 +168,7 @@ export async function createGame(
     }
   );
 
-  let directorPhase = new DirectorPhaseSystem(session as any, director as any);
+  const directorPhase = new DirectorPhaseSystem(session as any, director as any);
 
   // ---- Simulation systems
   const playerSystem = new PlayerSystem(bus as any, playerEnt, {
@@ -170,18 +199,28 @@ export async function createGame(
   const impact = new ImpactPhaseSystem(damage, caImpact);
   const collision = new CollisionSystem(bus, store as any);
 
-  // ---- Reset (no reload)
-  function reset(): void {
-    // reset session IN PLACE (preserve reference)
-    const fresh = makeSessionState();
-    for (const k of Object.keys(fresh) as (keyof typeof fresh)[]) {
-      (session as any)[k] = (fresh as any)[k];
-    }
+  // ---- Soft reset (no reload), keeps refs stable
+  const RESET_CFG = {
+    startLives: 3,
+    startEnergy: 5,
+    startBombs: 1,
+    invulnSec: 1.0,
+  };
+
+  function resetGame(): void {
+    // session (in place)
+    session.score = 0;
+    session.lives = RESET_CFG.startLives;
+    session.wave = 1;
+    session.gameOver = false;
+    session.tick = 0;
+    session.timeSec = 0;
+    (session as any).lastDeathPos = undefined;
 
     // clear world except player slot (keeps playerRef valid)
-    (store as any).killAllExceptSlots?.([playerRef.slot]);
-    if (!(store as any).killAllExceptSlots) {
-      // fallback: kill everything by marking (keeps player anyway)
+    if ((store as any).killAllExceptSlots) {
+      (store as any).killAllExceptSlots([playerRef.slot]);
+    } else {
       store.debugForEachAlive((ref, e: any) => {
         if (ref.slot === playerRef.slot) return;
         e.pendingKill = true;
@@ -189,7 +228,7 @@ export async function createGame(
       store.cleanup();
     }
 
-    // reset player
+    // reset player entity (same object)
     playerEnt.kind = "player";
     playerEnt.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
     playerEnt.vel = { x: 0, y: 0 };
@@ -198,30 +237,23 @@ export async function createGame(
     playerEnt.radius = Number(playerEnt.radius ?? 3);
     playerEnt.pendingKill = false;
 
-    playerEnt.energyMax = Number(playerEnt.energyMax ?? 5);
-    playerEnt.energy = Number(playerEnt.energyMax ?? 5);
+    playerEnt.energyMax = RESET_CFG.startEnergy;
+    playerEnt.energy = RESET_CFG.startEnergy;
+    playerEnt.bombs = RESET_CFG.startBombs;
 
-    playerEnt.invulnT = 0;
+    playerEnt.invulnT = RESET_CFG.invulnSec;
     playerEnt.deadT = 0;
     playerEnt.hitFlashT = 0;
 
-    // recreate director for a clean run
-    director = new DirectorSystem(
-      bus as any,
-      DIRECTOR_DEFS_MVP as any,
-      {
-        getAliveEnemies: countAliveEnemies,
-        getAliveEnemiesForWave: countAliveEnemiesForWave,
-      }
-    );
-    directorPhase = new DirectorPhaseSystem(session as any, director as any);
+    // input (release buffered/held actions)
+    try {
+      inputRt.actions.firePrimary = false as any;
+      inputRt.actions.fireSecondary = false as any;
+      (inputRt.actions as any).bombPressed = false;
+    } catch {}
 
-    // main reads window.__CM.director, so keep returned object consistent
-    (ret as any).director = director;
-    (ret as any).directorPhase = directorPhase;
-
-    // optional
-    (session as any).lastDeathPos = undefined;
+    // director runtime reset (keeps same instance)
+    director.reset();
   }
 
   const loop = new Loop<CMEventMap>({
@@ -229,6 +261,7 @@ export async function createGame(
 
     input: {
       sample: (_ctx) => {
+        // i při game over můžeš klidně dál sampleovat (kvůli Y/N atd.)
         inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
       },
     },
@@ -237,6 +270,10 @@ export async function createGame(
       update: (ctx, events) => {
         if (session.gameOver) return;
         directorPhase.update(ctx, events as any);
+
+        // keep numeric wave in session for HUD
+        const w = director.getHUDInfo().current;
+        if (typeof w === "number" && Number.isFinite(w)) session.wave = w;
       },
     },
 
@@ -245,7 +282,7 @@ export async function createGame(
         if (session.gameOver) return;
 
         respawn.tick();
-
+        pickupSystem.update(ctx.dt);
         playerSystem.update(ctx.dt, inputRt.actions as any);
 
         // dead gate: no weapons while dead
@@ -267,31 +304,31 @@ export async function createGame(
       update: (_ctx, _events) => {
         if (session.gameOver) return;
         collision.update();
-      }
+      },
     },
 
     impact: {
       update: (ctx, events) => {
         if (session.gameOver) return;
         (impact as any).update(ctx, events as any);
-      }
+      },
     },
 
     flow: {
       update: (ctx, events) => {
         // Flow nech běžet vždy – gameOver se často nastaví právě ve Flow
         flow.update(ctx, events as any);
-      }
+      },
     },
 
     cleanup: {
       update: (_ctx, _events) => {
         store.cleanup();
-      }
+      },
     },
   });
 
-  const ret = {
+  return {
     loop,
     bus,
     store,
@@ -302,10 +339,8 @@ export async function createGame(
     playerEnt,
     director,
     directorPhase,
-    reset,
+    reset: resetGame,
     logicW: LOGIC_W,
-    logicH: LOGIC_H
+    logicH: LOGIC_H,
   };
-
-  return ret;
 }

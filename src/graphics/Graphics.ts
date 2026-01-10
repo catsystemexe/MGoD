@@ -111,10 +111,11 @@ export class Graphics {
     console.log("[GFX] present viewport", d.viewportW, d.viewportH);
     
     // letterbox clear (black)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // C64 BLUE (proper)
+    gl.clearColor(5/ 255, 5 / 255, 5 / 255, 1);
+     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // viewport do kterého se vykreslí pixel-perfect obraz
     gl.viewport(d.viewportX, d.viewportY, d.viewportW, d.viewportH);

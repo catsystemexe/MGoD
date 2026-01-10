@@ -15,10 +15,16 @@ export class DirectorPhaseSystem {
     this.session.tick = ctx.tick;
     this.session.timeSec += ctx.dt;
 
-    // ✅ MUST include dt, because DirectorSystem requires it
+    // let director run spawns for NEXT tick
     this.director.update(
       { tick: ctx.tick, dt: ctx.dt, timeSec: this.session.timeSec } as any,
       []
     );
+
+    // keep wave number in session for HUD
+    const cur = this.director.getHUDInfo().current;
+    if (typeof cur === "number" && Number.isFinite(cur)) {
+      this.session.wave = cur;
+    }
   }
 }

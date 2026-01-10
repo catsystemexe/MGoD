@@ -26,16 +26,34 @@ export class DirectorSystem {
     defs: DirectorDefs,
     private readonly deps: DirectorDeps,
   ) {
-    console.log("[DIR][INIT] waves=", defs.waves?.length ?? null, defs.waves?.map((w:any)=>w.id));
+    console.log("[DIR][INIT] waves=", defs.waves?.length ?? null, defs.waves?.map((w: any) => w.id));
     this.waves = defs.waves.map(makeWaveRuntime);
     this.globalMaxAlive = defs.globalMaxAlive ?? Infinity;
+  }
+
+  // ---- HUD helper
+  getHUDInfo(): { current: number } {
+    // current wave number = first active wave by order (1-based)
+    const idx = this.waves.findIndex(w => w.active);
+    return { current: idx >= 0 ? idx + 1 : 0 };
+  }
+
+  // ---- reset runtime
+  reset(): void {
+    this.t = 0;
+    for (const w of this.waves) {
+      w.active = false;
+      w.t = 0;
+      w.acc = 0;
+      w.spawned = 0;
+    }
+    // keep difficulty as-is; if you want: this.difficulty = 1;
   }
 
   // ---- control API
   triggerWave(id: string): void {
     const w = this.waves.find(x => x.id === id);
     if (!w || !w.enabled) return;
-    // manual: activate and keep active until stopWave()
     if (w.def.trigger.kind === "manual") this.activate(w);
   }
 
@@ -54,7 +72,6 @@ export class DirectorSystem {
 
   // ---- runtime API
   setDifficulty(mult: number): void {
-    // clamp: žádný extrém
     const m = Number.isFinite(mult) ? mult : 1;
     this.difficulty = Math.max(0.1, Math.min(10, m));
   }
@@ -63,7 +80,6 @@ export class DirectorSystem {
     return this.difficulty;
   }
 
-  /** Enable only this wave, disable all others (keeps triggers). */
   soloWave(id: string): void {
     for (const w of this.waves) {
       const on = w.id === id;
@@ -72,12 +88,10 @@ export class DirectorSystem {
     }
   }
 
-  /** Quick enable all waves. */
   enableAll(): void {
     for (const w of this.waves) w.enabled = true;
   }
 
-  /** Snapshot for debug UI */
   getWaveStates(): Array<{
     id: string;
     enabled: boolean;
@@ -99,7 +113,7 @@ export class DirectorSystem {
       trigger: w.def.trigger,
     }));
   }
-  
+
   // ---- update (Director phase)
   update(ctx: TickContext, _events: Array<AnyEvent<any>> = []): void {
     const dt = (ctx as any).dt;
@@ -117,7 +131,6 @@ export class DirectorSystem {
       if (this.shouldBeActive(w)) {
         if (!w.active) this.activate(w);
       } else {
-        // only auto-deactivate for time waves
         if (w.active && w.def.trigger.kind === "time") this.deactivate(w);
       }
 
@@ -132,34 +145,24 @@ export class DirectorSystem {
       const aliveWave = this.deps.getAliveEnemiesForWave?.(w.id);
       if (typeof aliveWave === "number" && aliveWave >= w.def.maxAlive) continue;
 
-      // fallback if per-wave count isn't available:
       if (aliveWave === undefined && aliveGlobal >= w.def.maxAlive) continue;
 
       // 4) accumulator spawn (lag-safe)
       const period = Math.max(0.01, w.def.spawnEverySec / this.difficulty);
       w.acc += dt;
 
-      const maxSpawnsThisTick = 8; // safety
+      const maxSpawnsThisTick = 8;
       let spawnedNow = 0;
 
       while (w.acc >= period && spawnedNow < maxSpawnsThisTick) {
         w.acc -= period;
 
-
-        console.log(
-          "[DIR][EMIT]",
-          "wave=", w.id,
-          "enemy=", w.def.enemyTypeId,
-          "t=", this.t.toFixed(2),
-          "acc=", w.acc.toFixed(3)
-        );
-        
         // emit spawn; include waveId for per-wave accounting (optional in event map)
         const ptn: any = (w.def as any).pattern;
         let spawn: any = undefined;
 
         if (ptn && ptn.kind === "grid") {
-          const idx = w.spawned; // 0..N
+          const idx = w.spawned;
           const col = idx % Math.max(1, ptn.cols);
           const row = Math.floor(idx / Math.max(1, ptn.cols)) % Math.max(1, ptn.rows);
           spawn = {
@@ -178,10 +181,8 @@ export class DirectorSystem {
         w.spawned++;
         spawnedNow++;
 
-        // re-check global cap after each spawn
         if (this.deps.getAliveEnemies() >= this.globalMaxAlive) break;
 
-        // re-check per-wave cap if available
         if (this.deps.getAliveEnemiesForWave) {
           if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) break;
         }
@@ -193,7 +194,7 @@ export class DirectorSystem {
     const tr = w.def.trigger;
 
     if (tr.kind === "manual") {
-      return w.active; // stays active until stopWave()
+      return w.active;
     }
 
     const start = tr.startSec ?? 0;

@@ -191,6 +191,17 @@ export class WebGLSceneRenderer {
         h = rr * 2;
         gl.uniform4f(this.uColor, 1, 1, 0, 1);
 
+        } else if (kind === "pickup") {
+          const rr = typeof r === "number" ? r : 4;
+          w = rr * 2;
+          h = rr * 2;
+
+          const defId = String((e as any).defId ?? "");
+          if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
+          else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
+          else if (defId === "score") gl.uniform4f(this.uColor, 0, 1, 1, 1);
+          else gl.uniform4f(this.uColor, 1, 0, 1, 1);
+        
       } else if (kind === "particle") {
         const sz = Number((e as any).size ?? 2);
         w = sz;

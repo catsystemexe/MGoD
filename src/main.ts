@@ -1,4 +1,7 @@
 // src/main.ts
+const bootN = ((window as any).__BOOT_N__ = (((window as any).__BOOT_N__ ?? 0) + 1));
+(document.title = `CM boot#${bootN}`);
+
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
@@ -8,10 +11,10 @@ document.body.style.userSelect = "none";
 (document.body.style as any).webkitUserSelect = "none";
 (document.body.style as any).webkitTouchCallout = "none";
 document.body.style.margin = "0";
-document.body.style.background = "black";
+document.body.style.background = "#6C5EB5"; // C64 blue
 document.body.style.height = "100vh";
-document.body.style.display = "grid";
-document.body.style.placeItems = "center";
+document.body.style.display = "block";
+document.body.style.overflow = "hidden";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
@@ -24,8 +27,8 @@ if (DEV) {
   hudTop = document.createElement("div");
   hudTop.id = "hudTop";
   hudTop.style.cssText =
-    "color:white;font:12px monospace;padding:6px;position:fixed;left:0;top:0;" +
-    "z-index:9999;white-space:pre;opacity:0.9";
+  "color:white;font:12px monospace;padding:6px;position:fixed;left:0;top:0;" +
+  "z-index:9999;white-space:pre;opacity:0.9;pointer-events:none";
   document.body.appendChild(hudTop);
   setHudTop("BOOT OK");
 }
@@ -41,8 +44,12 @@ window.__CM = window.__CM || {};
 // root container (canvas + overlays)
 const root = document.createElement("div");
 root.id = "root";
-root.style.position = "relative";
-root.style.display = "inline-block";
+root.style.position = "fixed";
+root.style.left = "0";
+root.style.top = "0";
+root.style.width = "100vw";
+root.style.height = "100vh";
+root.style.overflow = "hidden";
 document.body.appendChild(root);
 
 window.addEventListener("error", (e) => {
@@ -219,12 +226,17 @@ async function main() {
         }
       }
 
-      loop.step(dt);
+      loop.step(dt); 
+      const cur = window.__CM?.director?.getHUDInfo?.()?.current;
+      let waveText = "-";
 
-      const waveText =
-        window.__CM.director?.getHUDInfo?.()?.current != null
-          ? String(window.__CM.director.getHUDInfo().current)
-          : "-";
+      if (cur != null) {
+        const s = String(cur);
+        const m = s.match(/\d+/);           // první číslo ve stringu
+        waveText = m ? m[0] : s;            // když není číslo, ukaž aspoň raw
+      } else if ((game as any)?.session?.wave != null) {
+        waveText = String((game as any).session.wave);
+      }
 
       hud.update(game.playerEnt ?? {}, game.session ?? {}, waveText);
 

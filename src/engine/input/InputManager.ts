@@ -107,19 +107,31 @@ export class InputManager {
   }
 
   private clientToLogic(logicW: number, logicH: number): { x: number; y: number } {
-    const c = this.getCanvas();
-    if (!c) return { x: logicW * 0.5, y: logicH * 0.5 };
-
-    const r = c.getBoundingClientRect();
-
+  
     const pw = this.present.dw;
     const ph = this.present.dh;
     const usePresent = pw > 1 && ph > 1;
 
-    const left = (usePresent ? (r.left + this.present.ox) : r.left);
-    const top  = (usePresent ? (r.top + this.present.oy) : r.top);
-    const w    = (usePresent ? Math.max(1, pw) : Math.max(1, r.width));
-    const h    = (usePresent ? Math.max(1, ph) : Math.max(1, r.height));
+    let left = 0;
+    let top = 0;
+    let w = 1;
+    let h = 1;
+
+    if (usePresent) {
+      // present rect je už ve správných CSS souřadnicích
+      left = this.present.ox;
+      top  = this.present.oy;
+      w    = Math.max(1, pw);
+      h    = Math.max(1, ph);
+    } else {
+      const c = this.getCanvas();
+      if (!c) return { x: logicW * 0.5, y: logicH * 0.5 };
+      const r = c.getBoundingClientRect();
+      left = r.left;
+      top  = r.top;
+      w    = Math.max(1, r.width);
+      h    = Math.max(1, r.height);
+    }
 
     const nx = (this.mouseClientX - left) / w;
     const ny = (this.mouseClientY - top) / h;
