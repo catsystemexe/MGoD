@@ -12,4 +12,7 @@ export type PlayerData = {
   gen: number;
   id: number;
   flags: number;
+  invulnT?: number;
+  deadT?: number;
+  hitFlashT?: number;
 };

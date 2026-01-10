@@ -39,7 +39,22 @@ export class PlayerSystem {
       throw new Error("[PlayerSystem] update() must run in Phase.Simulation");
     }
 
-    // --- Aim dir (instant, no lag)
+    // --- timers
+    this.player.invulnT = Math.max(0, Number(this.player.invulnT ?? 0) - dtSec);
+    this.player.deadT = Math.max(0, Number(this.player.deadT ?? 0) - dtSec);
+
+    const hf0 = Number((this.player as any).hitFlashT ?? 0);
+    const hf = Number.isFinite(hf0) ? hf0 : 0;
+    (this.player as any).hitFlashT = hf > 0 ? Math.max(0, hf - dtSec) : 0;
+
+    // --- dead gate (no movement while dead)
+    if (Number(this.player.deadT ?? 0) > 0) {
+      this.player.vel.x = 0;
+      this.player.vel.y = 0;
+      return;
+    }
+
+    // --- Aim dir (optional; keep commented if you don't want it)
     // const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
     // const dx = aimTarget.x - this.player.pos.x;
     // const dy = aimTarget.y - this.player.pos.y;
@@ -58,7 +73,6 @@ export class PlayerSystem {
 
     // clamp to bounds, respecting radius
     const r = this.player.radius ?? 0;
-
     this.player.pos.x = clamp(nx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
     this.player.pos.y = clamp(ny, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
   }

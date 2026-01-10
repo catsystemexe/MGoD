@@ -6,6 +6,18 @@ import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
 // --- World entities (MVP subset used by Collision) ---
 
+export interface PlayerEntity {
+  kind: "player";
+  pos: { x: number; y: number };
+  radius: number;
+  pendingKill: boolean;
+
+  // optional but used for contact-gating
+  invulnT?: number; // seconds
+  energy?: number;
+  energyMax?: number;
+}
+
 export interface EnemyEntity {
   kind: "enemy";
   pos: { x: number; y: number };
@@ -40,7 +52,7 @@ export interface BombEntity {
 }
 
 // ✅ WorldEntity musí splnit BaseEntity kontrakt store
-export type WorldEntity = BaseEntity & (EnemyEntity | ProjectileEntity | BombEntity);
+export type WorldEntity = BaseEntity & (PlayerEntity | EnemyEntity | ProjectileEntity | BombEntity);
 
 export interface CollisionConfig {
   enemyPriorityOverCA: boolean; // default true (MVP zatím CA ignore)
@@ -55,7 +67,7 @@ export class CollisionSystem {
   constructor(
     private bus: EventBus<CMEventMap>,
     private store: EntityStore<WorldEntity>,
-    private cfg: CollisionConfig = { enemyPriorityOverCA: true }
+    private cfg: CollisionConfig = { enemyPriorityOverCA: true },
   ) {}
 
   /** Phase.Collision only: detect collisions and emit events. */
@@ -65,10 +77,22 @@ export class CollisionSystem {
 
     const enemies: Array<{ ref: EntityRef; e: EnemyEntity }> = [];
 
+    let playerRef: EntityRef | null = null;
+    let player: PlayerEntity | null = null;
+
+    // 1) snapshot enemies + find player
     this.store.debugForEachAlive((ref, e) => {
-      if (e.kind === "enemy" && !e.pendingKill) enemies.push({ ref, e });
+      if (e.pendingKill) return;
+
+      if (e.kind === "enemy") enemies.push({ ref, e: e as EnemyEntity });
+
+      if (e.kind === "player") {
+        playerRef = ref;
+        player = e as PlayerEntity;
+      }
     });
 
+    // 2) projectile -> enemy
     this.store.debugForEachAlive((projRef, e) => {
       if (e.pendingKill) return;
       if (e.kind !== "projectile") return;
@@ -88,5 +112,24 @@ export class CollisionSystem {
         }
       }
     });
+
+    // 3) player -> enemy (CONTACT)
+    if (!player || !playerRef) return;
+
+    // gate by invulnerability (seconds)
+    const inv = Number(player.invulnT ?? 0);
+    if (Number.isFinite(inv) && inv > 0) return;
+
+    const px = player.pos.x, py = player.pos.y;
+    const pr = Number(player.radius ?? 3);
+
+    for (const { ref: enemyRef, e: enemy } of enemies) {
+      const rr = pr + Number(enemy.radius ?? 4);
+      if (dist2(px, py, enemy.pos.x, enemy.pos.y) <= rr * rr) {
+        // emit contact (owned by Impact)
+        this.bus.emit(EventType.PLAYER_HIT_ENEMY, { player: playerRef, enemy: enemyRef } as any);
+        break; // one contact per tick (MVP)
+      }
+    }
   }
 }

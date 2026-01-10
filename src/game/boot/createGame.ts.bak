@@ -54,8 +54,10 @@ export function createGame(getCanvas: () => HTMLCanvasElement) {
 
   // ---- Flow pipeline
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
-  const gameOver = new GameOverSystem(session);
-  const flowDispatcher = new FlowDispatcher([score, gameOver]);
+
+const flowDispatcher = new FlowDispatcher([score /*, respawn */]);
+
+
   const flow = new FlowSystem(flowDispatcher);
 
   // ---- Director + Spawn

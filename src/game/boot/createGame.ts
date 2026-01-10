@@ -2,6 +2,7 @@ import { EventBus } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { Loop } from "../../engine/core/Loop";
 import type { CMEventMap } from "../../engine/core/events";
+
 import { DIRECTOR_DEFS_MVP } from "../defs/DirectorDefs";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import { makeSessionState } from "../data/SessionState";
@@ -9,17 +10,16 @@ import { makeSessionState } from "../data/SessionState";
 import { FlowDispatcher } from "../systems/FlowDispatcher";
 import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
-import { GameOverSystem } from "../systems/GameOverSystem";
 
 import { SpawnSystem } from "../systems/SpawnSystem";
 import { DirectorSystem } from "../systems/DirectorSystem";
 import { DirectorPhaseSystem } from "../systems/DirectorPhaseSystem";
 
 import { CollisionSystem } from "../systems/CollisionSystem";
-import { Phase } from "../../engine/core/EventBus";
 import { InputManager } from "../../engine/input/InputManager";
 import { makeInputRuntime } from "../data/InputRuntime";
 import { CAImpactSystem } from "../impact/CAImpactSystem";
+import { RespawnSystem } from "../systems/RespawnSystem";
 import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
 import { ImpactPhaseSystem } from "../systems/ImpactPhaseSystem";
 import type { WorldEntity } from "../systems/CollisionSystem";
@@ -68,18 +68,34 @@ export async function createGame(
     ent.speed = 140;
     ent.radius = 3;
     ent.pendingKill = false;
+    ent.energyMax = 5;
+    ent.energy = 5;
+    ent.invulnT = 0;
+    ent.deadT = 0;
+    ent.hitFlashT = 0;
 
     playerEnt = ent;
   });
 
-
-  
   if (!playerEnt) throw new Error("[createGame] playerEnt not captured");
 
   // ---- Flow
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
-  const gameOver = new GameOverSystem(session);
-  const flowDispatcher = new FlowDispatcher([score, gameOver]);
+
+  const respawn = new RespawnSystem(
+    session as any,
+    store as any,
+    () => playerRef,
+    LOGIC_W,
+    LOGIC_H,
+    {
+      respawnDelayTicks: 60,
+      invulnSec: 1.0,
+      spawnEnergy: 5,
+    }
+  );
+
+  const flowDispatcher = new FlowDispatcher([score, respawn]);
   const flow = new FlowSystem(flowDispatcher);
 
   // ---- Spawn system (Director-owned requests are applied here)
@@ -114,30 +130,25 @@ export async function createGame(
   }
 
   /// ---- Director (decides spawns for NEXT tick)
-const director = new DirectorSystem(
-  bus as any,
-  DIRECTOR_DEFS_MVP as any,
-  {
-    getAliveEnemies: countAliveEnemies,
-    getAliveEnemiesForWave: countAliveEnemiesForWave,
-  }
-);
+  const director = new DirectorSystem(
+    bus as any,
+    DIRECTOR_DEFS_MVP as any,
+    {
+      getAliveEnemies: countAliveEnemies,
+      getAliveEnemiesForWave: countAliveEnemiesForWave,
+    }
+  );
 
-// ---- DirectorPhase (authoritative clock + applies spawn requests)
-const directorPhase = new DirectorPhaseSystem(
-  session as any,
-  director as any,
-);
-
- 
+  const directorPhase = new DirectorPhaseSystem(
+    session as any,
+    director as any,
+  );
 
   // ---- Simulation systems
   const playerSystem = new PlayerSystem(bus as any, playerEnt, {
-    // klidně 0..LOGIC (radius clamp řeší PlayerSystem)
     bounds: { minX: 0, minY: 0, maxX: LOGIC_W, maxY: LOGIC_H },
   });
 
-  // použij WEAPONS_MVP pokud existuje, jinak fallback
   let weaponsCfg: any = WEAPONS_FALLBACK;
   try {
     const mod: any = await import("../defs/Weapons");
@@ -148,68 +159,101 @@ const directorPhase = new DirectorPhaseSystem(
 
   const weaponSystem = new WeaponSystem(bus as any, weaponsCfg);
   const projectileSystem = new ProjectileSystem(bus as any, store as any);
-  // createGame.ts
   const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
+
   // ---- Impact
-    const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
-    const caImpact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
+  const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
+  const caImpact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
-    const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
-      projectileHitEnemyDamage: 3,
-      playerHitEnemyDamage: 999,
-    });
+  const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
+    projectileHitEnemyDamage: 3,
+    playerHitEnemyDamage: 1,
+  });
 
-    const impact = new ImpactPhaseSystem(damage, caImpact);
+  const impact = new ImpactPhaseSystem(damage, caImpact);
+  const collision = new CollisionSystem(bus, store as any);
 
-const collision = new CollisionSystem(bus, store as any);
+  const loop = new Loop<CMEventMap>({
+    eventBus: bus,
 
-  
-    const loop = new Loop<CMEventMap>({
-      eventBus: bus,
-
-      input: {
-        sample: (_ctx) => {
-          inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
-        },
+    input: {
+      sample: (_ctx) => {
+        // i při game over můžeš klidně dál sampleovat (kvůli Y/N později)
+        inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
       },
+    },
 
-      director: {
-        update: (ctx, events) => {
-          directorPhase.update(ctx, events as any);
-        },
+    director: {
+      update: (ctx, events) => {
+        if (session.gameOver) return;
+        directorPhase.update(ctx, events as any);
       },
+    },
 
-      simulation: {
-        update: (ctx, events) => {
-          // 1) player
-          playerSystem.update(ctx.dt, inputRt.actions as any);
+    simulation: {
+      update: (ctx, events) => {
+        if (session.gameOver) return;
 
-          // 2) weapons emit spawn requests (next tick)
+        respawn.tick();
+
+        playerSystem.update(ctx.dt, inputRt.actions as any);
+
+        // dead gate: no weapons while dead
+        if (Number(playerEnt.deadT ?? 0) <= 0) {
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { ...playerEnt.pos },
             aimDir: { ...playerEnt.aimDir },
             shipRef: playerRef,
           } as any);
+        }
 
-          // ✅ 3) APPLY spawns that arrived (from last tick emitNext)
-          spawn.update(ctx, events as any);
-
-          // 4) move projectiles
-          projectileSystem.update(ctx.dt);
-
-          // 5) move + cull enemies
-          enemySystem.update(ctx);
-        },
+        spawn.update(ctx, events as any);
+        projectileSystem.update(ctx.dt);
+        enemySystem.update(ctx);
       },
+    },
 
-      
-      collision: { update: (_ctx, _events) => collision.update() },
+    collision: {
+      update: (_ctx, _events) => {
+        if (session.gameOver) return;
+        collision.update();
+      }
+    },
 
-      impact: { update: (ctx, events) => (impact as any).update(ctx, events as any) },
+    impact: {
+      update: (ctx, events) => {
+        if (session.gameOver) return;
+        (impact as any).update(ctx, events as any);
+      }
+    },
 
-      flow: { update: (ctx, events) => flow.update(ctx, events as any) },
+    flow: {
+      update: (ctx, events) => {
+        // Flow nech běžet vždy – gameOver se často nastaví právě ve Flow
+        flow.update(ctx, events as any);
+      }
+    },
 
-      cleanup: { update: (_ctx, _events) => store.cleanup() },
-    });
-  return { loop, bus, store, session, inputRt, playerRef, inputMgr, playerEnt, director, logicW: LOGIC_W, logicH: LOGIC_H };
+    cleanup: {
+      update: (_ctx, _events) => {
+        // u game over klidně můžeš cleanup zastavit (aby svět “zamrzl”)
+        // ale teď necháme běžet – pendingKill u hráče už ruší RespawnSystem
+        store.cleanup();
+      }
+    },
+  });
+
+  return {
+    loop,
+    bus,
+    store,
+    session,
+    inputRt,
+    playerRef,
+    inputMgr,
+    playerEnt,
+    director,
+    logicW: LOGIC_W,
+    logicH: LOGIC_H
+  };
 }

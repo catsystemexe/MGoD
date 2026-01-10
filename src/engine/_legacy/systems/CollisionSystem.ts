@@ -3,6 +3,7 @@
  * - Detection-only: emits *_HIT_* events, does not apply damage/grid changes.
  * - One-Hit Rule: projectile marked Consumed after first hit (collision bookkeeping).
  * - Priority: Enemy > CA when both would be hit in same tick.
+ * - Player contact: emits PLAYER_HIT_ENEMY with i-frame gate (prevents event storms).
  */
 
 import type { EventBus } from "../../core/EventBus";
@@ -31,12 +32,19 @@ export type CollidableEnemy = {
   r: number;
 };
 
+// Player collidable (MVP)
+export type CollidablePlayer = {
+  ref: EntityRef;
+  alive: boolean;
+  pendingKill: boolean;
+  x: number;
+  y: number;
+  r: number;
+  invulnT?: number; // seconds remaining; if >0 => ignore contact hits
+};
+
 // CA query interface (MVP)
 export type CAQuery = {
-  /**
-   * Returns true if projectile at (x,y,r) intersects CA solid area.
-   * MVP implementation can be coarse (e.g. point test).
-   */
   hitTestCircle: (x: number, y: number, r: number) => boolean;
 };
 
@@ -46,14 +54,10 @@ export class CollisionSystem {
     private readonly ca: CAQuery,
     private readonly getProjectiles: () => CollidableProjectile[],
     private readonly getEnemies: () => CollidableEnemy[],
+    private readonly getPlayer: () => CollidablePlayer | null, // ✅ NEW
   ) {}
 
-  /**
-   * Must run in Phase.Collision (Phase 3).
-   * Emits hit events owned by Impact phase.
-   */
   update(): void {
-    // Optional enforcement (if EventBus exposes current phase)
     if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Collision) {
       throw new Error("[CollisionSystem] update() must run in Phase.Collision");
     }
@@ -61,6 +65,24 @@ export class CollisionSystem {
     const projectiles = this.getProjectiles();
     const enemies = this.getEnemies();
 
+    // --- Player contact (enemy touch)
+    const player = this.getPlayer();
+    if (player && player.alive && !player.pendingKill) {
+      const inv = Number(player.invulnT ?? 0);
+
+      // gate: only emit once when not invulnerable
+      if (!(inv > 0)) {
+        const hit = this.findEnemyHitCircle(player.x, player.y, player.r, enemies);
+        if (hit) {
+          this.bus.emit(EventType.PLAYER_HIT_ENEMY, {
+            player: player.ref,
+            enemy: hit.ref,
+          } as any);
+        }
+      }
+    }
+
+    // --- Projectile collisions
     for (const p of projectiles) {
       if (!p.alive || p.pendingKill) continue;
       if ((p.flags & EntityFlag.Consumed) !== 0) continue;
@@ -68,24 +90,25 @@ export class CollisionSystem {
       // 1) Enemy priority
       const hitEnemy = this.findEnemyHit(p, enemies);
       if (hitEnemy) {
-        // mark consumed (bookkeeping to prevent multi-hit storm)
         p.flags |= EntityFlag.Consumed;
 
         this.bus.emit(EventType.PROJECTILE_HIT_ENEMY, {
           projectile: p.ref,
           enemy: hitEnemy.ref,
-        });
-        continue; // CA ignored if enemy hit
+        } as any);
+
+        continue;
       }
 
       // 2) CA hit
       if (this.ca.hitTestCircle(p.x, p.y, p.r)) {
         p.flags |= EntityFlag.Consumed;
+
         this.bus.emit(EventType.PROJECTILE_HIT_CA, {
           projectile: p.ref,
           x: p.x,
           y: p.y,
-        });
+        } as any);
       }
     }
   }
@@ -94,6 +117,19 @@ export class CollisionSystem {
     for (const e of enemies) {
       if (!e.alive || e.pendingKill) continue;
       if (circleHit(p.x, p.y, p.r, e.x, e.y, e.r)) return e;
+    }
+    return null;
+  }
+
+  private findEnemyHitCircle(
+    x: number,
+    y: number,
+    r: number,
+    enemies: CollidableEnemy[],
+  ): CollidableEnemy | null {
+    for (const e of enemies) {
+      if (!e.alive || e.pendingKill) continue;
+      if (circleHit(x, y, r, e.x, e.y, e.r)) return e;
     }
     return null;
   }

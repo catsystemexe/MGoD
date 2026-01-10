@@ -14,7 +14,9 @@ export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
   [EventType.PROJECTILE_HIT_ENEMY]: Phase.Impact,
   [EventType.PROJECTILE_HIT_CA]: Phase.Impact,
 
-  // ✅ results owned by Flow (consumed by score/state)
+  // ✅ Impact owns contact too
+  [EventType.PLAYER_HIT_ENEMY]: Phase.Impact,
+
   [EventType.CA_CELLS_KILLED]: Phase.Flow,
   [EventType.ENTITY_DAMAGED]: Phase.Flow,
   [EventType.ENTITY_KILLED]: Phase.Flow,
