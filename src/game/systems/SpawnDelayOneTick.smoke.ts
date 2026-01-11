@@ -8,7 +8,7 @@ function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
-function tick(bus: EventBus<CMEventMap>, phase: Phase, t: number, fn: (events: any[]) => void) {
+function tick(bus: EventBus<CMEventMap>, phase: Phase, fn: (events: any[]) => void) {
   bus.enterPhase(phase);
   const events = bus.drainPhase(phase) as any[];
   fn(events);
@@ -16,7 +16,9 @@ function tick(bus: EventBus<CMEventMap>, phase: Phase, t: number, fn: (events: a
 
 function countProjectiles(store: EntityStore<any>): number {
   let n = 0;
-  store.debugForEachAlive((_ref, e: any) => { if (e.kind === "projectile") n++; });
+  store.debugForEachAlive((_ref, e: any) => {
+    if (e.kind === "projectile") n++;
+  });
   return n;
 }
 
@@ -41,10 +43,13 @@ function main() {
     bomb: { travelSec: 1, damage: 1, radius: 1, ttlSec: 1 },
   });
 
-  // Tick 0: emitNext projectile (Simulation), Director shouldn't see it yet
+  // -----------------------
+  // Tick 0: emitNext -> should NOT spawn in the same tick
+  // Owner of SPAWN_PROJECTILE is Simulation, but event is in qNext anyway.
+  // -----------------------
   bus.beginTick(0);
 
-  tick(bus, Phase.Simulation, 0, () => {
+  tick(bus, Phase.Simulation, () => {
     bus.emitNext(EventType.SPAWN_PROJECTILE, {
       owner: { slot: 1, gen: 0 },
       origin: { x: 10, y: 10 },
@@ -53,17 +58,21 @@ function main() {
     });
   });
 
-  tick(bus, Phase.Director, 0, (events) => spawn.update({ tick: 0, dt: 1/60 }, events as any));
-  tick(bus, Phase.Cleanup, 0, () => store.cleanup());
-
+  tick(bus, Phase.Cleanup, () => store.cleanup());
   bus.endTickAndSwap();
 
   assert(countProjectiles(store) === 0, "tick0: projectile must NOT spawn yet (emitNext delay)");
 
-  // Tick 1: Director drains previous tick's next events => spawn happens now
+  // -----------------------
+  // Tick 1: qNext -> qNow; Simulation drains SPAWN_PROJECTILE and SpawnSystem materializes it
+  // -----------------------
   bus.beginTick(1);
-  tick(bus, Phase.Director, 1, (events) => spawn.update({ tick: 1, dt: 1/60 }, events as any));
-  tick(bus, Phase.Cleanup, 1, () => store.cleanup());
+
+  tick(bus, Phase.Simulation, (events) => {
+    spawn.update({ tick: 1, dt: 1 / 60 }, events as any);
+  });
+
+  tick(bus, Phase.Cleanup, () => store.cleanup());
   bus.endTickAndSwap();
 
   assert(countProjectiles(store) === 1, "tick1: projectile must spawn (delayed from tick0)");

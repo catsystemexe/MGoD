@@ -44,7 +44,7 @@ function main() {
       bombPressed: false,
       bombTarget: { x: 0, y: 0 },
     },
-    { shipPos, aimDir, shipRef }
+    { shipPos , shipRef }
   );
 
   // Nothing should be drainable yet in tick 0 (emitNext goes to qNext)
@@ -58,10 +58,9 @@ function main() {
   // TICK 1: Director drains spawn requests
   // ---------------------------
   bus.beginTick(1);
-  bus.enterPhase(Phase.Director);
-
-  const dir1 = bus.drainPhase(Phase.Director);
-  const proj1 = dir1.filter((e) => e.type === EventType.SPAWN_PROJECTILE);
+  bus.enterPhase(Phase.Simulation);
+  const sim1 = bus.drainPhase(Phase.Simulation);
+  const proj1 = sim1.filter(e => e.type === EventType.SPAWN_PROJECTILE);
   assert(proj1.length === 1, "primary should spawn 1 projectile in next tick Director (emitNext)");
 
   bus.enterPhase(Phase.Cleanup);
@@ -84,7 +83,7 @@ function main() {
       bombPressed: true,
       bombTarget: { x: 123, y: 77 },
     },
-    { shipPos, aimDir, shipRef }
+    { shipPos, shipRef }
   );
 
   bus.enterPhase(Phase.Cleanup);
@@ -94,9 +93,8 @@ function main() {
   // TICK 3: Director drains; bomb should be there, projectile should NOT
   // ---------------------------
   bus.beginTick(3);
-  bus.enterPhase(Phase.Director);
-
-  const dir3 = bus.drainPhase(Phase.Director);
+  bus.enterPhase(Phase.Simulation);
+  const dir3 = bus.drainPhase(Phase.Simulation);
   const proj3 = dir3.filter((e) => e.type === EventType.SPAWN_PROJECTILE);
   const bomb3 = dir3.filter((e) => e.type === EventType.SPAWN_BOMB);
 

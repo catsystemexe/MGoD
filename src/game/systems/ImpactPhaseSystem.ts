@@ -2,7 +2,7 @@
 import type { TickContext, AnyEvent } from "../../engine/core/Loop";
 import type { CMEventMap } from "../../engine/core/events";
 import type { CAImpactSystem } from "../impact/CAImpactSystem";
-import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
+import { DamageSystem } from "./DamageSystem";
 import type { WorldEntity } from "./CollisionSystem";
 
 export class ImpactPhaseSystem {

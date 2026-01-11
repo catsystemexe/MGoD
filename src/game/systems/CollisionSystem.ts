@@ -156,7 +156,7 @@ export class CollisionSystem {
     for (const { ref: enemyRef, e: enemy } of enemies) {
       const rr = pr + Number(enemy.radius ?? 4);
       if (dist2(px, py, enemy.pos.x, enemy.pos.y) <= rr * rr) {
-        this.bus.emit(EventType.PLAYER_HIT_ENEMY, { player: playerRef, enemy: enemyRef } as any);
+        this.bus.emit(EventType.PLAYER_HIT_ENEMY, { player: playerRef, enemy: enemyRef });
         break;
       }
     }

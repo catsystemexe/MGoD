@@ -87,8 +87,6 @@ export class RespawnSystem {
 
     p.pendingKill = false;
 
-    // aim dir keep if exists
-    if (!p.aimDir) p.aimDir = { x: 0, y: -1 };
 
     // ✅ spawn i-frames
     p.invulnT = this.cfg.invulnSec;

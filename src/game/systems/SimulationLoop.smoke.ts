@@ -82,7 +82,6 @@ function main() {
 
   const snap: any = {
     shipPos: { x: 10, y: 10 },
-    aimDir: { x: 1, y: 0 },
     shipRef: ship,
   };
 
@@ -122,8 +121,8 @@ function main() {
 
     bus.beginTick(t);
 
-    // Director: apply spawn requests from previous tick
-    tick(bus, Phase.Director, t, (events) => {
+    // ✅ SPRÁVNĚ
+    tick(bus, Phase.Simulation, t, (events) => {
       spawn.update({ tick: t, dt }, events as any);
     });
 

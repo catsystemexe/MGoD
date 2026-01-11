@@ -253,18 +253,6 @@ async function main() {
           (DEV ? "" : " (DEV off)"),
       );
 
-      // HUD values (corners) – needs explicit update each frame
-      try {
-        hud.update?.(
-          (game as any).playerEnt ?? {},
-          session ?? {},
-          undefined, // waveText optional
-        );
-      } catch (e) {
-        // ignore HUD errors
-      }
-
-      
       gfx.renderScene(() => renderer.render());
       gfx.present();
     } catch (err) {

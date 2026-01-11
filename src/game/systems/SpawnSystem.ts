@@ -59,7 +59,8 @@ export interface PickupEntity extends BaseEntity {
 
 export interface EnemyEntity extends BaseEntity {
   kind: "enemy";
-  typeId: EnemyTypeId;
+    typeId: EnemyTypeId;
+    waveId?: string;
   pos: Vec2;
   vel: Vec2;
   hp: number;
@@ -137,7 +138,7 @@ export class SpawnSystem {
         }
 
         case EventType.SPAWN_ENEMY: {
-          const p = e.payload as any;
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
           const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
 
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];

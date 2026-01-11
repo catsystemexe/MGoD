@@ -6,7 +6,7 @@ import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
 import { CollisionSystem, type WorldEntity } from "./CollisionSystem";
-import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
+import { DamageSystem } from "./DamageSystem";
 
 import { FlowDispatcher } from "../systems/FlowDispatcher";
 import { FlowSystem } from "../systems/FlowSystem";

@@ -65,7 +65,7 @@ export class Graphics {
    */
   renderScene(draw?: (gl: WebGL2RenderingContext) => void): void {
     const gl = this.gl;
-    console.log("[GFX] renderScene");
+    
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fb);
     gl.viewport(0, 0, this.scene.w, this.scene.h);
 

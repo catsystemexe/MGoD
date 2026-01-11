@@ -54,12 +54,11 @@ export class PlayerSystem {
       return;
     }
 
-    // --- Aim dir (optional; keep commented if you don't want it)
-    // const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
-    // const dx = aimTarget.x - this.player.pos.x;
-    // const dy = aimTarget.y - this.player.pos.y;
-    // const len = Math.hypot(dx, dy) || 1;
-    // this.player.aimDir = { x: dx / len, y: dy / len };
+    // --- Aim dir (deterministic, from sampled actions)
+    const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
+    const dx = aimTarget.x - this.player.pos.x;
+    const dy = aimTarget.y - this.player.pos.y;
+    const len = Math.hypot(dx, dy) || 1;
 
     // --- Movement
     const vx = actions.move.x * this.player.speed;

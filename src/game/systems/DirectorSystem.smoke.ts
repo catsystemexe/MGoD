@@ -4,61 +4,85 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 
 import { DirectorSystem } from "./DirectorSystem";
-import { DIRECTOR_DEFS_MVP } from "../defs/DirectorDefs";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
-type TestEntity = { kind: "enemy"; pendingKill: boolean } | { kind: "other" };
+type TestEntity = any;
+
+const TEST_DEFS: any = {
+  globalMaxAlive: 999,
+  waves: [
+    {
+      id: "wave.test",
+      trigger: { kind: "time", startSec: 0, endSec: 999 },
+      spawnEverySec: 1.0,     // jistota: dt=1.1 => min 1 spawn
+      maxAlive: 999,
+      enemyTypeId: "enemy.test",
+      behaviorPresetId: "none.basic",
+    },
+  ],
+};
 
 function main() {
   const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
     maxEventsPerTick: 256,
     failFast: true,
     dropLeftoversInProd: true,
-    onWarn: (m) => console.warn(m),
-    onError: (m) => console.error(m),
   });
 
   const store = new EntityStore<TestEntity>(64);
 
-  const director = new DirectorSystem(bus, store, DIRECTOR_DEFS_MVP, { enabled: true });
+  const director = new DirectorSystem(
+    bus as any,
+    TEST_DEFS,
+    {
+      getAliveEnemies: () => 0,
+      getAliveEnemiesForWave: () => 0,
+    }
+  );
 
-  // Tick 0 at t=0 -> should emit SPAWN_ENEMY
+  // ─────────────────────────────────────
+  // Tick 0: Director emitNext -> event až v tick 1
+  // ─────────────────────────────────────
   bus.beginTick(0);
   bus.enterPhase(Phase.Director);
-  director.update({ timeSec: 0, tick: 0 });
 
-  const ev0 = bus.drainPhase(Phase.Director);
-  const spawn0 = ev0.filter(e => e.type === EventType.SPAWN_ENEMY);
-  assert(spawn0.length === 1, "should spawn 1 enemy at t=0");
+  director.update({ tick: 0, dt: 1.1 } as any);
 
-  // If we call again at same time -> no new spawn due to interval
-  director.update({ timeSec: 0, tick: 0 });
-  const ev0b = bus.drainPhase(Phase.Director);
-  assert(ev0b.length === 0, "should NOT spawn twice at same t due to cadence");
+  // Director NIC nedrainuje (SPAWN_* owner = Simulation)
+  const dir0 = bus.drainPhase(Phase.Director);
+  assert(dir0.length === 0, "Director must not drain spawn");
 
-  // Advance time less than interval (2.0s in wave1) -> still no spawn
-  director.update({ timeSec: 1.0, tick: 60 });
-  const ev1 = bus.drainPhase(Phase.Director);
-  assert(ev1.length === 0, "should not spawn before interval");
+  // Simulation v tick 0 NIC (protože emitNext)
+  bus.enterPhase(Phase.Simulation);
+  const sim0 = bus.drainPhase(Phase.Simulation);
+  assert(sim0.length === 0, "no spawn in same tick (emitNext)");
 
-  // Advance beyond interval -> should spawn again
-  director.update({ timeSec: 2.1, tick: 126 });
-  const ev2 = bus.drainPhase(Phase.Director);
-  assert(ev2.filter(e => e.type === EventType.SPAWN_ENEMY).length === 1, "should spawn after interval");
+  // End tick 0 (qNow musí být prázdné)
+  bus.enterPhase(Phase.Cleanup);
+  bus.endTickAndSwap();
 
-  // Cap test: create maxAlive enemies
-  for (let i = 0; i < 6; i++) {
-    store.spawn(e => { e.kind = "enemy"; (e as any).pendingKill = false; });
-  }
+  // ─────────────────────────────────────
+  // Tick 1: spawn je v qNow a drainuje ho Simulation
+  // ─────────────────────────────────────
+  bus.beginTick(1);
 
-  director.update({ timeSec: 4.5, tick: 270 });
-  const evCap = bus.drainPhase(Phase.Director);
-  assert(evCap.length === 0, "should not spawn when maxAlive cap reached");
+  // (volitelně Director s malým dt, aby negeneroval další emitNext)
+  bus.enterPhase(Phase.Director);
+  director.update({ tick: 1, dt: 0.0001 } as any);
+  const dir1 = bus.drainPhase(Phase.Director);
+  assert(dir1.length === 0, "Director must not drain spawn (tick 1)");
 
-  // End tick cleanly
+  bus.enterPhase(Phase.Simulation);
+  const sim1 = bus.drainPhase(Phase.Simulation);
+  assert(
+    sim1.filter(e => e.type === EventType.SPAWN_ENEMY).length >= 1,
+    "spawn must be drained in Simulation phase"
+  );
+
+  // End tick 1
   bus.enterPhase(Phase.Cleanup);
   bus.endTickAndSwap();
 

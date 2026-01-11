@@ -10,6 +10,11 @@
  *  - End-of-tick invariant: qNow MUST be empty before swap (dev fail-fast).
  */
 
+import { SPAWN_EVENT_TYPES } from "./events";
+
+const SPAWN_EVENT_TYPE_SET = new Set<string>(SPAWN_EVENT_TYPES);
+const isSpawnEventType = (t: string) => SPAWN_EVENT_TYPE_SET.has(t);
+
 export enum Phase {
   Input = 0,
   Director = 1,
@@ -21,9 +26,8 @@ export enum Phase {
   Cleanup = 7,
 }
 
-export type EventType = string;
 
-export type GameEvent<TType extends EventType = EventType, TPayload = unknown> = {
+export type GameEvent<TType extends string = string, TPayload = unknown> = {
   type: TType;
   payload: TPayload;
   tick: number;
@@ -37,7 +41,7 @@ export type GameEvent<TType extends EventType = EventType, TPayload = unknown> =
  *   "ENTITY_KILLED": { ref: EntityRef; reason: string };
  * };
  */
-export type EventMap = Record<EventType, unknown>;
+export type EventMap = Record<string, unknown>;
 
 export type OwnershipMap<T extends EventMap> = {
   [K in keyof T]: Phase;
@@ -64,6 +68,8 @@ const DEFAULT_POLICY: EventBusPolicy = {
   dropLeftoversInProd: true,
 };
 
+
+
 export class EventBus<T extends EventMap> {
   private qNow: Array<GameEvent<keyof T & string, T[keyof T]>> = [];
   private qNext: Array<GameEvent<keyof T & string, T[keyof T]>> = [];
@@ -80,10 +86,6 @@ export class EventBus<T extends EventMap> {
   public getTick(): number {
     return this.tick;
   }
-
-  public getCurrentPhase(): Phase {
-    return this.currentPhase;
-  }
   
   public getPhase(): Phase {
     return this.currentPhase;
@@ -99,6 +101,18 @@ export class EventBus<T extends EventMap> {
     if (typeof nextTick === "number") this.tick = nextTick;
     this.currentPhase = Phase.Input;
 
+    // dev-only: ensure qNow events belong to current tick
+    if (this.policy.failFast && this.qNow.length) {
+      for (const e of this.qNow) {
+        if (e.tick !== this.tick) {
+          throw new Error(
+            "[EventBus] qNow contains event with wrong tick. expected=" + this.tick + " got=" + e.tick + " type=" + String(e.type)
+          );
+        }
+      }
+    }
+
+
     // qNow should already contain only events for this tick (from swap), or be empty.
     // We don't enforce emptiness here, because swap() is the enforcement point.
   }
@@ -112,12 +126,45 @@ export class EventBus<T extends EventMap> {
   public emit<K extends keyof T & string>(type: K, payload: T[K]): void {
     this.guardEventStorm();
 
+    // ❌ SPAWN_* MUST be emitNext only (one-tick delay)
+    if (isSpawnEventType(String(type))) {
+      const msg = "[EventBus] emit(" + String(type) + ") is forbidden. SPAWN_* must use emitNext() for determinism.";
+      if (this.policy.failFast) {
+        this.policy.onError?.(msg);
+        throw new Error(msg);
+      } else {
+        this.policy.onWarn?.(msg);
+        return;
+      }
+    }
+
+
+
+  
+    const owner = this.ownership[type as keyof T];
+
+    // ✅ allow same-tick forward routing (emit in earlier phase, drained later by owner phase)
+    // ❌ forbid emitting to an earlier phase (would never be drained this tick)
+    if (owner < this.currentPhase) {
+      const msg =
+        `[EventBus] emit(${String(type)}) in phase=${this.currentPhase} but owner=${owner}. ` +
+        `Cannot emit to past phases. Use emitNext() or fix ownership.`;
+      if (this.policy.failFast) {
+        this.policy.onError?.(msg);
+        throw new Error(msg);
+      } else {
+        this.policy.onWarn?.(msg);
+        return;
+      }
+    }
+
     const e: GameEvent<K, T[K]> = { type, payload, tick: this.tick };
     this.qNow.push(e);
   }
 
   /** Emit an event into qNext (next tick). */
   public emitNext<K extends keyof T & string>(type: K, payload: T[K]): void {
+    this.guardEventStorm();
     const e: GameEvent<K, T[K]> = { type, payload, tick: this.tick + 1 };
     this.qNext.push(e);
   }

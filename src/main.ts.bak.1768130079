@@ -23,15 +23,15 @@ function setHudTop(text: string) {
   if (hudTop) hudTop.textContent = text;
 }
 
-// DEBUG TOP BAR: vytvoř vždy (dokud nevyřešíme wiring)
-// v prod to pak můžeš zase zavřít za DEV flag.
-hudTop = document.createElement("div");
-hudTop.id = "hudTop";
-hudTop.style.cssText =
+if (DEV) {
+  hudTop = document.createElement("div");
+  hudTop.id = "hudTop";
+  hudTop.style.cssText =
   "color:white;font:12px monospace;padding:6px;position:fixed;left:0;top:0;" +
   "z-index:9999;white-space:pre;opacity:0.9;pointer-events:none";
-document.body.appendChild(hudTop);
-setHudTop("BOOT OK");
+  document.body.appendChild(hudTop);
+  setHudTop("BOOT OK");
+}
 
 declare global {
   interface Window {
@@ -131,7 +131,7 @@ async function main() {
   hud.setMode?.("TITLE");
   loop.setPaused?.(true);
 
-  // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
+  // ---- Keys: Pause (P), Start (Enter), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
@@ -141,7 +141,6 @@ async function main() {
       loop.setPaused?.(false);
       return;
     }
-
     // Pause toggle (P)
     if (e.code === "KeyP") {
       e.preventDefault();
@@ -157,7 +156,7 @@ async function main() {
 
     if (e.code === "KeyY") {
       e.preventDefault();
-      (game as any).reset?.(); // hard reset run (no reload)
+      (game as any).reset?.();      // hard reset run (no reload)
       hud.setMode?.("PLAY");
       loop.setPaused?.(false);
       return;
@@ -165,21 +164,12 @@ async function main() {
 
     if (e.code === "KeyN") {
       e.preventDefault();
+      // simplest: back to TITLE, paused
       hud.setMode?.("TITLE");
       loop.setPaused?.(true);
       return;
     }
   });
-
-  // iPad/touch: start also by tapping/clicking anywhere (register ONCE)
-  window.addEventListener(
-    "pointerdown",
-    () => {
-      hud.setMode?.("PLAY");
-      loop.setPaused?.(false);
-    },
-    { passive: true },
-  );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
@@ -192,10 +182,7 @@ async function main() {
 
     const pr = (gfx as any).getPresentRect?.();
     if (pr) {
-      const x = pr.x / dpr,
-        y = pr.y / dpr,
-        w = pr.w / dpr,
-        h = pr.h / dpr;
+      const x = pr.x / dpr, y = pr.y / dpr, w = pr.w / dpr, h = pr.h / dpr;
 
       game?.inputMgr?.setPresentRect?.(x, y, w, h);
       hud.setRect?.(x, y, w, h);
@@ -213,10 +200,7 @@ async function main() {
       const dt = (now - last) / 1000;
       last = now;
 
-      // advance simulation (THIS WAS MISSING)
-      loop.step(dt);
-
-      // per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
+      // per-frame aim
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
         const dx = t.x - game.playerEnt.pos.x;
@@ -231,40 +215,25 @@ async function main() {
           game.inputRt.actions.aimTarget.y = t.y;
         }
       }
+    
+      if (DEV) {
+        let nEnemy = 0, nProj = 0, nBomb = 0, nPlayer = 0;
 
-      // top debug (tick + counts) – držíme i mimo DEV, dokud to není stabilní
-      let nEnemy = 0,
-        nProj = 0,
-        nBomb = 0,
-        nPlayer = 0;
+        store.debugForEachAlive((_r: any, e: any) => {
+          if (!e || !e.kind) return;
+          if (e.kind === "enemy") nEnemy++;
+          else if (e.kind === "projectile") nProj++;
+          else if (e.kind === "bomb") nBomb++;
+          else if (e.kind === "player") nPlayer++;
+        });
 
-      store.debugForEachAlive((_r: any, e: any) => {
-        if (!e || !e.kind) return;
-        if (e.kind === "enemy") nEnemy++;
-        else if (e.kind === "projectile") nProj++;
-        else if (e.kind === "bomb") nBomb++;
-        else if (e.kind === "player") nPlayer++;
-      });
-
-      setHudTop(
-        `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)} ` +
+        setHudTop(
+          `tick=${loop.getTick?.() ?? "?"} dt=${dt.toFixed(3)} ` +
           `alive=${store.getAliveCount?.() ?? "?"} ` +
-          `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}` +
-          (DEV ? "" : " (DEV off)"),
-      );
-
-      // HUD values (corners) – needs explicit update each frame
-      try {
-        hud.update?.(
-          (game as any).playerEnt ?? {},
-          session ?? {},
-          undefined, // waveText optional
+          `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}`,
         );
-      } catch (e) {
-        // ignore HUD errors
       }
 
-      
       gfx.renderScene(() => renderer.render());
       gfx.present();
     } catch (err) {

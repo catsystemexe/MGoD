@@ -26,6 +26,16 @@ export const EventType = {
 
 export type EventType = (typeof EventType)[keyof typeof EventType];
 
+export const SPAWN_EVENT_TYPES = [
+  "SPAWN_ENEMY",
+  "SPAWN_PROJECTILE",
+  "SPAWN_BOMB",
+  "SPAWN_PICKUP",
+] as const;
+
+export type SpawnEventType = typeof SPAWN_EVENT_TYPES[number];
+
+
 export type CMEventMap = {
   [EventType.SPAWN_PROJECTILE]: {
     owner: EntityRef;

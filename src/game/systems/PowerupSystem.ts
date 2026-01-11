@@ -17,7 +17,7 @@ export class PowerupSystem {
 
   onFlowEvents(events: AnyCMEvent[]): void {
     for (const e of events) {
-      if (e.type !== (EventType as any).PLAYER_PICKUP) continue;
+      if (e.type !== EventType.PLAYER_PICKUP) continue;
 
       const p = e.payload as any;
       const defId = String(p?.defId ?? "unknown");

@@ -75,17 +75,9 @@ export class Loop<EM extends EventMap> {
 
     const events = bus.drainPhase(phase) as AnyEvent<EM>[];
 
-    // DEBUG: co se v jaké fázi skutečně drenuje
-    if (events.length > 0) {
-      const types = events.map((e: any) => e.type).join(",");
-      console.log("[LOOP][DRAIN]", phase, "n=", events.length, types);
-    }
-
     fn?.(ctx, events);
   }
 
-  
- 
   private fixedTick(): void {
     if (this.paused) return;
     const ctx: TickContext = { tick: this.tick, dt: this.dt };

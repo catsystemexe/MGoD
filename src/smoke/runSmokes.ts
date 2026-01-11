@@ -1,0 +1,28 @@
+// src/smoke/runSmokes.ts
+const SMOKES = [
+  "../game/systems/PlayerSystem.smoke",
+  "../game/systems/WeaponSystem.smoke",
+  "../game/systems/SimulationLoop.smoke",
+  "../game/systems/DirectorSystem.smoke",
+  "../game/systems/SpawnSystem.smoke",
+  "../game/systems/DirectorSpawn.smoke",
+  "../game/systems/SpawnDelayOneTick.smoke",
+  "../game/systems/EnemyCapRespected.smoke",
+  "../game/systems/Flow.smoke",
+  "../game/systems/StartToSpawn.integration.smoke",
+  "../game/systems/SpawnOwnership.contract.smoke",
+  "../game/systems/DirectorToSimulationSpawn.integration.smoke",
+];
+
+async function main() {
+  for (const p of SMOKES) {
+    await import(p);
+  }
+  console.log("[SMOKE RUNNER] OK");
+}
+
+main().catch((e) => {
+  console.error("[SMOKE RUNNER] FAIL");
+  console.error(e);
+  process.exit(1);
+});

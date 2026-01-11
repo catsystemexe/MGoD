@@ -22,7 +22,7 @@ import { InputManager } from "../../engine/input/InputManager";
 import { makeInputRuntime } from "../data/InputRuntime";
 import { CAImpactSystem } from "../impact/CAImpactSystem";
 import { RespawnSystem } from "../systems/RespawnSystem";
-import { DamageSystem } from "../../engine/_legacy/systems/DamageSystem";
+import { DamageSystem } from "../systems/DamageSystem";
 import { ImpactPhaseSystem } from "../systems/ImpactPhaseSystem";
 import type { WorldEntity } from "../systems/CollisionSystem";
 import { EnemySystem } from "../systems/EnemySystem";
@@ -68,7 +68,7 @@ export async function createGame(
     ent.kind = "player";
     ent.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
     ent.vel = { x: 0, y: 0 };
-    ent.aimDir = { x: 1, y: 0 }; // důležité
+   
     ent.speed = 140;
     ent.radius = 3;
     ent.pendingKill = false;
@@ -232,7 +232,7 @@ export async function createGame(
     playerEnt.kind = "player";
     playerEnt.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
     playerEnt.vel = { x: 0, y: 0 };
-    playerEnt.aimDir = playerEnt.aimDir ?? { x: 1, y: 0 };
+    
     playerEnt.speed = Number(playerEnt.speed ?? 140);
     playerEnt.radius = Number(playerEnt.radius ?? 3);
     playerEnt.pendingKill = false;
@@ -288,10 +288,9 @@ export async function createGame(
         // dead gate: no weapons while dead
         if (Number(playerEnt.deadT ?? 0) <= 0) {
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
-            shipPos: { ...playerEnt.pos },
-            aimDir: { ...playerEnt.aimDir },
+            shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
             shipRef: playerRef,
-          } as any);
+          });
         }
 
         spawn.update(ctx, events as any);

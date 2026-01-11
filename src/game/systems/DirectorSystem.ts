@@ -26,8 +26,9 @@ export class DirectorSystem {
     defs: DirectorDefs,
     private readonly deps: DirectorDeps,
   ) {
-    console.log("[DIR][INIT] waves=", defs.waves?.length ?? null, defs.waves?.map((w: any) => w.id));
-    this.waves = defs.waves.map(makeWaveRuntime);
+      const waveDefs: any[] = Array.isArray((defs as any)?.waves) ? (defs as any).waves : [];
+      console.log("[DIR][INIT] waves=", waveDefs.length, waveDefs.map((w: any) => w.id));
+      this.waves = waveDefs.map(makeWaveRuntime);
     this.globalMaxAlive = defs.globalMaxAlive ?? Infinity;
   }
 
@@ -171,7 +172,7 @@ export class DirectorSystem {
           };
         }
 
-        this.bus.emitNext(EventType.SPAWN_ENEMY as any, {
+        this.bus.emitNext(EventType.SPAWN_ENEMY, {
           typeId: w.def.enemyTypeId,
           waveId: w.id,
           spawn,

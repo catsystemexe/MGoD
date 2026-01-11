@@ -20,7 +20,7 @@ import { CollisionSystem, type WorldEntity } from "../../game/systems/CollisionS
 import { ScoreSystem, type SessionState } from "../../game/systems/ScoreSystem";
 
 // ✅ legacy damage (už je přesunuté)
-import { DamageSystem } from "../_legacy/systems/DamageSystem";
+import { DamageSystem } from "../../game/systems/DamageSystem";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);

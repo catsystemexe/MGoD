@@ -4,7 +4,7 @@ export type PlayerData = {
   kind: "player";
   pos: Vec2;
   vel: Vec2;
-  aimDir: Vec2;     // unit-ish
+ 
   speed: number;    // WU/sec
   radius: number;
   alive: boolean;

@@ -30,7 +30,6 @@ export class SimulationPhaseSystem {
 
     const snap: WeaponSnapshot = {
       shipPos: { x: this.playerData.pos.x, y: this.playerData.pos.y },
-      aimDir: { x: this.playerData.aimDir.x, y: this.playerData.aimDir.y },
       shipRef: this.playerRef,
     };
 

@@ -20,30 +20,48 @@ function main() {
   });
 
   const session = makeSessionState();
+
+  // MVP score rules: only CA cells add score, entity kills add 0.
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 0 });
   const gameOver = new GameOverSystem(session);
-
   const flow = new FlowDispatcher([score, gameOver]);
 
   bus.beginTick(0);
 
-  // Simulate Impact emitting Flow-owned events
-  bus.enterPhase(Phase.Impact);
-  bus.emit(EventType.CA_CELLS_KILLED, { count: 12, source: "explosion" });
-  bus.emit(EventType.ENTITY_DAMAGED, { target: { slot: 2, gen: 1 }, amount: 3, hpAfter: 7 });
-  bus.emit(EventType.ENTITY_KILLED, { target: { slot: 3, gen: 1 }, source: "projectile", isPlayer: false });
+  // ---- Flow-owned events should be emitted in Flow phase (ownership guard)
+  const caCount = 3;
 
-  // Flow drains and dispatches
+  bus.enterPhase(Phase.Flow);
+  bus.emit(EventType.CA_CELLS_KILLED, { count: caCount, source: "test" });
+
+  bus.emit(EventType.ENTITY_DAMAGED, {
+    target: { slot: 2, gen: 1 },
+    amount: 3,
+    hpAfter: 7,
+    source: "test",
+  });
+
+  bus.emit(EventType.ENTITY_KILLED, {
+    target: { slot: 3, gen: 1 },
+    source: "projectile",
+    isPlayer: false,
+  });
+
+  // Drain + dispatch Flow
   bus.enterPhase(Phase.Flow);
   const flowEvents = bus.drainPhase(Phase.Flow);
   flow.dispatch(flowEvents as any);
 
-  assert(session.score === 12, "score must equal CA killed count in MVP");
+  assert(session.score === caCount, "score must equal CA killed count in MVP");
   assert(session.gameOver === false, "gameOver should remain false");
 
-  // Now kill player
-  bus.enterPhase(Phase.Impact);
-  bus.emit(EventType.ENTITY_KILLED, { target: { slot: 1, gen: 1 }, source: "contact", isPlayer: true });
+  // ---- Player death: ENTITY_KILLED is Flow-owned => must be emitted in Flow phase
+  bus.enterPhase(Phase.Flow);
+  bus.emit(EventType.ENTITY_KILLED, {
+    target: { slot: 1, gen: 1 },
+    source: "contact",
+    isPlayer: true,
+  });
 
   bus.enterPhase(Phase.Flow);
   const flowEvents2 = bus.drainPhase(Phase.Flow);
@@ -51,7 +69,7 @@ function main() {
 
   assert(session.gameOver === true, "gameOver must become true after player kill");
 
-  // end tick must not complain about leftovers
+  // End tick must not complain about leftovers
   bus.enterPhase(Phase.Cleanup);
   bus.endTickAndSwap();
 

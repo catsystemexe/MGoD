@@ -1,122 +1,150 @@
- /**
-  * EventBus smoke test (v3.1) – ownership-driven (no guessing)
-  * Run: npm run smoke:eventbus
-  */
+/**
+ * EventBus smoke test (v3.1) – ownership-driven (no guessing)
+ * Run: npm run smoke:eventbus
+ */
 
- import { EventBus, Phase } from "./EventBus";
- import { CM_EVENT_OWNERSHIP } from "./EventOwnershipMap";
- import { EventType, type CMEventMap } from "./events";
+import { EventBus, Phase } from "./EventBus";
+import { CM_EVENT_OWNERSHIP } from "./EventOwnershipMap";
+import { EventType, type CMEventMap } from "./events";
+import type { EntityRef } from "../ecs/EntityRef";
 
- function assert(cond: unknown, msg: string): void {
-   if (!cond) throw new Error("[SMOKE] " + msg);
- }
+function assert(cond: unknown, msg: string): void {
+  if (!cond) throw new Error("[SMOKE] " + msg);
+}
 
- type AnyEvent = { type: keyof CMEventMap; payload: CMEventMap[keyof CMEventMap] };
+// NOTE: we only need type/payload fields for the asserts here
+type AnyEvent = { type: keyof CMEventMap; payload: CMEventMap[keyof CMEventMap] };
 
- function owns(type: keyof CMEventMap): Phase {
-   return CM_EVENT_OWNERSHIP[type];
- }
+function owns(type: keyof CMEventMap): Phase {
+  return CM_EVENT_OWNERSHIP[type];
+}
 
- function drainAndAssert(
-   bus: EventBus<CMEventMap>,
-   phase: Phase,
-   expectedTypes: Array<keyof CMEventMap>,
- ) {
-   bus.enterPhase(phase);
-   const events = bus.drainPhase(phase) as AnyEvent[];
+function drainAndAssert(
+  bus: EventBus<CMEventMap>,
+  phase: Phase,
+  expectedTypes: Array<keyof CMEventMap>,
+) {
+  bus.enterPhase(phase);
+  const events = bus.drainPhase(phase) as AnyEvent[];
 
-   for (const t of expectedTypes) {
-     assert(
-       events.some((e) => e.type === t),
-       `Owner phase (${Phase[phase]}) must drain ${String(t)}`,
-     );
-   }
+  for (const t of expectedTypes) {
+    assert(
+      events.some((e) => e.type === t),
+      `Owner phase (${Phase[phase]}) must drain ${String(t)}`,
+    );
+  }
 
-   return events;
- }
+  return events;
+}
 
- function main(): void {
-   const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
-     maxEventsPerTick: 256,
-     failFast: true,
-     dropLeftoversInProd: true,
-     onWarn: (m) => console.warn(m),
-     onError: (m) => console.error(m),
-   });
+function main(): void {
+  const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
+    maxEventsPerTick: 256,
+    failFast: true,
+    dropLeftoversInProd: true,
+    onWarn: (m) => console.warn(m),
+    onError: (m) => console.error(m),
+  });
 
-   bus.beginTick(0);
+  const ship: EntityRef = { slot: 1, gen: 1 };
 
-   // Phase Input
-   bus.enterPhase(Phase.Input);
-   assert(bus.drainPhase(Phase.Input).length === 0, "Input should drain nothing");
+  // Tick 0
+  bus.beginTick(0);
 
-   // Director
-   assert(owns(EventType.SPAWN_PROJECTILE) === Phase.Director, "SPAWN_PROJECTILE must be owned by Director for this test");
+  // Phase Input
+  bus.enterPhase(Phase.Input);
+  assert(bus.drainPhase(Phase.Input).length === 0, "Input should drain nothing");
 
-   bus.enterPhase(Phase.Director);
-   bus.emit(EventType.SPAWN_PROJECTILE, {
-     owner: { slot: 1, gen: 1 },
-     origin: { x: 10, y: 20 },
-     dir: { x: 1, y: 0 },
-     weapon: "primary",
-   });
+  // --- Schedule "next tick" spawn requests in any phase
+  // emitNext queues into NEXT tick's owner phase (per CM_EVENT_OWNERSHIP)
+  bus.enterPhase(Phase.Simulation);
 
-   const directorEvents = bus.drainPhase(Phase.Director);
-   assert(directorEvents.length === 1, "Director should drain exactly 1 spawn request");
-   assert(directorEvents[0].type === EventType.SPAWN_PROJECTILE, "Wrong drained event type in Director");
+  bus.emitNext(EventType.SPAWN_PROJECTILE, {
+    owner: ship,
+    origin: { x: 10, y: 20 },
+    dir: { x: 1, y: 0 },
+    weapon: "primary",
+  });
 
-   // Simulation
-   bus.enterPhase(Phase.Simulation);
-   bus.emit(EventType.PLAYER_FIRE_PRIMARY, { owner: { slot: 1, gen: 1 } });
+  bus.emitNext(EventType.SPAWN_BOMB, {
+    owner: ship,
+    origin: { x: 10, y: 20 },
+    target: { x: 60, y: 20 },
+  });
 
-   const simEvents = bus.drainPhase(Phase.Simulation);
-   assert(simEvents.length === 1, "Simulation should drain PLAYER_FIRE_PRIMARY");
-   assert(simEvents[0].type === EventType.PLAYER_FIRE_PRIMARY, "Wrong drained event type in Simulation");
+  bus.enterPhase(Phase.Cleanup);
+  bus.endTickAndSwap();
 
-   // Collision emits hit (owner is typically Impact)
-   bus.enterPhase(Phase.Collision);
-   bus.emit(EventType.PROJECTILE_HIT_ENEMY, {
-     projectile: { slot: 2, gen: 1 },
-     enemy: { slot: 3, gen: 1 },
-   });
+  // Tick 1
+  bus.beginTick(1);
 
-   // Collision must not drain if owned elsewhere
-   const collisionEvents = bus.drainPhase(Phase.Collision);
-   assert(collisionEvents.length === 0, "Collision should drain nothing if hit is owned elsewhere");
+  // ✅ Spawn events must appear in THEIR OWNER phase in tick 1
+  const spawnOwner = owns(EventType.SPAWN_PROJECTILE);
+  const bombOwner = owns(EventType.SPAWN_BOMB);
 
-   // Drain hit in its owner phase
-   const hitOwner = owns(EventType.PROJECTILE_HIT_ENEMY);
-   drainAndAssert(bus, hitOwner, [EventType.PROJECTILE_HIT_ENEMY]);
+  // drain all owners involved (handles "same owner" correctly)
+  const phaseToTypes = new Map<Phase, Array<keyof CMEventMap>>();
+  phaseToTypes.set(spawnOwner, [EventType.SPAWN_PROJECTILE]);
+  phaseToTypes.set(bombOwner, [...(phaseToTypes.get(bombOwner) ?? []), EventType.SPAWN_BOMB]);
 
-   // Emit derived events
-   bus.emit(EventType.ENTITY_DAMAGED, {
-     entity: { slot: 3, gen: 1 },
-     amount: 999,
-     source: "projectile",
-   });
+  for (const [phase, types] of phaseToTypes.entries()) {
+    drainAndAssert(bus, phase, types);
+  }
 
-   bus.emit(EventType.ENTITY_KILLED, {
-     entity: { slot: 3, gen: 1 },
-     source: "projectile",
-   });
+  // --- Immediate event in Simulation
+  bus.enterPhase(Phase.Simulation);
+  bus.emit(EventType.PLAYER_FIRE_PRIMARY, { owner: ship });
 
-   // ✅ Drain by unique owners (handles “same owner” correctly)
-   const damagedOwner = owns(EventType.ENTITY_DAMAGED);
-   const killedOwner = owns(EventType.ENTITY_KILLED);
+  // must drain in its owner phase (usually Simulation)
+  drainAndAssert(bus, owns(EventType.PLAYER_FIRE_PRIMARY), [EventType.PLAYER_FIRE_PRIMARY]);
 
-   const phaseToTypes = new Map<Phase, Array<keyof CMEventMap>>();
-   phaseToTypes.set(damagedOwner, [EventType.ENTITY_DAMAGED]);
-   phaseToTypes.set(killedOwner, [...(phaseToTypes.get(killedOwner) ?? []), EventType.ENTITY_KILLED]);
+  // --- Hit event: emitted in Collision, owned elsewhere (Impact)
+  bus.enterPhase(Phase.Collision);
+  bus.emit(EventType.PROJECTILE_HIT_ENEMY, {
+    projectile: { slot: 2, gen: 1 },
+    enemy: { slot: 3, gen: 1 },
+  });
 
-   for (const [phase, types] of phaseToTypes.entries()) {
-     drainAndAssert(bus, phase, types);
-   }
+  // Collision must not drain if owned elsewhere
+  const collisionEvents = bus.drainPhase(Phase.Collision);
+  assert(collisionEvents.length === 0, "Collision should drain nothing if hit is owned elsewhere");
 
-   // Cleanup/end
-   bus.enterPhase(Phase.Cleanup);
-   bus.endTickAndSwap();
+  // drain hit in its owner phase
+  drainAndAssert(bus, owns(EventType.PROJECTILE_HIT_ENEMY), [EventType.PROJECTILE_HIT_ENEMY]);
 
-   console.log("[SMOKE] EventBus v3.1 OK ✅");
- }
+  // --- Derived Flow events (schema must match events.ts!)
+  bus.enterPhase(Phase.Flow);
 
- main();
+  bus.emit(EventType.ENTITY_DAMAGED, {
+    target: { slot: 3, gen: 1 },
+    amount: 999,
+    hpAfter: 0,
+    source: "projectile",
+  });
+
+  bus.emit(EventType.ENTITY_KILLED, {
+    target: { slot: 3, gen: 1 },
+    source: "projectile",
+    isPlayer: false,
+  });
+
+  // drain by unique owners
+  const damagedOwner = owns(EventType.ENTITY_DAMAGED);
+  const killedOwner = owns(EventType.ENTITY_KILLED);
+
+  const phaseToTypes2 = new Map<Phase, Array<keyof CMEventMap>>();
+  phaseToTypes2.set(damagedOwner, [EventType.ENTITY_DAMAGED]);
+  phaseToTypes2.set(killedOwner, [...(phaseToTypes2.get(killedOwner) ?? []), EventType.ENTITY_KILLED]);
+
+  for (const [phase, types] of phaseToTypes2.entries()) {
+    drainAndAssert(bus, phase, types);
+  }
+
+  // Cleanup/end
+  bus.enterPhase(Phase.Cleanup);
+  bus.endTickAndSwap();
+
+  console.log("[SMOKE] EventBus v3.1 OK ✅");
+}
+
+main();

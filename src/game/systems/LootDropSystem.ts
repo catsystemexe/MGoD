@@ -39,8 +39,8 @@ export class LootDropSystem {
         r < 0.50 ? "energy" :
         r < 0.75 ? "score" :
         "bomb";
+      this.bus.emitNext(EventType.SPAWN_PICKUP, { defId, pos });
 
-      this.bus.emitNext(EventType.SPAWN_PICKUP as any, { defId, pos } as any);
     }
   }
 }

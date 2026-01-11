@@ -8,7 +8,6 @@ expertMode = true
 [nix]
 packages = ["tree"]
 
-
 [[ports]]
 localPort = 5173
 externalPort = 80

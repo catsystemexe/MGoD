@@ -1,9 +1,9 @@
-import type { EventBus } from "../../core/EventBus";
-import { Phase } from "../../core/EventBus";
-import { EventType, type CMEventMap } from "../../core/events";
-import type { EntityRef } from "../../ecs/EntityRef";
-import type { BaseEntity } from "../../ecs/ComponentTypes";
-import { EntityStore } from "../../ecs/EntityStore";
+import type { EventBus } from "../../engine/core/EventBus";
+import { Phase } from "../../engine/core/EventBus";
+import { EventType, type CMEventMap } from "../../engine/core/events";
+import type { EntityRef } from "../../engine/ecs/EntityRef";
+import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
+import { EntityStore } from "../../engine/ecs/EntityStore";
 
 export type DamageRules = {
   projectileHitEnemyDamage: number;

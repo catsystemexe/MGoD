@@ -3,6 +3,7 @@ import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
+import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 
 import { SpawnSystem, type SpawnableEntity } from "./SpawnSystem";
 
@@ -21,7 +22,7 @@ function main() {
 
   const store = new EntityStore<SpawnableEntity>(32);
 
-  const spawn = new SpawnSystem(bus, store, {
+  const spawn = new SpawnSystem(store, {
     rng01: () => 0.5,
     logicSize: { w: 400, h: 224 },
     projectile: {
@@ -33,7 +34,9 @@ function main() {
 
   const ship: EntityRef = { slot: 1, gen: 1 };
 
-  // Tick 0: queue spawn requests for next tick (emitNext)
+  // -----------------------
+  // Tick 0: emitNext → next tick (owned by SIMULATION
+  // -----------------------
   bus.beginTick(0);
   bus.enterPhase(Phase.Simulation);
 
@@ -46,20 +49,26 @@ function main() {
 
   bus.emitNext(EventType.SPAWN_BOMB, {
     owner: ship,
+    origin: { x: 10, y: 20 },
     target: { x: 100, y: 50 },
   });
 
   bus.emitNext(EventType.SPAWN_ENEMY, {
-    typeId: "enemy.drone",
+    typeId: "red", // <-- dosaď existující
   });
 
   bus.enterPhase(Phase.Cleanup);
   bus.endTickAndSwap();
 
-  // Tick 1: Director drains and spawns entities
+  // -----------------------
+  // Tick 1: Director drains and SpawnSystem consumes events
+  // -----------------------
   bus.beginTick(1);
-  bus.enterPhase(Phase.Director);
-  spawn.update();
+  bus.enterPhase(Phase.Simulation);
+
+  const ctx: TickContext = { tick: 1, dt: 1 / 60 };
+  const events = bus.drainPhase(Phase.Simulation) as AnyEvent<CMEventMap>[];
+  spawn.update(ctx, events);
 
   let projCount = 0;
   let bombCount = 0;

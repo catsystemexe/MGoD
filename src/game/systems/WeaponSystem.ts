@@ -21,7 +21,6 @@ import type { WeaponsConfig, WeaponId } from "../defs/Weapons";
 
 export type WeaponSnapshot = {
   shipPos: Vec2;   // WU
-  aimDir: Vec2;    // unit
   shipRef: EntityRef;
 };
 
@@ -36,6 +35,28 @@ function safeUnitDir(dir: Vec2): Vec2 {
   if (l <= 1e-6) return { x: 1, y: 0 };
   return { x: dir.x / l, y: dir.y / l };
 }
+function tryFire(
+  on: boolean,
+  cd: number,
+  cooldownSec: number,
+  fire: () => void,
+): number {
+  if (!on) return cd;
+  if (cd > 0) return cd;
+  fire();
+  return cooldownSec;
+}
+
+function dirFromAimTarget(shipPos: Vec2, aimTarget?: Vec2 | null): Vec2 {
+  const ax = (aimTarget && typeof aimTarget.x === "number") ? aimTarget.x : (shipPos.x + 1);
+  const ay = (aimTarget && typeof aimTarget.y === "number") ? aimTarget.y : (shipPos.y);
+
+  
+  const dx = ax - shipPos.x;
+  const dy = ay - shipPos.y;
+  return safeUnitDir({ x: dx, y: dy });
+}
+
 
 export class WeaponSystem {
   private st: WeaponSystemState = { cdPrimary: 0, cdSecondary: 0, cdBomb: 0 };
@@ -55,34 +76,37 @@ export class WeaponSystem {
     this.st.cdSecondary = Math.max(0, this.st.cdSecondary - dtSec);
     this.st.cdBomb = Math.max(0, this.st.cdBomb - dtSec);
 
-    const dir = safeUnitDir(snap.aimDir);
+    const dir = dirFromAimTarget(snap.shipPos, actions.aimTarget);
 
-    // Hold fire primary
-    if (actions.firePrimary && this.st.cdPrimary <= 0) {
-      this.emitProjectile("primary", snap.shipRef, snap.shipPos, dir);
-      this.st.cdPrimary = this.cfg.primary.cooldownSec;
-    }
+    this.st.cdPrimary = tryFire(
+      !!actions.firePrimary,
+      this.st.cdPrimary,
+      this.cfg.primary.cooldownSec,
+      () => this.emitProjectile("primary", snap.shipRef, snap.shipPos, dir),
+    );
 
-    // Hold fire secondary
-    if (actions.fireSecondary && this.st.cdSecondary <= 0) {
-      this.emitProjectile("secondary", snap.shipRef, snap.shipPos, dir);
-      this.st.cdSecondary = this.cfg.secondary.cooldownSec;
-    }
+    this.st.cdSecondary = tryFire(
+      !!actions.fireSecondary,
+      this.st.cdSecondary,
+      this.cfg.secondary.cooldownSec,
+      () => this.emitProjectile("secondary", snap.shipRef, snap.shipPos, dir),
+    );
 
-    // Bomb trigger (buffered already in InputManager)
-    if (actions.bombPressed && this.st.cdBomb <= 0) {
-      this.bus.emitNext(EventType.SPAWN_BOMB, {
-        owner: snap.shipRef,
-        origin: { ...snap.shipPos },     // captured at press time
-        target: { ...actions.bombTarget }
-      });
-      this.st.cdBomb = this.cfg.bombCooldownSec;
-    }
+    this.st.cdBomb = tryFire(
+      !!actions.bombPressed,
+      this.st.cdBomb,
+      this.cfg.bombCooldownSec,
+      () => {
+        this.bus.emitNext(EventType.SPAWN_BOMB, {
+          owner: snap.shipRef,
+          origin: { ...snap.shipPos },
+          target: { ...actions.bombTarget },
+        });
+      },
+    );
   }
-
   private emitProjectile(weapon: WeaponId, owner: EntityRef, origin: Vec2, dir: Vec2): void {
    
-    console.log("FIRE tick", (window as any).__CM?.loop?.getTick?.(), dir);
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       weapon,
       owner,

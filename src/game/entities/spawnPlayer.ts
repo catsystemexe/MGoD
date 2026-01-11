@@ -9,7 +9,6 @@ export function spawnPlayer(store: EntityStore<any>, x: number, y: number): { re
     e.kind = "player";
     e.pos = { x, y };
     e.vel = { x: 0, y: 0 };
-    e.aimDir = { x: 1, y: 0 };
     e.speed = 140;
     e.radius = 4;
 
