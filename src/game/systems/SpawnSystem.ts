@@ -23,6 +23,7 @@ export interface SpawnSystemConfig {
   projectile: Record<WeaponId, { speed: number; ttlSec: number; damage: number; radius: number }>;
   bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
   pickup?: { ttlSec: number; radius: number; fallSpeed: number };
+  onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -111,6 +112,13 @@ export class SpawnSystem {
             ent.consumed = false;
             ent.pendingKill = false;
           });
+
+          this.cfg.onSpawnProjectile?.({
+            x: p.origin.x,
+            y: p.origin.y,
+            dx: nx,
+            dy: ny,
+          });
           break;
         }
 
@@ -144,7 +152,7 @@ export class SpawnSystem {
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
-          const r = def.radius ?? 4;
+          const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.radius > 0) ? def.radius : 4;
           const spawnPos =
             (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
               ? { x: p.spawn.x, y: p.spawn.y }
@@ -167,7 +175,7 @@ export class SpawnSystem {
 
             ent.vel = { x: 0, y: 0 };
             ent.hp = def.hp;
-            ent.radius = def.radius;
+            ent.radius = r;
             ent.render = def.render ? { ...def.render } : undefined;
 
             ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;

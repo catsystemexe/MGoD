@@ -216,11 +216,7 @@ async function main() {
       // advance simulation (THIS WAS MISSING)
       loop.step(dt);
 
-      
-
-        // cosmetic VFX (per-frame, not in fixed tick)
-        (game as any).vfx?.update?.(dt);
-// per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
+      // per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
         const dx = t.x - game.playerEnt.pos.x;
@@ -269,12 +265,8 @@ async function main() {
       }
 
       
-        gfx.renderScene(() => {
-          renderer.render();
-          (renderer as any).renderVFX?.((game as any).vfx);
-        });
-        gfx.present();
-      
+      gfx.renderScene(() => renderer.render());
+      gfx.present();
     } catch (err) {
       console.error("[BOOT] frame() crashed", err);
       console.error("[BOOT] frame() crashed stack=", (err as any)?.stack);

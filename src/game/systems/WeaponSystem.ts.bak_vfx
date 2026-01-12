@@ -64,7 +64,6 @@ export class WeaponSystem {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
     private readonly cfg: WeaponsConfig,
-    private readonly opts?: { onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void },
   ) {}
 
   update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
@@ -114,8 +113,5 @@ export class WeaponSystem {
       origin: { ...origin },
       dir: { ...dir },
     });
-  
-      // cosmetic hook (muzzle flash etc.)
-      this.opts?.onSpawnProjectile?.({ x: origin.x, y: origin.y, dx: dir.x, dy: dir.y });
-}
+  }
 }
