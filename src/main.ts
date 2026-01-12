@@ -1,6 +1,17 @@
 // src/main.ts
 const bootN = ((window as any).__BOOT_N__ = (((window as any).__BOOT_N__ ?? 0) + 1));
+// --- KILL PREVIOUS RAF LOOP (HMR / reboot safe) ---
+(window as any).__CM = (window as any).__CM || {};
+if ((window as any).__CM.__rafId) {
+  cancelAnimationFrame((window as any).__CM.__rafId);
+  (window as any).__CM.__rafId = 0;
+}
+(window as any).__CM.__running = false;
+
 (document.title = `CM boot#${bootN}`);
+
+
+import { VFXSystem } from "./game/vfx/VFXSystem";
 
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
@@ -22,6 +33,19 @@ let hudTop: HTMLDivElement | null = null;
 function setHudTop(text: string) {
   if (hudTop) hudTop.textContent = text;
 }
+// expose for systems (iPad has no console)
+(window as any).__CM = (window as any).__CM || {};
+(window as any).__CM.setTop = (msg: string) => setHudTop(msg);
+
+// small ring buffer if you want multiline
+(window as any).__CM.topLines = (window as any).__CM.topLines || [];
+(window as any).__CM.topLog = (msg: string) => {
+  const arr: string[] = (window as any).__CM.topLines;
+  arr.push(msg);
+  while (arr.length > 6) arr.shift();
+  setHudTop(arr.join("\n"));
+};
+
 
 // DEBUG TOP BAR: vytvoř vždy (dokud nevyřešíme wiring)
 // v prod to pak můžeš zase zavřít za DEV flag.
@@ -40,6 +64,7 @@ declare global {
 }
 window.__CM = window.__CM || {};
 (window as any).__CM.topLog = (window as any).__CM.topLog ?? "";
+
 
 // root container (canvas + overlays)
 const root = document.createElement("div");
@@ -208,6 +233,11 @@ async function main() {
 
   let last = performance.now();
 
+  // --- top debug overlay (default OFF; throttled) ---
+  const TOP_DEBUG_ENABLED = false; // zapni jen když ladíš
+  const TOP_DEBUG_EVERY_N_FRAMES = 15; // ~4×/s při 60fps
+  let topDbgFrame = 0;
+  
   function frame(now: number) {
     try {
       const dt = (now - last) / 1000;
@@ -236,26 +266,31 @@ async function main() {
         }
       }
 
-      // top debug (tick + counts) – držíme i mimo DEV, dokud to není stabilní
-      let nEnemy = 0,
-        nProj = 0,
-        nBomb = 0,
-        nPlayer = 0;
+      // top debug (tick + counts) – throttled, default OFF
+      if (TOP_DEBUG_ENABLED) {
+        topDbgFrame++;
+        if (topDbgFrame % TOP_DEBUG_EVERY_N_FRAMES === 0) {
+          let nEnemy = 0,
+            nProj = 0,
+            nBomb = 0,
+            nPlayer = 0;
 
-      store.debugForEachAlive((_r: any, e: any) => {
-        if (!e || !e.kind) return;
-        if (e.kind === "enemy") nEnemy++;
-        else if (e.kind === "projectile") nProj++;
-        else if (e.kind === "bomb") nBomb++;
-        else if (e.kind === "player") nPlayer++;
-      });
+          store.debugForEachAlive((_r: any, e: any) => {
+            if (!e || !e.kind) return;
+            if (e.kind === "enemy") nEnemy++;
+            else if (e.kind === "projectile") nProj++;
+            else if (e.kind === "bomb") nBomb++;
+            else if (e.kind === "player") nPlayer++;
+          });
 
-      setHudTop(
-        `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)} ` +
-          `alive=${store.getAliveCount?.() ?? "?"} ` +
-          `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}` +
-          (DEV ? "" : " (DEV off)"),
-      );
+          setHudTop(
+            `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)} ` +
+              `alive=${store.getAliveCount?.() ?? "?"} ` +
+              `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}` +
+              (DEV ? "" : " (DEV off)"),
+          );
+        }
+      }
 
       // HUD values (corners) – needs explicit update each frame
       try {
@@ -269,10 +304,12 @@ async function main() {
       }
 
       
-        gfx.renderScene(() => {
-          renderer.render();
-          (renderer as any).renderVFX?.((game as any).vfx);
-        });
+     
+
+      gfx.renderScene(() => {
+        renderer.render();
+        (renderer as any).renderVFX?.((game as any).vfx);
+      });
         gfx.present();
       
     } catch (err) {
@@ -280,13 +317,16 @@ async function main() {
       console.error("[BOOT] frame() crashed stack=", (err as any)?.stack);
       setHudTop("FRAME CRASH: " + String((err as any)?.message || err));
     } finally {
-      requestAnimationFrame(frame);
+      if ((window as any).__CM.__running !== false) {
+        (window as any).__CM.__rafId = requestAnimationFrame(frame);
+      }
     }
   }
 
-  requestAnimationFrame(frame);
-}
-
+  
+  (window as any).__CM.__running = true;
+  (window as any).__CM.__rafId = requestAnimationFrame(frame);
+  }
 main().catch((err) => {
   console.error("[BOOT] main() failed", err);
   setHudTop("BOOT ERROR (main): " + String((err as any)?.stack || err));

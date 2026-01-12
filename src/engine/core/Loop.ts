@@ -64,6 +64,16 @@ export class Loop<EM extends EventMap> {
     return this.tick;
   }
 
+  public getAlpha(): number {
+    // 0..1 — kolik jsme “uvnitr” dalsiho fixed ticku
+    if (this.paused) return 1;
+    return Math.max(0, Math.min(1, this.acc / this.dt));
+  }
+
+  public getFixedDt(): number {
+    return this.dt;
+  }
+  
   private runPhase(
     phase: Phase,
     ctx: TickContext,

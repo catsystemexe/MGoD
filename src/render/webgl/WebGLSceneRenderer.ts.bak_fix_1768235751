@@ -143,6 +143,7 @@ export class WebGLSceneRenderer {
 
     gl.uniform2f(this.uLogic, this.logicW, this.logicH);
 
+    
     this.store.debugForEachAlive((_ref, e: any) => {
       if (!e) return;
 
@@ -150,8 +151,9 @@ export class WebGLSceneRenderer {
       const pos = (e as HasPos).pos;
       if (!pos || !kind) return;
 
-      const r =
-        typeof (e as HasRadius).radius === "number" ? (e as HasRadius).radius : null;
+      const r = typeof (e as HasRadius).radius === "number"
+        ? (e as HasRadius).radius
+        : null;
 
       let w = r ? r * 2 : 6;
       let h = r ? r * 2 : 6;
@@ -164,8 +166,12 @@ export class WebGLSceneRenderer {
         const flashOn = Number.isFinite(hf) && hf > 0;
 
         if (flashOn) gl.uniform4f(this.uColor, 1, 1, 1, 1);
-        else gl.uniform4f(this.uColor, 0, 1, 1, 1);
+        else gl.uniform4f(this.uColor, 0, 1, 1, 1); // změň na jinou barvu, pokud chceš
+
       } else if (kind === "enemy") {
+        
+  
+        // HIT FLASH (enemy)
         const hf = Number((e as any).hitFlashT ?? 0);
         const flashOn = Number.isFinite(hf) && hf > 0;
 
@@ -177,16 +183,26 @@ export class WebGLSceneRenderer {
           if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
           else gl.uniform4f(this.uColor, 1, 0, 0, 1);
         }
-      } else if (kind === "projectile") {
-        gl.uniform4f(this.uColor, 0, 1, 0, 1);
+
+        } else if (kind === "projectile") {
+          // size už je odvozen z radius
+          gl.uniform4f(this.uColor, 0, 1, 0, 1);
+
       } else if (kind === "bomb") {
+       
+       
         gl.uniform4f(this.uColor, 1, 1, 0, 1);
+
       } else if (kind === "pickup") {
+       
+       
+
         const defId = String((e as any).defId ?? "");
         if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
         else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
         else if (defId === "score") gl.uniform4f(this.uColor, 0, 1, 1, 1);
         else gl.uniform4f(this.uColor, 1, 0, 1, 1);
+
       } else if (kind === "particle") {
         const sz = Number((e as any).size ?? 2);
         w = sz;
@@ -196,49 +212,28 @@ export class WebGLSceneRenderer {
         const rgb = typeof col === "string" ? hexToRgb01(col) : null;
         if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
         else gl.uniform4f(this.uColor, 1, 1, 1, 1);
+
       } else {
         w = 4;
         h = 4;
         gl.uniform4f(this.uColor, 0, 1, 1, 1);
       }
-      // alpha interpolace (Loop fixed 60Hz)
-      const a = (globalThis as any).__CM?.loop?.getAlpha?.() ?? 1;
+
+      // alpha interpolace (Loop fixed 60Hz, render běží dle frame)
+      const a = 1; // interpolation zatím natvrdo
+
       const pp = (e as any).posPrev;
+      const ix = pp ? (pp.x + (pos.x - pp.x) * a) : pos.x;
+      const iy = pp ? (pp.y + (pos.y - pp.y) * a) : pos.y;
 
-      let ix = pp ? pp.x + (pos.x - pp.x) * a : pos.x;
-      let iy = pp ? pp.y + (pos.y - pp.y) * a : pos.y;
-
-      // pixel-perfect jen pro enemies (anti-shimmer)
-     
-      // NOTE: enemies are pixel-snapped to avoid shimmer on retro sprites.
-      // Other kinds keep subpixel interpolation for smoothness.
-      if ((e as any).kind === "enemy") {
-        ix = Math.round(ix);
-        iy = Math.round(iy);
-      }
-
-      gl.uniform2f(this.uPos, ix, iy);
-      gl.uniform2f(this.uSize, w, h);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    });
-
-    gl.bindVertexArray(null);
-  }
+      gl.uniform2f(this.uPos, Math.round(ix), Math.round(iy));
+      });
+    }
 // --- VFX: muzzle + tracers (no ECS, no allocations) ---
 renderVFX(vfx: any): void {
   if (!vfx) return;
 
   const gl = this.gl;
-
-  // --- bind program & geometry for VFX pass ---
-  gl.useProgram(this.prog);
-  gl.bindVertexArray(this.vao);
-
-  // logic space (same as main render)
-  gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-
-  
-
 
   // MUZZLE
   if (vfx.getMuzzle) {
@@ -256,8 +251,9 @@ renderVFX(vfx: any): void {
       const size = fx.size * (1.0 + t * 0.5);
 
       gl.uniform4f(this.uColor, 1.0, 0.9, 0.6, alpha);
-      gl.uniform2f(this.uPos, (px), (py));
-      gl.uniform2f(this.uSize, size, size);
+      // snap AFTER interpolation
+      gl.uniform2f(this.uPos, Math.round(ix), Math.round(iy));
+      gl.uniform2f(this.uSize, w, h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
   }
@@ -286,7 +282,7 @@ renderVFX(vfx: any): void {
         const tail = 1.0 - k / n;
         const sz = fx.size * (0.6 + 0.4 * tail);
 
-        gl.uniform2f(this.uPos, (px), (py));
+        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
         gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
@@ -327,13 +323,12 @@ renderVFX(vfx: any): void {
           const px = fx.x + Math.cos(ang) * (dist + jitter);
           const py = fx.y + Math.sin(ang) * (dist + jitter);
 
-          gl.uniform2f(this.uPos, (px), (py));
+          gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
           const grow = 1.0 + t * 0.8;
           gl.uniform2f(this.uSize, fx.size * grow, fx.size * grow);
           gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
       }
-  gl.bindVertexArray(null);
+    }
   }
-   }
-   }
+  }

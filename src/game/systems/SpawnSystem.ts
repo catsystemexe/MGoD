@@ -23,7 +23,7 @@ export interface SpawnSystemConfig {
   projectile: Record<WeaponId, { speed: number; ttlSec: number; damage: number; radius: number }>;
   bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
   pickup?: { ttlSec: number; radius: number; fallSpeed: number };
-  onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
+  // onTracer / muzzle sem nepatří (řeší WeaponSystem opts kvůli interpolaci renderu)
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -102,23 +102,18 @@ export class SpawnSystem {
 
           this.store.spawn((ent: any) => {
             ent.kind = "projectile";
-            ent.owner = p.owner;
-            ent.weapon = p.weapon;
-            ent.pos = { x: p.origin.x, y: p.origin.y };
-            ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
-            ent.ttl = Math.max(0.001, wcfg.ttlSec);
-            ent.damage = wcfg.damage;
-            ent.radius = wcfg.radius;
-            ent.consumed = false;
-            ent.pendingKill = false;
+ent.owner = p.owner;
+ent.weapon = p.weapon;
+ent.pos = { x: p.origin.x, y: p.origin.y };
+ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
+ent.posPrev = { x: p.origin.x, y: p.origin.y };
+ent.ttl = Math.max(0.001, wcfg.ttlSec);
+ent.damage = wcfg.damage;
+ent.radius = wcfg.radius;
+ent.consumed = false;
+ent.pendingKill = false;
           });
 
-          this.cfg.onSpawnProjectile?.({
-            x: p.origin.x,
-            y: p.origin.y,
-            dx: nx,
-            dy: ny,
-          });
           break;
         }
 

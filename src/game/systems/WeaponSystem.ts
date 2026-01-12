@@ -20,8 +20,9 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { WeaponsConfig, WeaponId } from "../defs/Weapons";
 
 export type WeaponSnapshot = {
-  shipPos: Vec2;   // WU
   shipRef: EntityRef;
+  shipPos: Vec2;
+  shipVel?: Vec2;
 };
 
 type WeaponSystemState = {
@@ -64,13 +65,15 @@ export class WeaponSystem {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
     private readonly cfg: WeaponsConfig,
-    private readonly opts?: { onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void },
+    private readonly opts?: {
+      onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
+      onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
+    },
   ) {}
 
-  update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
-    if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Simulation) {
-      throw new Error("[WeaponSystem] update() must run in Phase.Simulation");
-    }
+    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
+      // NOTE: Phase guard removed (EventBus doesn't expose getCurrentPhase in current typings).
+      // If you want this check back, add getCurrentPhase() to EventBus implementation + type.
 
     // cooldown decay
     this.st.cdPrimary = Math.max(0, this.st.cdPrimary - dtSec);
@@ -83,14 +86,14 @@ export class WeaponSystem {
       !!actions.firePrimary,
       this.st.cdPrimary,
       this.cfg.primary.cooldownSec,
-      () => this.emitProjectile("primary", snap.shipRef, snap.shipPos, dir),
+      () => this.emitProjectile("primary", snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
     );
 
     this.st.cdSecondary = tryFire(
       !!actions.fireSecondary,
       this.st.cdSecondary,
       this.cfg.secondary.cooldownSec,
-      () => this.emitProjectile("secondary", snap.shipRef, snap.shipPos, dir),
+      () => this.emitProjectile("secondary", snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
     );
 
     this.st.cdBomb = tryFire(
@@ -106,16 +109,32 @@ export class WeaponSystem {
       },
     );
   }
-  private emitProjectile(weapon: WeaponId, owner: EntityRef, origin: Vec2, dir: Vec2): void {
-   
+  private emitProjectile(
+    weapon: WeaponId,
+    owner: EntityRef,
+    origin: Vec2,
+    dir: Vec2,
+    vel: Vec2 | undefined,
+    dtSec: number,
+  ): void {
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       weapon,
       owner,
       origin: { ...origin },
       dir: { ...dir },
     });
-  
-      // cosmetic hook (muzzle flash etc.)
-      this.opts?.onSpawnProjectile?.({ x: origin.x, y: origin.y, dx: dir.x, dy: dir.y });
+
+    // cosmetic hooks (muzzle + tracer) — lead to match render interpolation
+    const vx = vel?.x ?? 0;
+    const vy = vel?.y ?? 0;
+
+    // lead = půl ticku (nejbližší tomu, co vidíš v renderu)
+    const lead = 0.5 * dtSec;
+
+    const ox = origin.x + vx * lead;
+    const oy = origin.y + vy * lead;
+
+    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
 }
 }

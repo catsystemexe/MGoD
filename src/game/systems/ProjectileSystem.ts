@@ -28,7 +28,11 @@ export class ProjectileSystem {
       if (e.kind !== "projectile" && e.kind !== "particle") return;
       if (e.pendingKill) return;
 
-      // Move
+      // Move (+ posPrev for render interpolation)
+      const a: any = e as any;
+      if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
+      else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
+
       if (e.pos && e.vel) {
         e.pos.x += e.vel.x * dtSec;
         e.pos.y += e.vel.y * dtSec;

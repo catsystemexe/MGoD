@@ -46,6 +46,12 @@ export class EnemySystem {
       e.vel.x = safeNum(e.vel.x, 0);
       e.vel.y = safeNum(e.vel.y, 0);
 
+            // --- posPrev snapshot for render interpolation (must be BEFORE behavior + movement)
+            const pp = ((e as any).posPrev ??= { x: e.pos.x, y: e.pos.y });
+            pp.x = e.pos.x;
+            pp.y = e.pos.y;
+          
+
       // --- HIT FLASH timer (seconds) ---
       // normalize to finite number every tick
       {

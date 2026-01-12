@@ -40,6 +40,12 @@ export class EnemySystem {
       if (!e.vel) e.vel = { x: 0, y: 0 };
       if (!e.bState) e.bState = { t: 0 };
 
+      // snapshot previous position for render interpolation
+      const a: any = e as any;
+      if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
+      else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
+
+      
       // sanitize BEFORE behavior
       e.pos.x = safeNum(e.pos.x, 0);
       e.pos.y = safeNum(e.pos.y, 0);
@@ -54,7 +60,7 @@ export class EnemySystem {
       e.behaviorId = bid;
 
       const behavior = EnemyBehaviorDB[bid];
-      console.log("[ENEMY_DT]", dt)
+     
       // run behavior safely
       try {
         behavior?.update?.(e, ctx);

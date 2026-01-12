@@ -7,7 +7,8 @@ import { EntityStore } from "../../engine/ecs/EntityStore";
 
 export type DamageRules = {
   projectileHitEnemyDamage: number;
-  playerHitEnemyDamage: number; // interpret as "energy damage" on contact
+  playerHitEnemyDamage: number;
+  onHitSpark?: (p: { x: number; y: number; dx: number; dy: number }) => void;
 };
 
 export class DamageSystem<T extends BaseEntity> {
@@ -18,7 +19,8 @@ export class DamageSystem<T extends BaseEntity> {
   ) {}
 
   update(eventsOverride?: any[]): void {
-    if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Impact) {
+    const phase = (this.bus as any).getCurrentPhase?.();
+    if (phase && phase !== Phase.Impact) {
       throw new Error("[DamageSystem] update() must run in Phase.Impact");
     }
 
@@ -48,6 +50,15 @@ export class DamageSystem<T extends BaseEntity> {
             const dx = vx / len;
             const dy = vy / len;
 
+            if (enemyEnt && this.rules.onHitSpark) {
+              this.rules.onHitSpark({
+                x: enemyEnt.pos.x,
+                y: enemyEnt.pos.y,
+                dx,
+                dy,
+              });
+            }
+            
             const count = 6;
             const baseSpeed = 120;
             const spread = 0.45;

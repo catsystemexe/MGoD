@@ -35,9 +35,9 @@ export class PlayerSystem {
   ) {}
 
   update(dtSec: number, actions: PlayerActions): void {
-    if (this.bus.getCurrentPhase?.() && this.bus.getCurrentPhase?.() !== Phase.Simulation) {
-      throw new Error("[PlayerSystem] update() must run in Phase.Simulation");
-    }
+    // Phase check je OK jen pokud EventBus getCurrentPhase skutečně existuje:
+    // const ph = (this.bus as any).getCurrentPhase?.();
+    // if (ph && ph !== Phase.Simulation) throw new Error("[PlayerSystem] update() must run in Phase.Simulation");
 
     // --- timers
     this.player.invulnT = Math.max(0, Number(this.player.invulnT ?? 0) - dtSec);
@@ -60,15 +60,31 @@ export class PlayerSystem {
     const dy = aimTarget.y - this.player.pos.y;
     const len = Math.hypot(dx, dy) || 1;
 
-    // --- Movement
-    const vx = actions.move.x * this.player.speed;
-    const vy = actions.move.y * this.player.speed;
+    /// --- Movement (smooth accel/decel) + posPrev for render interpolation
+    const pAny = this.player as any;
 
-    this.player.vel.x = vx;
-    this.player.vel.y = vy;
+    // snapshot previous position for render lerp
+    if (!pAny.posPrev) pAny.posPrev = { x: this.player.pos.x, y: this.player.pos.y };
+    else { pAny.posPrev.x = this.player.pos.x; pAny.posPrev.y = this.player.pos.y; }
 
-    const nx = this.player.pos.x + vx * dtSec;
-    const ny = this.player.pos.y + vy * dtSec;
+    // target velocity (arcade)
+    const tvx = actions.move.x * this.player.speed;
+    const tvy = actions.move.y * this.player.speed;
+
+    // smoothing: faster stop than start (feels tight)
+    const accel = 22; // 1/s
+    const decel = 28; // 1/s
+    const hasInput = (actions.move.x !== 0 || actions.move.y !== 0);
+    const k = hasInput ? accel : decel;
+
+    // exp smoothing stable across dt jitter
+    const t = 1 - Math.exp(-k * dtSec);
+
+    this.player.vel.x = this.player.vel.x + (tvx - this.player.vel.x) * t;
+    this.player.vel.y = this.player.vel.y + (tvy - this.player.vel.y) * t;
+
+    const nx = this.player.pos.x + this.player.vel.x * dtSec;
+    const ny = this.player.pos.y + this.player.vel.y * dtSec;
 
     // clamp to bounds, respecting radius
     const r = this.player.radius ?? 0;

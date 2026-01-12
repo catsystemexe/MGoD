@@ -63,9 +63,11 @@ export async function createGame(
 
   const store = new EntityStore<any>(256);
 
-  
+   const vfx = new VFXSystem(64);
   // ---- VFX (cosmetic, per-frame)
-  const vfx = new VFXSystem(64);
+  (window as any).__CM.vfx = vfx;
+
+  
 // --- Spawn PLAYER (capture reference to the real entity object)
   let playerEnt: any = null;
   const playerRef = store.spawn((ent) => {
@@ -136,7 +138,6 @@ export async function createGame(
       secondary: { speed: 200, ttlSec: 0.8, damage: 2, radius: 2 },
     },
     bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
-    onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p),
   };
 
  
@@ -188,7 +189,10 @@ export async function createGame(
     weaponsCfg = WEAPONS_FALLBACK;
   }
 
-  const weaponSystem = new WeaponSystem(bus as any, weaponsCfg);
+  const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, {
+    onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
+    onTracer: (p: any) => vfx.onTracer(p), // tracer
+  });
   const projectileSystem = new ProjectileSystem(bus as any, store as any);
   const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
   // ---- Impact
@@ -198,6 +202,7 @@ export async function createGame(
   const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
+    onHitSpark: (p: any) => vfx.onHitSpark(p),
   });
 
   const impact = new ImpactPhaseSystem(damage, caImpact);
@@ -293,6 +298,7 @@ export async function createGame(
         if (Number(playerEnt.deadT ?? 0) <= 0) {
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
+            shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 }, // <-- přidej
             shipRef: playerRef,
           });
         }
@@ -332,19 +338,15 @@ export async function createGame(
   });
 
   return {
-    loop,
     bus,
+    loop,
     store,
     session,
-      vfx,
-inputRt,
+    vfx,
+    inputRt,
     playerRef,
     inputMgr,
     playerEnt,
-    director,
-    directorPhase,
-    reset: resetGame,
-    logicW: LOGIC_W,
-    logicH: LOGIC_H,
   };
+
 }
