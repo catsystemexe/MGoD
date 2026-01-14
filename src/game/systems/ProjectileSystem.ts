@@ -1,12 +1,12 @@
 import type { EventBus } from "../../engine/core/EventBus";
 import type { CMEventMap } from "../../engine/core/events";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
-import type { Vec2 } from "../../engine/math/Vec2";
 
-// Minimal shape we need from your projectile entities
+type Vec2 = { x: number; y: number };
+
 // Minimal shape we need from moving ttl entities
 export interface MovingTTL {
-  kind: "projectile" | "particle";
+  kind: "projectile" | "particle" | "bomb";
   pos: Vec2;
   vel: Vec2;
   ttl: number;
@@ -23,16 +23,19 @@ export class ProjectileSystem {
   ) {}
 
   update(dtSec: number): void {
+    if (!Number.isFinite(dtSec) || dtSec <= 0) return;
+
     this.store.debugForEachAlive((_ref, e: MovingTTL) => {
       if (!e) return;
-      if (e.kind !== "projectile" && e.kind !== "particle") return;
+      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb") return;
       if (e.pendingKill) return;
 
-      // Move (+ posPrev for render interpolation)
+      // posPrev snapshot for render interpolation (BEFORE movement)
       const a: any = e as any;
       if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
       else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
 
+      // Move
       if (e.pos && e.vel) {
         e.pos.x += e.vel.x * dtSec;
         e.pos.y += e.vel.y * dtSec;
@@ -41,11 +44,11 @@ export class ProjectileSystem {
       // Lifetime
       e.ttl -= dtSec;
 
-      // projectile: consumed kills same tick
+      // Kill conditions
       if (e.kind === "projectile") {
         if ((e as any).consumed || e.ttl <= 0) e.pendingKill = true;
       } else {
-        // particle
+        // particle OR bomb
         if (e.ttl <= 0) e.pendingKill = true;
       }
     });

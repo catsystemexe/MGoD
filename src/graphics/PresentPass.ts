@@ -42,8 +42,8 @@ export class PresentPass {
   private vao: WebGLVertexArrayObject;
   private uTexLoc: WebGLUniformLocation;
 
-  constructor(private gl: WebGL2RenderingContext) {
-    const gl = this.gl;
+  constructor(private _gl: WebGL2RenderingContext) {
+      const gl = this._gl;
     this.prog = program(gl, VS, FS);
     this.uTexLoc = gl.getUniformLocation(this.prog, "uTex")!;
 
@@ -77,7 +77,7 @@ export class PresentPass {
   }
 
   draw(sceneTex: WebGLTexture, info: DisplayInfo) {
-    const gl = this.gl;
+    const gl = this._gl;
 
     // clear whole screen (letterbox)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

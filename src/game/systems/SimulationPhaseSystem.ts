@@ -24,7 +24,7 @@ export class SimulationPhaseSystem {
     const actions = this.getActions();
 
     // move + cull enemies
-    this.enemies.update(ctx.dt);
+    this.enemies.update(ctx);
 
     this.player.update(ctx.dt, actions);
 

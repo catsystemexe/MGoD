@@ -16,6 +16,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string) {
 
 export class DevUI {
   private root: HTMLDivElement;
+  private tab: HTMLDivElement;
   private visible = false; // ✅ default OFF
   private refreshTimer: number | null = null;
 
@@ -27,6 +28,7 @@ export class DevUI {
       "right:8px",
       "top:8px",
       "z-index:99999",
+      "pointer-events:auto",
       "color:#fff",
       "font:10px monospace",                 // ✅ menší font
       "background:rgba(0,0,0,0.75)",
@@ -179,9 +181,13 @@ export class DevUI {
       const active = !!w.active;
       const spawned = Number(w.spawned ?? 0);
 
+      const pk = String((w as any).patternKind ?? "?");
+      const bp = String((w as any).behaviorPresetId ?? "?");
+
       left.innerHTML =
         `<div style="font-weight:700;">${id}</div>` +
-        `<div style="opacity:0.85;">enabled=${enabled} active=${active} spawned=${spawned}</div>`;
+        `<div style="opacity:0.85;">enabled=${enabled} active=${active} spawned=${spawned}</div>` +
+        `<div style="opacity:0.75;">pattern=${pk} behavior=${bp}</div>`;
       row.appendChild(left);
 
       const right = el("div");

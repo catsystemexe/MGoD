@@ -4,7 +4,7 @@
 
     { "id": "straight.basic", "behaviorId": "straight", "params": { "speedY": 38 } },
 
-    { "id": "sine.basic", "behaviorId": "sine", "params": { "speedY": 30, "ampX": 22, "freq": 1.2 } },
+    { "id": "sine.basic", "behaviorId": "sine", "params": { "speedY": 20, "ampX": 7, "freq": 0.5} },
 
     { "id": "invaders.basic", "behaviorId": "invaders", "params": { "speedY": 14, "ampX": 26, "freq": 0.55, "phaseStep": 0.35, "speedX": 0 } }
   ]

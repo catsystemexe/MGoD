@@ -5,34 +5,32 @@
       "startSec": 0,
       "durationSec": 25,
       "spawnEverySec": 0.6,
-      "maxAlive": 18,
+      "maxAlive": 10,
       "enemyTypeId": "red",
       "behaviorPresetId": "straight.basic",
       "pattern": {
-        "kind": "grid",
+        "kind": "line",
         "originX": 18,
-        "originY": 18,
-        "cols": 6,
-        "rows": 3,
+        "originY": 0,
         "spacingX": 16,
-        "spacingY": 14
+        "slopeY": 0
       }
     },
     {
       "id": "wave.green",
-      "startSec": 8,
+      "startSec": 0,
       "durationSec": 30,
       "spawnEverySec": 0.5,
       "maxAlive": 22,
       "enemyTypeId": "green",
       "behaviorPresetId": "sine.basic",
       "pattern": {
-        "kind": "grid",
+        "kind": "sine",
         "originX": 120,
-        "originY": 22,
+        "originY": 0,
         "cols": 5,
-        "rows": 4,
-        "spacingX": 18,
+        "rows": 1,
+        "spacingX": 1,
         "spacingY": 12
       }
     },
@@ -45,7 +43,7 @@
       "enemyTypeId": "blue",
       "behaviorPresetId": "invaders.basic",
       "pattern": {
-        "kind": "grid",
+        "kind": "",
         "originX": 40,
         "originY": 60,
         "cols": 10,

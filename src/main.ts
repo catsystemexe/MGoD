@@ -24,6 +24,9 @@ document.body.style.userSelect = "none";
 document.body.style.margin = "0";
 document.body.style.background = "#6C5EB5"; // C64 blue
 document.body.style.height = "100vh";
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.touchAction = "none";
 document.body.style.display = "block";
 document.body.style.overflow = "hidden";
 
@@ -152,8 +155,24 @@ async function main() {
     // ignore
   }
 
+  // --- HUD mode mirror (so we can gate pointer/touch)
+  type HudMode = "PLAY" | "TITLE" | "GAME_OVER";
+  let hudMode: HudMode = "PLAY";
+
+  function setHudMode(m: HudMode) {
+    hudMode = m;
+    hud.setMode?.(m);
+  }
+
+  function startPlay() {
+    setHudMode("PLAY");
+    hud.setPaused?.(false);     // ✅ vždy shodit PAUSED overlay
+    loop.setPaused?.(false);
+  }
+
   // --- TITLE at boot
-  hud.setMode?.("TITLE");
+  setHudMode("TITLE");
+  hud.setPaused?.(false);
   loop.setPaused?.(true);
 
   // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
@@ -162,8 +181,8 @@ async function main() {
 
     // Start from TITLE
     if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") {
-      hud.setMode?.("PLAY");
-      loop.setPaused?.(false);
+      // Start only from TITLE
+      if (hudMode === "TITLE") startPlay();
       return;
     }
 
@@ -183,14 +202,14 @@ async function main() {
     if (e.code === "KeyY") {
       e.preventDefault();
       (game as any).reset?.(); // hard reset run (no reload)
-      hud.setMode?.("PLAY");
-      loop.setPaused?.(false);
+      startPlay();
       return;
     }
 
     if (e.code === "KeyN") {
       e.preventDefault();
-      hud.setMode?.("TITLE");
+      setHudMode("TITLE");
+      hud.setPaused?.(false);
       loop.setPaused?.(true);
       return;
     }
@@ -200,8 +219,8 @@ async function main() {
   window.addEventListener(
     "pointerdown",
     () => {
-      hud.setMode?.("PLAY");
-      loop.setPaused?.(false);
+      // ✅ touch/click starts game ONLY from TITLE
+      if (hudMode === "TITLE") startPlay();
     },
     { passive: true },
   );
@@ -209,8 +228,9 @@ async function main() {
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
   function resize() {
-    const cssW = window.innerWidth;
-    const cssH = window.innerHeight;
+    const vv = (window as any).visualViewport as VisualViewport | undefined;
+    const cssW = vv?.width ?? window.innerWidth;
+    const cssH = vv?.height ?? window.innerHeight;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     gfx.resize(cssW, cssH, dpr);
@@ -227,14 +247,28 @@ async function main() {
     }
   }
 
-  window.addEventListener("resize", resize);
-  window.addEventListener("orientationchange", resize);
-  resize();
+  let resizeQueued = false;
+  function requestResize() {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      resize();
+    });
+  }
+
+  window.addEventListener("resize", requestResize);
+  window.addEventListener("orientationchange", requestResize);
+
+  const vv = (window as any).visualViewport as VisualViewport | undefined;
+  vv?.addEventListener?.("resize", requestResize);
+
+  requestResize();
 
   let last = performance.now();
 
   // --- top debug overlay (default OFF; throttled) ---
-  const TOP_DEBUG_ENABLED = false; // zapni jen když ladíš
+  const TOP_DEBUG_ENABLED = true; // zapni jen když ladíš
   const TOP_DEBUG_EVERY_N_FRAMES = 15; // ~4×/s při 60fps
   let topDbgFrame = 0;
   
@@ -266,7 +300,7 @@ async function main() {
         }
       }
 
-      // top debug (tick + counts) – throttled, default OFF
+      // top debug (tick + counts + present rect) – throttled
       if (TOP_DEBUG_ENABLED) {
         topDbgFrame++;
         if (topDbgFrame % TOP_DEBUG_EVERY_N_FRAMES === 0) {
@@ -283,11 +317,19 @@ async function main() {
             else if (e.kind === "player") nPlayer++;
           });
 
+          const dpr = Math.max(1, window.devicePixelRatio || 1);
+          const pr = (gfx as any).getPresentRect?.();
+          const prLine = pr
+            ? `PR phys=(${pr.x},${pr.y},${pr.w},${pr.h}) scale=${pr.scale} | PR css=(${(pr.x / dpr).toFixed(
+                1,
+              )},${(pr.y / dpr).toFixed(1)},${(pr.w / dpr).toFixed(1)},${(pr.h / dpr).toFixed(1)})`
+            : `PR ?`;
+
           setHudTop(
-            `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)} ` +
-              `alive=${store.getAliveCount?.() ?? "?"} ` +
-              `P=${nPlayer} E=${nEnemy} PR=${nProj} B=${nBomb}` +
-              (DEV ? "" : " (DEV off)"),
+            `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)}\n` +
+              `alive=${store.getAliveCount?.() ?? "?"} P=${nPlayer} E=${nEnemy} PRJ=${nProj} B=${nBomb}\n` +
+              `css=(${window.innerWidth}x${window.innerHeight}) dpr=${dpr}\n` +
+              prLine,
           );
         }
       }
@@ -307,12 +349,14 @@ async function main() {
      
 
       gfx.renderScene(() => {
-        renderer.render();
+        const a = loop.getAlpha?.() ?? 1;
+        renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
       });
-        gfx.present();
-      
-    } catch (err) {
+
+      gfx.present();
+
+} catch (err) {
       console.error("[BOOT] frame() crashed", err);
       console.error("[BOOT] frame() crashed stack=", (err as any)?.stack);
       setHudTop("FRAME CRASH: " + String((err as any)?.message || err));

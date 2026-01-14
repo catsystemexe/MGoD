@@ -102,6 +102,10 @@ export class DirectorSystem {
     spawnEverySec: number;
     maxAlive: number;
     trigger: any;
+
+    enemyTypeId: string;
+    behaviorPresetId: string;
+    patternKind: string;
   }> {
     return this.waves.map(w => ({
       id: w.id,
@@ -112,6 +116,10 @@ export class DirectorSystem {
       spawnEverySec: w.def.spawnEverySec,
       maxAlive: w.def.maxAlive,
       trigger: w.def.trigger,
+
+      enemyTypeId: w.def.enemyTypeId,
+      behaviorPresetId: String((w.def as any).behaviorPresetId ?? ""),
+      patternKind: String(((w.def as any).pattern?.kind) ?? ""),
     }));
   }
 
@@ -164,14 +172,71 @@ export class DirectorSystem {
 
         if (ptn && ptn.kind === "grid") {
           const idx = w.spawned;
-          const col = idx % Math.max(1, ptn.cols);
-          const row = Math.floor(idx / Math.max(1, ptn.cols)) % Math.max(1, ptn.rows);
+          const cols = Math.max(1, ptn.cols ?? 1);
+          const rows = Math.max(1, ptn.rows ?? 1);
+          const col = idx % cols;
+          const row = Math.floor(idx / cols) % rows;
           spawn = {
-            x: ptn.originX + col * ptn.spacingX,
-            y: ptn.originY + row * ptn.spacingY,
+            x: (ptn.originX ?? 0) + col * (ptn.spacingX ?? 0),
+            y: (ptn.originY ?? 0) + row * (ptn.spacingY ?? 0),
+          };
+        } else if (ptn && ptn.kind === "line") {
+          const idx = w.spawned;
+          const ox = ptn.originX ?? 0;
+          const oy = ptn.originY ?? 0;
+          const dx = ptn.spacingX ?? 12;
+          const dy = ptn.slopeY ?? 0;
+          spawn = { x: ox + idx * dx, y: oy + idx * dy };
+        } else if (ptn && ptn.kind === "sine") {
+          // sine spawn line: x advances, y follows sine
+          const idx = w.spawned;
+
+          const ox = ptn.originX ?? 0;
+          const oy = ptn.originY ?? 0;
+          const dx = ptn.spacingX ?? 8;
+
+          const ampY = ptn.ampY ?? 12;
+          const freq = ptn.freq ?? 0.12; // cycles per spawn-step
+          const phase = ptn.phase ?? 0;
+          const driftY = ptn.driftY ?? 0;
+
+          const x = ox + idx * dx;
+          const angle = idx * (Math.PI * 2 * freq) + phase;
+          const y = oy + Math.sin(angle) * ampY + idx * driftY;
+
+          spawn = { x, y };
+        } else if (ptn && ptn.kind === "ring") {
+          const idx = w.spawned;
+
+          const cx = ptn.centerX ?? (ptn.originX ?? 0);
+          const cy = ptn.centerY ?? (ptn.originY ?? 0);
+          const r = ptn.radius ?? 30;
+          const n = Math.max(3, ptn.count ?? 12);
+
+          const angle = (idx % n) * (Math.PI * 2 / n);
+          spawn = {
+            x: cx + Math.cos(angle) * r,
+            y: cy + Math.sin(angle) * r,
+          };
+        } else if (ptn && ptn.kind === "rand") {
+          const idx = w.spawned;
+          const minX = ptn.minX ?? 0;
+          const maxX = ptn.maxX ?? 200;
+          const minY = ptn.minY ?? 0;
+          const maxY = ptn.maxY ?? 120;
+          const h = (n: number) => {
+            const x = Math.sin(n * 12.9898) * 43758.5453;
+            return x - Math.floor(x);
+          };
+          const rx = h(idx + 1);
+          const ry = h(idx + 999);
+          spawn = {
+            x: minX + rx * (maxX - minX),
+            y: minY + ry * (maxY - minY),
           };
         }
 
+        // ✅ THIS WAS MISSING (core contract)
         this.bus.emitNext(EventType.SPAWN_ENEMY, {
           typeId: w.def.enemyTypeId,
           waveId: w.id,
@@ -188,10 +253,13 @@ export class DirectorSystem {
           if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) break;
         }
       }
-    }
-  }
+       }
+     }
 
-  private shouldBeActive(w: WaveRuntime): boolean {
+
+
+      
+        private shouldBeActive(w: WaveRuntime): boolean {
     const tr = w.def.trigger;
 
     if (tr.kind === "manual") {

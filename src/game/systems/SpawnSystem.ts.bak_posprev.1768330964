@@ -105,7 +105,6 @@ export class SpawnSystem {
 ent.owner = p.owner;
 ent.weapon = p.weapon;
 ent.pos = { x: p.origin.x, y: p.origin.y };
-            (ent as any).posPrev = { x: ent.pos.x, y: ent.pos.y };
 ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
 ent.posPrev = { x: p.origin.x, y: p.origin.y };
 ent.ttl = Math.max(0.001, wcfg.ttlSec);

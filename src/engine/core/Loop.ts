@@ -36,12 +36,28 @@ export class Loop<EM extends EventMap> {
   }
 
   public step(frameDtSec: number): void {
+    // When paused, do NOT accumulate time; otherwise unpause causes "catch-up" bursts.
+    if (this.paused) {
+      this.acc = 0;
+      return;
+    }
+
     const capped = Math.min(frameDtSec, 0.25);
     this.acc += capped;
+
+    // Anti spiral-of-death: never run too many fixed ticks per frame
+    let steps = 0;
+    const MAX_STEPS = 6;
 
     while (this.acc >= this.dt) {
       this.fixedTick();
       this.acc -= this.dt;
+
+      if (++steps >= MAX_STEPS) {
+        // drop leftover; keeps sim stable under stalls
+        this.acc = 0;
+        break;
+      }
     }
   }
   public setPaused(on: boolean): void {

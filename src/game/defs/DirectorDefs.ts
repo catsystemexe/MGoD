@@ -2,9 +2,22 @@
 import { CONTENT } from "../content/CONTENT";
 import type { DirectorDefs } from "./DirectorTypes";
 
+// DEV: allow forcing single wave by id (set in console: window.__CM_DEV_SOLO_WAVE__="wave.red")
+function pickWaves() {
+  const solo =
+    typeof window !== "undefined"
+      ? (window as any).__CM_DEV_SOLO_WAVE__
+      : undefined;
+
+  if (typeof solo === "string" && solo.length > 0) {
+    return CONTENT.waves.filter((w) => w.id === solo);
+  }
+  return CONTENT.waves;
+}
+
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
   globalMaxAlive: 24,
-  waves: CONTENT.waves.map(w => ({
+  waves: pickWaves().map((w) => ({
     id: w.id,
     trigger: {
       kind: "time",
@@ -14,15 +27,9 @@ export const DIRECTOR_DEFS_MVP: DirectorDefs = {
     spawnEverySec: w.spawnEverySec,
     maxAlive: w.maxAlive,
     enemyTypeId: w.enemyTypeId,
-    pattern: {
-      kind: "grid",
-      cols: 10,
-      rows: 4,
-      spacingX: 24,
-      spacingY: 18,
-      originX: 40,
-      originY: 30,
-    },
-    behaviorPresetId: "invaders.basic",
+
+    // take from content (directorWaves.json)
+    pattern: w.pattern,
+    behaviorPresetId: w.behaviorPresetId,
   })),
 };

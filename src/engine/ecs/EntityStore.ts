@@ -27,6 +27,21 @@ export class EntityStore<T extends BaseEntity> {
     const slot = this.freeList.pop()!;
     const e = this.entities[slot];
 
+    // IMPORTANT:
+    // Entity objects are recycled. Cleanup does NOT clear old component fields,
+    // so we must reset the slot IN-PLACE to avoid "ghost state" across spawns.
+    // Keep only base fields; everything else must be deleted.
+    for (const k of Object.keys(e as any)) {
+      if (
+        k === "id" ||
+        k === "gen" ||
+        k === "alive" ||
+        k === "pendingKill" ||
+        k === "flags"
+      ) continue;
+      delete (e as any)[k];
+    }
+
     // revive slot
     e.alive = true;
     e.pendingKill = false;

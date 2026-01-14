@@ -260,7 +260,7 @@ renderVFX(vfx: any): void {
       const size = fx.size * (1.0 + t * 0.5);
 
       gl.uniform4f(this.uColor, 1.0, 0.9, 0.6, alpha);
-      gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+      gl.uniform2f(this.uPos, px, py);
       gl.uniform2f(this.uSize, size, size);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
@@ -287,7 +287,7 @@ renderVFX(vfx: any): void {
         const tail = 1.0 - k / n;
         const sz = fx.size * (0.6 + 0.4 * tail);
 
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        gl.uniform2f(this.uPos, px, py);
         gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
@@ -326,7 +326,7 @@ renderVFX(vfx: any): void {
         const py = fx.y + Math.sin(ang) * (dist + jitter);
 
         const grow = 1.0 + t * 0.8;
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        gl.uniform2f(this.uPos, px, py);
         gl.uniform2f(this.uSize, fx.size * grow, fx.size * grow);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }

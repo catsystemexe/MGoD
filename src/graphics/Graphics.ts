@@ -13,13 +13,17 @@ export class Graphics {
   readonly logicW: number;
   readonly logicH: number;
 
-  private gl: WebGL2RenderingContext;
-  private scene: RenderTarget;
-  private blit: BlitProgram;
+    private gl: WebGL2RenderingContext;
+    private scene: RenderTarget;
+    private blit: BlitProgram;
 
-  private display: DisplayInfo | null = null;
+    private display: DisplayInfo | null = null;
 
-  constructor(private canvas: HTMLCanvasElement, mode: GraphicsMode = "classic_400x224") {
+    // debug: detect display drift without spamming console each frame
+    private _dbgDisplaySig = "";
+    private _dbgFrame = 0;
+
+    constructor(private canvas: HTMLCanvasElement, mode: GraphicsMode = "classic_400x224") {
     this.mode = mode;
     this.logicW = MODE_RES[mode].w;
     this.logicH = MODE_RES[mode].h;
@@ -108,7 +112,19 @@ export class Graphics {
     const d = this.display;
     if (!d) return;
     
-    console.log("[GFX] present viewport", d.viewportW, d.viewportH);
+    // Debug: log only when display parameters actually change (prevents perf/jitter on iOS)
+    // Also helps detect "drift" caused by fluctuating cssH/dpr (browser UI bars).
+    this._dbgFrame++;
+    const sig =
+      `${d.cssW}x${d.cssH}@${d.dpr} ` +
+      `scale=${d.scale} ` +
+      `vp=(${d.viewportX},${d.viewportY},${d.viewportW},${d.viewportH}) ` +
+      `canvas=(${this.canvas.width},${this.canvas.height})`;
+
+    if (sig !== this._dbgDisplaySig) {
+      this._dbgDisplaySig = sig;
+      console.warn("[GFX] display changed:", sig);
+    }
     
     // letterbox clear (black)
      gl.bindFramebuffer(gl.FRAMEBUFFER, null);

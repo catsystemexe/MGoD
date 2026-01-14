@@ -64,10 +64,13 @@ export async function createGame(
   const store = new EntityStore<any>(256);
 
    const vfx = new VFXSystem(64);
-  // ---- VFX (cosmetic, per-frame)
-  (window as any).__CM.vfx = vfx;
 
-  
+  // ---- VFX (cosmetic, per-frame)
+  // In browser we expose it for debugging; in Node (smokes) there is no window.
+  if (typeof window !== "undefined") {
+    (window as any).__CM = (window as any).__CM || {};
+    (window as any).__CM.vfx = vfx;
+
 // --- Spawn PLAYER (capture reference to the real entity object)
   let playerEnt: any = null;
   const playerRef = store.spawn((ent) => {
@@ -240,6 +243,7 @@ export async function createGame(
     // reset player entity (same object)
     playerEnt.kind = "player";
     playerEnt.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
+    (playerEnt as any).posPrev = { x: playerEnt.pos.x, y: playerEnt.pos.y };
     playerEnt.vel = { x: 0, y: 0 };
     
     playerEnt.speed = Number(playerEnt.speed ?? 140);
@@ -342,11 +346,12 @@ export async function createGame(
     loop,
     store,
     session,
+    director,// ✅ devui needs director
     vfx,
     inputRt,
     playerRef,
     inputMgr,
     playerEnt,
   };
-
-}
+     }
+   }
