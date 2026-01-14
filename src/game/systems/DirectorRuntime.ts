@@ -5,7 +5,7 @@ export type WaveRuntime = {
   id: WaveId;
   enabled: boolean;
   active: boolean;
-
+  spawnBudget: number; // how many spawns are due (accumulated), consumed on emit
   t: number;     // local time since activation
   acc: number;   // spawn accumulator
   spawned: number;
@@ -21,6 +21,7 @@ export function makeWaveRuntime(def: WaveDef): WaveRuntime {
     t: 0,
     acc: 0,
     spawned: 0,
+    spawnBudget: 0,
     def,
   };
 }

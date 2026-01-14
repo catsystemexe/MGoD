@@ -146,20 +146,44 @@ export class DirectorSystem {
       // 2) update local time
       w.t += dt;
 
-      // 3) caps (DEFAULT: cap pauses the wave; no backlog scheduling)
-      if (globalCapHit) continue;
-
+      // 3) soft caps (slowdown before hard cap; avoid backlog bursts)
       const aliveWave = this.deps.getAliveEnemiesForWave?.(w.id);
-      if (typeof aliveWave === "number") {
-        if (aliveWave >= w.def.maxAlive) continue;
-      } else {
-        // fallback if per-wave not provided
-        if (aliveGlobal >= w.def.maxAlive) continue;
-      }
+      const waveAlive = (typeof aliveWave === "number") ? aliveWave : aliveGlobal;
 
-      // 4) accumulator spawn (lag-safe)
-      const period = Math.max(0.01, w.def.spawnEverySec / this.difficulty);
+      const globalCap = this.globalMaxAlive;
+      const globalSat =
+        (typeof globalCap === "number" && Number.isFinite(globalCap) && globalCap > 0)
+          ? (aliveGlobal / globalCap)
+          : 0;
+
+      const waveCap = Math.max(1, w.def.maxAlive);
+      const waveSat = waveAlive / waveCap;
+
+      const SOFT_START = 0.70;
+      const SOFT_FULL = 1.00;
+      const MAX_SLOW = 4.0;
+
+      const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+      const smoothstep = (a: number, b: number, x: number) => {
+        const t = clamp01((x - a) / (b - a));
+        return t * t * (3 - 2 * t);
+      };
+
+      const sat = Math.max(globalSat, waveSat);
+      const slowK = smoothstep(SOFT_START, SOFT_FULL, sat);
+      const slowFactor = 1 + (MAX_SLOW - 1) * slowK;
+
+      // 4) accumulator spawn (lag-safe) with soft-cap slowdown
+      const basePeriod = Math.max(0.01, w.def.spawnEverySec / this.difficulty);
+      const period = Math.max(0.01, basePeriod * slowFactor);
+
       w.acc += dt;
+
+      // If we're at/over cap, do NOT build backlog. Keep acc just under one period.
+      if (globalCapHit || waveSat >= 1) {
+        w.acc = Math.min(w.acc, period * 0.99);
+        continue;
+      }
 
       const MAX_SPAWNS_PER_TICK = 8;
       let spawnedNow = 0;
@@ -243,10 +267,16 @@ export class DirectorSystem {
         w.spawned++;
         spawnedNow++;
 
-        // break early if cap reached after spawning
-        if (this.deps.getAliveEnemies() >= this.globalMaxAlive) break;
+        // break early if cap reached after spawning (avoid backlog)
+        if (this.deps.getAliveEnemies() >= this.globalMaxAlive) {
+          w.acc = Math.min(w.acc, period * 0.99);
+          break;
+        }
         if (this.deps.getAliveEnemiesForWave) {
-          if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) break;
+          if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) {
+            w.acc = Math.min(w.acc, period * 0.99);
+            break;
+          }
         }
       }
     }
