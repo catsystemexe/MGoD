@@ -19,7 +19,12 @@ export interface EnemyBehaviorRuntime {
 
 export type EnemyBehavior = {
   init?: (e: any) => void;
+
+  // update = state update (t, phase, etc.)
   update?: (e: any, ctx: TickContext) => void;
+
+  // optional V1 contract: behavior provides analytic target, system derives vel
+  getTarget?: (e: any, ctx: TickContext) => { x: number; y: number } | null;
 };
 
 // ---- Content (data-first) types used by loadContent()

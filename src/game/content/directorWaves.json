@@ -25,7 +25,7 @@
       "enemyTypeId": "green",
       "behaviorPresetId": "sine.basic",
       "pattern": {
-        "kind": "sine",
+        "kind": "line",
         "originX": 120,
         "originY": 0,
         "cols": 5,

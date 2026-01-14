@@ -100,14 +100,13 @@ export class SpawnSystem {
           const nx = dx / len;
           const ny = dy / len;
 
-          this.store.spawn((ent: any) => {
-            ent.kind = "projectile";
+this.store.spawn((ent: any) => {
+ent.kind = "projectile";
 ent.owner = p.owner;
 ent.weapon = p.weapon;
 ent.pos = { x: p.origin.x, y: p.origin.y };
-            (ent as any).posPrev = { x: ent.pos.x, y: ent.pos.y };
+ent.posPrev = { x: ent.pos.x, y: ent.pos.y };
 ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
-ent.posPrev = { x: p.origin.x, y: p.origin.y };
 ent.ttl = Math.max(0.001, wcfg.ttlSec);
 ent.damage = wcfg.damage;
 ent.radius = wcfg.radius;
@@ -131,7 +130,7 @@ ent.pendingKill = false;
             ent.kind = "bomb";
             ent.owner = p.owner;
             ent.pos = { x: p.origin.x, y: p.origin.y };
-  ent.posPrev = { x: p.origin.x, y: p.origin.y };
+             // ent.posPrev = { x: p.origin.x, y: p.origin.y };
             ent.vel = { x: vx, y: vy };
             ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
             ent.damage = b.damage;
@@ -146,6 +145,15 @@ ent.pendingKill = false;
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
           const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
 
+          const spawnOrdinal = (typeof (p as any)?.spawnOrdinal === "number" && Number.isFinite((p as any).spawnOrdinal))
+          ? (p as any).spawnOrdinal
+          : 0;
+
+          const spawnAgeSec =
+            (typeof (p as any)?.spawnAgeSec === "number" && Number.isFinite((p as any).spawnAgeSec) && (p as any).spawnAgeSec > 0)
+              ? (p as any).spawnAgeSec
+              : 0;
+          
           const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
           if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
@@ -174,6 +182,10 @@ ent.pendingKill = false;
             ent.typeId = p.typeId as EnemyTypeId;
             ent.waveId = waveId;
 
+            // ✅ BE V1 deterministic index
+            ent.spawnOrdinal = spawnOrdinal;
+            // ✅ BE V1 deterministic index
+            
             // CLONE + INIT PREV (KEY FIX)
             ent.pos = { x, y };
             ent.posPrev = { x, y };
@@ -185,7 +197,7 @@ ent.pendingKill = false;
 
             ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
             ent.behavior = { ...(preset.params ?? {}) };
-            ent.bState = { t: 0 };
+            ent.bState = { t: spawnAgeSec };
 
             beh?.init?.(ent);
 

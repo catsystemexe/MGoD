@@ -13,10 +13,10 @@ export class Graphics {
   readonly logicW: number;
   readonly logicH: number;
 
-    private gl: WebGL2RenderingContext;
-    private scene: RenderTarget;
-    private blit: BlitProgram;
-
+  private gl: WebGL2RenderingContext;
+  private scene: RenderTarget;
+  private enemies: RenderTarget;
+  private blit: BlitProgram;
     private display: DisplayInfo | null = null;
 
     // debug: detect display drift without spamming console each frame
@@ -29,9 +29,9 @@ export class Graphics {
     this.logicH = MODE_RES[mode].h;
 
     this.gl = getGL(canvas);
-    this.scene = new RenderTarget(this.gl, this.logicW, this.logicH);
-    this.blit = createBlitProgram(this.gl);
-
+      this.scene = new RenderTarget(this.gl, this.logicW, this.logicH, "nearest");
+      this.enemies = new RenderTarget(this.gl, this.logicW, this.logicH, "linear");
+      this.blit = createBlitProgram(this.gl);
     // default state
     const gl = this.gl;
     gl.disable(gl.DEPTH_TEST);
@@ -106,6 +106,27 @@ export class Graphics {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+
+  /**
+   * Render ENEMIES do EnemyRT (transparent background).
+   * EnemyRT is bound + viewport set to logicW x logicH.
+   */
+  renderEnemies(draw?: (gl: WebGL2RenderingContext) => void): void {
+    const gl = this.gl;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.enemies.fb);
+    gl.viewport(0, 0, this.enemies.w, this.enemies.h);
+
+    // clear transparent
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    if (draw) draw(gl);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  
   /** Present SceneRT -> screen s integer scale + viewport */
   present(): void {
     const gl = this.gl;

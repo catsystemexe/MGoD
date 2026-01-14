@@ -51,10 +51,12 @@ export type CMEventMap = {
   };
 
   [EventType.SPAWN_ENEMY]: {
-    typeId: import("../../game/defs/EnemyDefs").EnemyTypeId;
+    typeId: string;
     waveId?: string;
-    spawn?: Vec2;
+    spawn?: { x: number; y: number };
     behaviorPresetId?: string;
+    spawnOrdinal?: number; // ✅ BE V1: deterministic index within wave
+    spawnAgeSec?: number;  // ✅ director backlog catch-up (seconds since scheduled spawn)
   };
 
   [EventType.SPAWN_PICKUP]: { defId: string; pos: Vec2 };

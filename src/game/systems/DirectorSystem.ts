@@ -26,15 +26,14 @@ export class DirectorSystem {
     defs: DirectorDefs,
     private readonly deps: DirectorDeps,
   ) {
-      const waveDefs: any[] = Array.isArray((defs as any)?.waves) ? (defs as any).waves : [];
-      console.log("[DIR][INIT] waves=", waveDefs.length, waveDefs.map((w: any) => w.id));
-      this.waves = waveDefs.map(makeWaveRuntime);
+    const waveDefs: any[] = Array.isArray((defs as any)?.waves) ? (defs as any).waves : [];
+    console.log("[DIR][INIT] waves=", waveDefs.length, waveDefs.map((w: any) => w.id));
+    this.waves = waveDefs.map(makeWaveRuntime);
     this.globalMaxAlive = defs.globalMaxAlive ?? Infinity;
   }
 
   // ---- HUD helper
   getHUDInfo(): { current: number } {
-    // current wave number = first active wave by order (1-based)
     const idx = this.waves.findIndex(w => w.active);
     return { current: idx >= 0 ? idx + 1 : 0 };
   }
@@ -48,7 +47,6 @@ export class DirectorSystem {
       w.acc = 0;
       w.spawned = 0;
     }
-    // keep difficulty as-is; if you want: this.difficulty = 1;
   }
 
   // ---- control API
@@ -148,30 +146,33 @@ export class DirectorSystem {
       // 2) update local time
       w.t += dt;
 
-      // 3) caps
+      // 3) caps (DEFAULT: cap pauses the wave; no backlog scheduling)
       if (globalCapHit) continue;
 
       const aliveWave = this.deps.getAliveEnemiesForWave?.(w.id);
-      if (typeof aliveWave === "number" && aliveWave >= w.def.maxAlive) continue;
-
-      if (aliveWave === undefined && aliveGlobal >= w.def.maxAlive) continue;
+      if (typeof aliveWave === "number") {
+        if (aliveWave >= w.def.maxAlive) continue;
+      } else {
+        // fallback if per-wave not provided
+        if (aliveGlobal >= w.def.maxAlive) continue;
+      }
 
       // 4) accumulator spawn (lag-safe)
       const period = Math.max(0.01, w.def.spawnEverySec / this.difficulty);
       w.acc += dt;
 
-      const maxSpawnsThisTick = 8;
+      const MAX_SPAWNS_PER_TICK = 8;
       let spawnedNow = 0;
 
-      while (w.acc >= period && spawnedNow < maxSpawnsThisTick) {
+      while (w.acc >= period && spawnedNow < MAX_SPAWNS_PER_TICK) {
         w.acc -= period;
 
-        // emit spawn; include waveId for per-wave accounting (optional in event map)
+        // compute spawn for this wave/ordinal
+        const idx = w.spawned;
         const ptn: any = (w.def as any).pattern;
         let spawn: any = undefined;
 
         if (ptn && ptn.kind === "grid") {
-          const idx = w.spawned;
           const cols = Math.max(1, ptn.cols ?? 1);
           const rows = Math.max(1, ptn.rows ?? 1);
           const col = idx % cols;
@@ -181,16 +182,12 @@ export class DirectorSystem {
             y: (ptn.originY ?? 0) + row * (ptn.spacingY ?? 0),
           };
         } else if (ptn && ptn.kind === "line") {
-          const idx = w.spawned;
           const ox = ptn.originX ?? 0;
           const oy = ptn.originY ?? 0;
           const dx = ptn.spacingX ?? 12;
           const dy = ptn.slopeY ?? 0;
           spawn = { x: ox + idx * dx, y: oy + idx * dy };
         } else if (ptn && ptn.kind === "sine") {
-          // sine spawn line: x advances, y follows sine
-          const idx = w.spawned;
-
           const ox = ptn.originX ?? 0;
           const oy = ptn.originY ?? 0;
           const dx = ptn.spacingX ?? 8;
@@ -206,8 +203,6 @@ export class DirectorSystem {
 
           spawn = { x, y };
         } else if (ptn && ptn.kind === "ring") {
-          const idx = w.spawned;
-
           const cx = ptn.centerX ?? (ptn.originX ?? 0);
           const cy = ptn.centerY ?? (ptn.originY ?? 0);
           const r = ptn.radius ?? 30;
@@ -219,15 +214,16 @@ export class DirectorSystem {
             y: cy + Math.sin(angle) * r,
           };
         } else if (ptn && ptn.kind === "rand") {
-          const idx = w.spawned;
           const minX = ptn.minX ?? 0;
           const maxX = ptn.maxX ?? 200;
           const minY = ptn.minY ?? 0;
           const maxY = ptn.maxY ?? 120;
+
           const h = (n: number) => {
             const x = Math.sin(n * 12.9898) * 43758.5453;
             return x - Math.floor(x);
           };
+
           const rx = h(idx + 1);
           const ry = h(idx + 999);
           spawn = {
@@ -236,30 +232,27 @@ export class DirectorSystem {
           };
         }
 
-        // ✅ THIS WAS MISSING (core contract)
         this.bus.emitNext(EventType.SPAWN_ENEMY, {
           typeId: w.def.enemyTypeId,
           waveId: w.id,
           spawn,
+          spawnOrdinal: w.spawned,
           behaviorPresetId: (w.def as any).behaviorPresetId,
         } as any);
 
         w.spawned++;
         spawnedNow++;
 
+        // break early if cap reached after spawning
         if (this.deps.getAliveEnemies() >= this.globalMaxAlive) break;
-
         if (this.deps.getAliveEnemiesForWave) {
           if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) break;
         }
       }
-       }
-     }
+    }
+  }
 
-
-
-      
-        private shouldBeActive(w: WaveRuntime): boolean {
+  private shouldBeActive(w: WaveRuntime): boolean {
     const tr = w.def.trigger;
 
     if (tr.kind === "manual") {

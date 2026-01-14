@@ -345,11 +345,10 @@ async function main() {
         // ignore HUD errors
       }
 
-      
-     
+      const a = loop.getAlpha?.() ?? 1;
 
+      // Render everything into scene RT (single pass, known-good)
       gfx.renderScene(() => {
-        const a = loop.getAlpha?.() ?? 1;
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
       });

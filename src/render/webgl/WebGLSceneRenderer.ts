@@ -212,7 +212,8 @@ export class WebGLSceneRenderer {
 
       // Pixel snap: stabilnější varianta
       // 1) nejdřív snap endpoints (pp/pos) → 2) lerp mezi snapnutými body
-      if (kind === "enemy" || kind === "player" || kind === "projectile" || kind === "bomb") {
+      if (kind === "player" || kind === "projectile" || kind === "bomb") {
+        // endpoint snap + final snap (stabilita pro player/proj/bomb)
         if (pp) {
           const p0x = Math.round(pp.x);
           const p0y = Math.round(pp.y);
@@ -221,6 +222,10 @@ export class WebGLSceneRenderer {
           ix = p0x + (p1x - p0x) * a;
           iy = p0y + (p1y - p0y) * a;
         }
+        ix = Math.round(ix);
+        iy = Math.round(iy);
+      } else if (kind === "enemy") {
+        // enemy: only final snap (no endpoint snap) -> reduces pixel shimmer
         ix = Math.round(ix);
         iy = Math.round(iy);
       }

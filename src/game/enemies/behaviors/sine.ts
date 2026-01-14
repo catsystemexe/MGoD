@@ -1,74 +1,84 @@
 // src/game/enemies/behaviors/sine.ts
 import type { EnemyBehavior } from "../EnemyBehaviorTypes";
+import type { TickContext } from "../../../engine/core/Loop";
 
-function num(v: any, fallback: number): number {
+function num(v: unknown, fallback: number): number {
   const n = typeof v === "number" ? v : fallback;
   return Number.isFinite(n) ? n : fallback;
 }
 
-/// Deterministic phase tied to spawn ordering.
-// NOTE: floor/quantization here caused visible "phase jumps".
-// Using x0 makes adjacent spawns advance phase smoothly (regular snake).
-function phaseFromSpawn(x0: number, _y0: number, phaseStep: number): number {
-  return x0 * phaseStep;
+function phaseFromSpawn(spawnOrdinal: number, phaseStep: number): number {
+  return spawnOrdinal * phaseStep;
 }
 
 export const sineBehavior: EnemyBehavior = {
-  init: (e) => {
-    e.bState = e.bState || {};
+  init: (e: any) => {
+    e.bState ??= {};
 
-    const p = e.behavior ?? {};
+    const st = e.bState as any;
+    const p = (e.behavior ?? {}) as any;
+
     const speedY = num(p.speedY, 35);
     const driftX = num(p.driftX, 0);
 
-    // store base anchors (formation lock)
     const x0 = num(e.pos?.x, 0);
     const y0 = num(e.pos?.y, 0);
 
     const phaseStep = num(p.phaseStep, 0.35);
-    const phase = phaseFromSpawn(x0, y0, phaseStep);
+    const ord = num((e as any).spawnOrdinal, 0);
+    const phase = phaseFromSpawn(ord, phaseStep);
 
-    e.bState.t = 0;
-    e.bState.baseX = x0;
-    e.bState.baseY = y0;
-    e.bState.baseSpeedY = speedY;
-    e.bState.driftX = driftX;
-    e.bState.phase = phase;
+    // IMPORTANT:
+    // - SpawnSystem may pre-seed bState.t from spawnAgeSec (backlog catch-up).
+    // - Do NOT overwrite it.
+    st.t = num(st.t, 0);
 
-    e.vel = e.vel || { x: 0, y: 0 };
+    // base anchors are the spawn position at creation time (stable formation)
+    st.baseX = num(st.baseX, x0);
+    st.baseY = num(st.baseY, y0);
+
+    st.baseSpeedY = num(st.baseSpeedY, speedY);
+    st.driftX = num(st.driftX, driftX);
+    st.phase = num(st.phase, phase);
+
+    // NOTE: do not touch e.vel here (EnemySystem is single authority)
   },
 
-  update: (e, ctx) => {
+  update: (e: any, ctx: TickContext) => {
     const dt = num((ctx as any)?.dt, 0);
     if (dt <= 0) return;
 
-    e.bState = e.bState || {};
-    e.bState.t = num(e.bState.t, 0) + dt;
+    e.bState ??= {};
+    const st = e.bState as any;
 
-    const p = e.behavior ?? {};
+    // advance internal time only
+    st.t = num(st.t, 0) + dt;
+  },
+
+  // V1 contract: analytic target (EnemySystem derives vel)
+  getTarget: (e: any, _ctx: TickContext) => {
+    e.bState ??= {};
+    const st = e.bState as any;
+
+    const p = (e.behavior ?? {}) as any;
     const ampX = num(p.ampX, 18);
     const freq = num(p.freq, 0.8); // Hz
 
-    const t = num(e.bState.t, 0);
+    const t = num(st.t, 0);
     const omega = Math.PI * 2 * freq;
 
-    const baseX = num(e.bState.baseX, num(e.pos?.x, 0));
-    const baseY = num(e.bState.baseY, num(e.pos?.y, 0));
-    const phase = num(e.bState.phase, 0);
+    const baseX = num(st.baseX, num(e.pos?.x, 0));
+    const baseY = num(st.baseY, num(e.pos?.y, 0));
+    const phase = num(st.phase, 0);
 
-    const driftX = num(e.bState.driftX, 0);
-    const speedY = num(e.bState.baseSpeedY, 35);
+    const driftX = num(st.driftX, 0);
+    const speedY = num(st.baseSpeedY, 35);
 
-    // analytic target (formation-stable)
     const a = omega * t + phase;
-    const targetX = baseX + Math.sin(a) * ampX + driftX * t;
-    const targetY = baseY + speedY * t;
 
-    const px = num(e.pos?.x, 0);
-    const py = num(e.pos?.y, 0);
-
-    e.vel = e.vel || { x: 0, y: 0 };
-    e.vel.x = (targetX - px) / dt;
-    e.vel.y = (targetY - py) / dt;
+    return {
+      x: baseX + Math.sin(a) * ampX + driftX * t,
+      y: baseY + speedY * t,
+    };
   },
 };

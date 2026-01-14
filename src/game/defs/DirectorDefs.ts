@@ -16,7 +16,7 @@ function pickWaves() {
 }
 
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
-  globalMaxAlive: 24,
+  // globalMaxAlive: 999,
   waves: pickWaves().map((w) => ({
     id: w.id,
     trigger: {

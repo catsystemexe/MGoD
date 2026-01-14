@@ -46,10 +46,11 @@ export class EnemySystem {
       e.vel.x = safeNum(e.vel.x, 0);
       e.vel.y = safeNum(e.vel.y, 0);
 
-            // --- posPrev snapshot for render interpolation (must be BEFORE behavior + movement)
-            const pp = ((e as any).posPrev ??= { x: e.pos.x, y: e.pos.y });
-            pp.x = e.pos.x;
-            pp.y = e.pos.y;
+      // --- posPrev snapshot for render interpolation (must be BEFORE behavior + movement)
+      const a = e as any;
+      if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
+      else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
+         
           
 
       // --- HIT FLASH timer (seconds) ---
@@ -71,7 +72,20 @@ export class EnemySystem {
 
       // run behavior safely
       try {
+        // 1) update internal state
         behavior?.update?.(e, ctx);
+
+        // 2) V1: if behavior provides target, derive velocity here (single authority)
+        if (behavior?.getTarget) {
+          const t = behavior.getTarget(e, ctx);
+          if (t && Number.isFinite(t.x) && Number.isFinite(t.y)) {
+            const px = safeNum(e.pos?.x, 0);
+            const py = safeNum(e.pos?.y, 0);
+            e.vel = e.vel || { x: 0, y: 0 };
+            e.vel.x = (t.x - px) / dt;
+            e.vel.y = (t.y - py) / dt;
+          }
+        }
       } catch (err) {
         console.error("[EnemyBehavior crash]", bid, err, e);
         this.store.markKill(ref);
