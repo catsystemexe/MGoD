@@ -6,10 +6,11 @@ function num(v: any, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-// Deterministic-ish phase from spawn position (stable per enemy)
-function phaseFromSpawn(x0: number, y0: number, phaseStep: number): number {
-  const idx = (Math.floor((x0 + y0) * 0.25) % 999) | 0;
-  return idx * phaseStep;
+/// Deterministic phase tied to spawn ordering.
+// NOTE: floor/quantization here caused visible "phase jumps".
+// Using x0 makes adjacent spawns advance phase smoothly (regular snake).
+function phaseFromSpawn(x0: number, _y0: number, phaseStep: number): number {
+  return x0 * phaseStep;
 }
 
 export const sineBehavior: EnemyBehavior = {
