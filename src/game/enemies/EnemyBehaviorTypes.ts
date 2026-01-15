@@ -1,12 +1,26 @@
 // src/game/enemies/EnemyBehaviorTypes.ts
 
+
+
+/**
+ * Behavior V1 CONTRACT
+ * --------------------
+ * - Behavior NESMÍ zapisovat e.pos / e.vel
+ * - update() = pouze stav (bState, čas, fáze)
+ * - getTarget() = analytický cíl, pohyb řeší EnemySystem
+ */
+
+
+
 import type { TickContext } from "../../engine/core/Loop";
 
-export type EnemyBehaviorId = 
+export type EnemyBehaviorId =
   "none" |
   "straight" |
   "sine" |
-  "invaders";
+  "invaders" |
+  "orbit" |
+  "zigzag";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
 export type EnemyBehaviorParams = Record<string, any>;
@@ -62,3 +76,16 @@ export type ContentBundle = {
   behaviorPresets: BehaviorPreset[];
   waves: WaveDef[];
 };
+// ---- Runtime guard (single source of truth)
+export const ENEMY_BEHAVIOR_IDS = [
+  "none",
+  "straight",
+  "sine",
+  "invaders",
+  "zigzag",
+   "orbit" 
+] as const;
+
+export function isEnemyBehaviorId(x: unknown): x is EnemyBehaviorId {
+  return typeof x === "string" && (ENEMY_BEHAVIOR_IDS as readonly string[]).includes(x);
+}

@@ -2,17 +2,13 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { TickContext } from "../../engine/core/Loop";
 import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
+import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import type { EnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
 const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 const safeNum = (n: unknown, fallback = 0) => (isFiniteNum(n) ? n : fallback);
-
-// type guard: string -> EnemyBehaviorId
-function isBehaviorId(x: unknown): x is EnemyBehaviorId {
-  return typeof x === "string" && x in EnemyBehaviorDB;
-}
 
 export class EnemySystem {
   constructor(
@@ -62,8 +58,8 @@ export class EnemySystem {
       }
 
       // behavior id (TS-safe)
-      const bid: EnemyBehaviorId = isBehaviorId(e.behaviorId) ? e.behaviorId : "none";
-      if (DEV && bid === "none" && e.behaviorId && !isBehaviorId(e.behaviorId)) {
+      const bid: EnemyBehaviorId = isEnemyBehaviorId(e.behaviorId) ? e.behaviorId : "none";
+      if (DEV && bid === "none" && e.behaviorId && !isEnemyBehaviorId(e.behaviorId)) {
         console.warn("[EnemySystem] unknown behaviorId -> none:", e.behaviorId, "type:", e.typeId);
       }
       e.behaviorId = bid;

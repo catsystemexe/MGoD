@@ -2,6 +2,7 @@ import enemyTypesJson from "./enemyTypes.json";
 import behaviorPresetsJson from "./behaviorPresets.json";
 import directorWavesJson from "./directorWaves.json";
 
+import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import type { ContentBundle, EnemyTypeDef, BehaviorPreset, WaveDef } from "../enemies/EnemyBehaviorTypes";
 
 function assert(cond: any, msg: string): asserts cond {
@@ -11,10 +12,6 @@ function assert(cond: any, msg: string): asserts cond {
 function isNum(x: any) { return typeof x === "number" && Number.isFinite(x); }
 function isStr(x: any) { return typeof x === "string" && x.length > 0; }
 
-function isBehaviorId(x: any): boolean {
-  // keep in sync with EnemyBehaviorId union
-  return x === "none" || x === "straight" || x === "sine" || x === "invaders";
-}
 
 function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
   assert(Array.isArray(list), "enemyTypes must be an array");
@@ -36,7 +33,7 @@ function validateBehaviorPresets(list: any[]): BehaviorPreset[] {
     assert(b && typeof b === "object", "behaviorPresets item must be object");
     assert(isStr(b.id), "behaviorPresets.id must be string");
     assert(isStr(b.behaviorId), `behaviorPresets(${b.id}).behaviorId must be string`);
-    assert(isBehaviorId(b.behaviorId), `behaviorPresets(${b.id}).behaviorId unknown: ${String(b.behaviorId)}`);
+    assert(isEnemyBehaviorId(b.behaviorId), `behaviorPresets(${b.id}).behaviorId unknown: ${String(b.behaviorId)}`);
     assert(b.params && typeof b.params === "object", `behaviorPresets(${b.id}).params must be object`);
   }
   return list as BehaviorPreset[];

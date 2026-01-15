@@ -1,7 +1,8 @@
 // src/game/enemies/EnemyBehaviorPresets.ts
+// src/game/enemies/EnemyBehaviorPresets.ts
 import { CONTENT } from "../content/CONTENT";
+import { isEnemyBehaviorId } from "./EnemyBehaviorTypes";
 import type { EnemyBehaviorId, EnemyBehaviorParams } from "./EnemyBehaviorTypes";
-
 export type EnemyBehaviorPresetId = string;
 
 export type EnemyBehaviorPreset = {
@@ -16,13 +17,6 @@ function isObj(x: unknown): x is Record<string, any> {
 
 function isStr(x: unknown): x is string {
   return typeof x === "string" && x.length > 0;
-}
-
-function isBehaviorId(x: unknown): x is EnemyBehaviorId {
-  return  x === "none" || 
-          x === "straight" ||
-          x === "sine" ||
-          x === "invaders";
 }
 
 /**
@@ -48,8 +42,7 @@ export const EnemyBehaviorPresets: Record<EnemyBehaviorPresetId, EnemyBehaviorPr
     }
 
     const behaviorIdRaw = raw?.behaviorId;
-    const behaviorId: EnemyBehaviorId = isBehaviorId(behaviorIdRaw) ? behaviorIdRaw : "none";
-
+    const behaviorId: EnemyBehaviorId = isEnemyBehaviorId(behaviorIdRaw) ? behaviorIdRaw : "none";
     const params = isObj(raw?.params) ? raw.params : {};
 
     out[id] = { id, behaviorId, params };
