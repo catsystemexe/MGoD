@@ -7,17 +7,30 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
 /**
  * Minimal overlay that does NOT block canvas (pointer-events:none).
  * Reads mapping from window.__CM.devWaveHotkeys.
+ *
+ * Requirements:
+ * - default hidden (keys still active elsewhere)
+ * - positioned below top dev UI (roughly mid-screen)
+ * - toggle visibility via "I" key handled in createGame.ts
  */
 export class DevHotkeys {
   private root: HTMLDivElement;
+  private visible = false;
 
-  constructor() {
+  constructor(opts?: { defaultVisible?: boolean; top?: string; left?: string }) {
+    this.visible = !!opts?.defaultVisible;
+
     this.root = el("div");
     this.root.id = "devhotkeys";
+
+    const left = opts?.left ?? "8px";
+    // Put it under the top debug/dev overlays. "50vh" ≈ middle of canvas/screen.
+    const top = opts?.top ?? "50vh";
+
     this.root.style.cssText = [
       "position:fixed",
-      "left:8px",
-      "top:8px",
+      `left:${left}`,
+      `top:${top}`,
       "z-index:99999",
       "pointer-events:none",
       "user-select:none",
@@ -25,10 +38,24 @@ export class DevHotkeys {
       "font:10px monospace",
       "color:rgba(255,255,255,0.9)",
       "text-shadow:0 1px 2px rgba(0,0,0,0.75)",
+      `display:${this.visible ? "block" : "none"}`,
     ].join(";");
 
     document.body.appendChild(this.root);
     this.refresh();
+  }
+
+  setVisible(on: boolean): void {
+    this.visible = !!on;
+    this.root.style.display = this.visible ? "block" : "none";
+  }
+
+  toggle(): void {
+    this.setVisible(!this.visible);
+  }
+
+  isVisible(): boolean {
+    return this.visible;
   }
 
   refresh(): void {
@@ -40,10 +67,7 @@ export class DevHotkeys {
       return;
     }
 
-    // format:
-    // 1  wave.red
-    // 2  wave.green
-    const lines = list.map(it => `${it.key}  ${it.id}`);
+    const lines = list.map((it) => `${it.key}  ${it.id}`);
     this.root.textContent = lines.join("\n");
   }
 

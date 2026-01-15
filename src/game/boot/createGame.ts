@@ -208,7 +208,7 @@ export async function createGame(
           }));
 
           // minimal overlay (non-blocking)
-          const devHotkeys = new DevHotkeys();
+          const devHotkeys = new DevHotkeys({ defaultVisible: false, top: "50vh", left: "8px" });
           devHotkeys.refresh();
 
           window.addEventListener("keydown", (e) => {
@@ -220,6 +220,14 @@ export async function createGame(
 
             let n = -1;
 
+
+            // Toggle preset list visibility (I)
+            if (key === "i" || key === "I") {
+              devHotkeys.toggle();
+              return;
+            }
+
+            
             // ✅ primary: e.key ("1".."9") – funguje i na iOS/BT klávesnicích častěji než code
             if (typeof key === "string" && key.length === 1) {
               const k = key.charCodeAt(0) - 48; // '1' => 1
