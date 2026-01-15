@@ -7,7 +7,7 @@ import type { WorldEntity } from "./CollisionSystem";
 
 export class ImpactPhaseSystem {
   constructor(
-    private readonly damage: DamageSystem,
+    private readonly damage: DamageSystem<any>,
     private readonly caImpact: CAImpactSystem
   ) {}
 

@@ -16,7 +16,7 @@ function ensureWindowStub(): void {
 
 async function main() {
   ensureWindowStub();
-  const { loop, store } = await createGame(() => makeStubCanvas(), 400, 224);
+  const { loop, store } = await createGame(() => makeStubCanvas(), 896, 504);
 
   // nech to naspawnovat green (cca 2s)
   for (let i = 0; i < 120; i++) loop.stepOneTick();

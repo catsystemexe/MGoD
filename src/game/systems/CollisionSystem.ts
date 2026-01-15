@@ -87,23 +87,23 @@ export class CollisionSystem {
     const enemies: Array<{ ref: EntityRef; e: EnemyEntity }> = [];
     const pickups: Array<{ ref: EntityRef; e: PickupEntity }> = [];
 
-    let playerRef: EntityRef | null = null;
-    let player: (WorldEntity & PlayerEntity) | null = null;
+    let playerRef: any = null;
+    let player: any = null;
 
     // 1) snapshot enemies/pickups + find player
-    this.store.debugForEachAlive((ref, e) => {
+    this.store.debugForEachAlive((ref, e: any) => {
       if (!e || e.pendingKill) return;
 
       if (e.kind === "enemy") enemies.push({ ref, e: e as EnemyEntity });
       else if (e.kind === "pickup") pickups.push({ ref, e: e as PickupEntity });
       else if (e.kind === "player") {
         playerRef = ref;
-        player = e as (WorldEntity & PlayerEntity);
+        player = e;
       }
     });
 
     // 2) projectile -> enemy
-    this.store.debugForEachAlive((projRef, e) => {
+    this.store.debugForEachAlive((projRef, e: any) => {
       if (!e || e.pendingKill) return;
       if (e.kind !== "projectile") return;
       if ((e as any).consumed) return;

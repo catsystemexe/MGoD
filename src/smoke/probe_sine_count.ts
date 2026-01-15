@@ -13,7 +13,7 @@ function ensureWindowStub(): void {
 }
 async function main(){
   ensureWindowStub();
-  const { loop, store } = await createGame(()=>makeStubCanvas(), 400, 224);
+  const { loop, store } = await createGame(() => makeStubCanvas(), 896, 504);
   for (let i=0;i<300;i++) loop.stepOneTick(); // 5s
   let greens=0, enemies=0;
   (store as any).debugForEachAlive?.((_r:any,e:any)=>{

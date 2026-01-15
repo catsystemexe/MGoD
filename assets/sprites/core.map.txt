@@ -1,0 +1,10 @@
+# core.map.txt (grid order: left->right, top->bottom)
+# use "." for empty cell
+ship.player.body.0
+ship.player.thruster.0
+ship.player.thruster.1
+ship.player.thruster.2
+ship.player.thruster.3
+.
+.
+.

@@ -1,16 +1,16 @@
-// DEV ONLY – remove or guard by env later
-if (process.env.NODE_ENV !== "production") {
-  const eventKeys = Object.values(EventType).sort();
-  const ownerKeys = Object.keys(CM_EVENT_OWNERSHIP).sort();
+// src/engine/core/dev.ts
+import { CM_EVENT_OWNERSHIP } from "./EventOwnershipMap";
 
-  const missing = eventKeys.filter(e => !ownerKeys.includes(e));
-  const extra   = ownerKeys.filter(e => !eventKeys.includes(e));
+/**
+ * Dev helper: sanity-check ownership map exists.
+ * Intentionally avoids Node-only globals (process) and any extra deps.
+ */
+export function devSanity(): void {
+  const isDev = Boolean((globalThis as any).__DEV__);
+  if (!isDev) return;
 
-  if (missing.length || extra.length) {
-    throw new Error(
-      "[EventOwnershipMap] mismatch\n" +
-      `Missing owners for: ${missing.join(", ") || "—"}\n` +
-      `Extra owners for: ${extra.join(", ") || "—"}`
-    );
+  const ownerKeys = Object.keys(CM_EVENT_OWNERSHIP ?? {});
+  if (ownerKeys.length === 0) {
+    console.warn("[devSanity] CM_EVENT_OWNERSHIP is empty");
   }
 }

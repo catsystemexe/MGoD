@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "build": "vite build",
-    "smoke": "tsx src/smoke/runSmokes.ts"
+    "smoke": "tsx src/smoke/runSmokes.ts",
+    "gen:atlas": "node tools/gen_atlas.mjs assets/sprites/core.map.txt public/assets/sprites/core.atlas.json"
   },
   "dependencies": {
     "vite": "^7.3.1"

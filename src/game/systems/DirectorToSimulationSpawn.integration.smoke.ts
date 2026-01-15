@@ -43,7 +43,7 @@ function countEnemies(store: any): number {
 
 (async () => {
   ensureWindowStub();
-  const g = await createGame(() => makeStubCanvas(), 400, 224);
+  const g = await createGame(() => makeStubCanvas(), 896, 504);
 
   const e0 = countEnemies(g.store);
 

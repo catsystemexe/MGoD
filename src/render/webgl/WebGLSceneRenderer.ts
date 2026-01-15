@@ -1,4 +1,5 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
+import { SpriteSystem } from "../sprites/SpriteSystem";
 
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
@@ -68,6 +69,9 @@ export class WebGLSceneRenderer {
   private uSize: WebGLUniformLocation;
   private uColor: WebGLUniformLocation;
 
+  private sprites: SpriteSystem;
+
+  
   constructor(
     private readonly gl: WebGL2RenderingContext,
     private readonly store: EntityStore<any>,
@@ -130,10 +134,15 @@ export class WebGLSceneRenderer {
     gl.bindVertexArray(null);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.CULL_FACE);
-    gl.disable(gl.BLEND);
-  }
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.CULL_FACE);
+      gl.disable(gl.BLEND);
+
+      // Sprite MVP (async load; safe fallback when missing)
+      this.sprites = new SpriteSystem(gl);
+      void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
+    }
+  
   render(alpha: number = 1): void {
     const gl = this.gl;
 
@@ -144,6 +153,9 @@ export class WebGLSceneRenderer {
 
     // clamp once per frame
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+
+    // sprite anim time
+    const tSec = performance.now() * 0.001;
 
     this.store.debugForEachAlive((_ref, e: any) => {
       if (!e) return;
@@ -159,14 +171,23 @@ export class WebGLSceneRenderer {
       let h = r ? r * 2 : 6;
 
       if (kind === "player") {
-        w = 6;
-        h = 6;
+        // --- SPRITE PATH (if ready) ---
+        if (this.sprites?.ready && this.sprites.atlas) {
+          const atlas = this.sprites.atlas;
 
-        const hf = Number((e as any).hitFlashT ?? 0);
-        const flashOn = Number.isFinite(hf) && hf > 0;
+          // position is computed later (ix/iy) => here only mark we want sprite draw
+          // keep w/h for fallback (unused when sprite draws)
+        } else {
+          // fallback sizes + color (old behavior)
+          w = 6;
+          h = 6;
 
-        if (flashOn) gl.uniform4f(this.uColor, 1, 1, 1, 1);
-        else gl.uniform4f(this.uColor, 0, 1, 1, 1);
+          const hf = Number((e as any).hitFlashT ?? 0);
+          const flashOn = Number.isFinite(hf) && hf > 0;
+
+          if (flashOn) gl.uniform4f(this.uColor, 1, 1, 1, 1);
+          else gl.uniform4f(this.uColor, 0, 1, 1, 1);
+        }
       } else if (kind === "enemy") {
         const hf = Number((e as any).hitFlashT ?? 0);
         const flashOn = Number.isFinite(hf) && hf > 0;
@@ -230,6 +251,69 @@ export class WebGLSceneRenderer {
         iy = Math.round(iy);
       }
 
+      // --- SPRITE DRAW (player only) ---
+      if (kind === "player" && this.sprites?.ready && this.sprites.atlas) {
+        const atlas = this.sprites.atlas;
+
+        const body = atlas.frame("ship.player.body.0");
+        const thr = atlas.pickAnimFrame("ship.player.thruster", tSec);
+
+        if (body && this.sprites.tex.ready) {
+          // enable alpha for sprite pass
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+          // rotation from aimDir (defaults to +X)
+          const ad = (e as any).aimDir;
+          const ax = typeof ad?.x === "number" ? ad.x : 1;
+          const ay = typeof ad?.y === "number" ? ad.y : 0;
+          const rot = Math.atan2(ay, ax);
+
+          // draw
+          this.sprites.prog.begin(this.logicW, this.logicH, this.sprites.tex.tex, this.sprites.tex.w, this.sprites.tex.h);
+
+          // body (pivoted)
+          this.sprites.prog.draw(
+            ix, iy,
+            body.w, body.h,
+            body.px, body.py,
+            rot,
+            body.x, body.y, body.w, body.h,
+            1, 1, 1, 1
+          );
+
+          // thruster layer (optional)
+          if (thr) {
+            // offset behind ship along -aimDir
+            const len = Math.max(0.0001, Math.hypot(ax, ay));
+            const dx = ax / len;
+            const dy = ay / len;
+
+            const back = 10; // px (tweak later)
+            const tx = ix - dx * back;
+            const ty = iy - dy * back;
+
+            this.sprites.prog.draw(
+              tx, ty,
+              thr.w, thr.h,
+              thr.px, thr.py,
+              rot,
+              thr.x, thr.y, thr.w, thr.h,
+              1, 1, 1, 1
+            );
+          }
+
+          this.sprites.prog.end();
+
+          // restore for quad path (optional, safe)
+          gl.disable(gl.BLEND);
+
+          // IMPORTANT: skip quad fallback draw
+          return;
+        }
+      }
+
+      // --- QUAD FALLBACK (original) ---
       gl.uniform2f(this.uPos, ix, iy);
       gl.uniform2f(this.uSize, w, h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);

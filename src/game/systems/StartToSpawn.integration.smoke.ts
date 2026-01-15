@@ -46,7 +46,7 @@ function makeStubCanvas(): HTMLCanvasElement {
 (async () => {
   ensureWindowStub();
 
-  const g: any = await createGame(() => makeStubCanvas(), 400, 224);
+  const g: any = await createGame(() => makeStubCanvas(), 896, 504);
   assert(g, "createGame must return game object");
 
   // ✅ IMPORTANT: Input phase would overwrite actions every tick → disable sampling in this smoke

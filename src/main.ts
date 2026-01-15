@@ -111,11 +111,11 @@ async function main() {
   const canvas = ensureWebGLCanvas();
 
   const { Graphics } = await import("./graphics/Graphics");
-  const gfx = new Graphics(canvas, "classic_400x224");
+  const gfx = new Graphics(canvas, "classic_896x504");
   const gl = gfx.getGL();
 
-  const LOGIC_W = 400;
-  const LOGIC_H = 224;
+  const LOGIC_W = 896;
+  const LOGIC_H = 504;
 
   const { createGame } = await import("./game/boot/createGame");
   const game = await createGame(() => canvas, LOGIC_W, LOGIC_H);
@@ -254,7 +254,7 @@ async function main() {
     });
   }
 
-  window.addEventListener("resize", requestResize);
+    window.addEventListener("resize", requestResize);
   window.addEventListener("orientationchange", requestResize);
 
   const vv = (window as any).visualViewport as VisualViewport | undefined;
@@ -265,7 +265,7 @@ async function main() {
   let last = performance.now();
 
   // --- top debug overlay (default OFF; throttled) ---
-  const TOP_DEBUG_ENABLED = true; // zapni jen když ladíš
+  const TOP_DEBUG_ENABLED = DEV; // zapni jen když ladíš
   const TOP_DEBUG_EVERY_N_FRAMES = 15; // ~4×/s při 60fps
   let topDbgFrame = 0;
   

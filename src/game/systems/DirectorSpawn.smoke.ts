@@ -49,7 +49,7 @@ function makeStubCanvas(): HTMLCanvasElement {
 async function main() {
   ensureWindowStub();
 
-  const game = await createGame(() => makeStubCanvas(), 400, 224);
+  const game = await createGame(() => makeStubCanvas(), 896, 504);
   if (!game) throw new Error("[SMOKE] createGame returned undefined");
 
   const loop = game.loop;

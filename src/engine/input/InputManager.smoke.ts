@@ -12,7 +12,7 @@ function assert(cond: unknown, msg: string): void {
 // ultra-min fake canvas for Node (only what InputManager reads)
 function makeFakeCanvas(): HTMLCanvasElement {
   return {
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 224 } as any),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 896, height: 504 } as any),
     addEventListener: () => {},
     removeEventListener: () => {},
   } as any as HTMLCanvasElement;
@@ -24,9 +24,9 @@ function main() {
 
   // Provide display mapping so readAimLogic works
   const di: DisplayInfo = {
-    logicW: 400,
-    logicH: 224,
-    viewport: { x: 0, y: 0, w: 400, h: 224 },
+    logicW: 896,
+    logicH: 504,
+    viewport: { x: 0, y: 0, w: 896, h: 504 },
   } as any;
   input.setDisplayInfo(di);
 

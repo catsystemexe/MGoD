@@ -3,10 +3,11 @@ import { RenderTarget } from "./RenderTarget";
 import { computeDisplay, type DisplayInfo } from "./DisplayRenderer";
 import { createBlitProgram, type BlitProgram } from "./BlitProgram";
 
-export type GraphicsMode = "classic_400x224";
+export type GraphicsMode = "classic_896x504";
 export const MODE_RES: Record<GraphicsMode, { w: number; h: number }> = {
-  classic_400x224: { w: 400, h: 224 },
+  classic_896x504: { w: 896, h: 504 },
 };
+
 
 export class Graphics {
   readonly mode: GraphicsMode;
@@ -23,7 +24,7 @@ export class Graphics {
     private _dbgDisplaySig = "";
     private _dbgFrame = 0;
 
-    constructor(private canvas: HTMLCanvasElement, mode: GraphicsMode = "classic_400x224") {
+      constructor(private canvas: HTMLCanvasElement, mode: GraphicsMode = "classic_896x504") {
     this.mode = mode;
     this.logicW = MODE_RES[mode].w;
     this.logicH = MODE_RES[mode].h;
