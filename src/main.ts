@@ -56,7 +56,9 @@ hudTop = document.createElement("div");
 hudTop.id = "hudTop";
 hudTop.style.cssText =
   "color:white;font:12px monospace;padding:6px;position:fixed;left:0;top:0;" +
-  "z-index:9999;white-space:pre;opacity:0.9;pointer-events:none";
+  "z-index:9999;white-space:pre-wrap;opacity:0.9;pointer-events:none;" +
+  "max-width:100vw;box-sizing:border-box;word-break:break-word;overflow-wrap:anywhere;";
+
 document.body.appendChild(hudTop);
 setHudTop("BOOT OK");
 
@@ -66,7 +68,7 @@ declare global {
   }
 }
 window.__CM = window.__CM || {};
-(window as any).__CM.topLog = (window as any).__CM.topLog ?? "";
+// keep existing function (do not overwrite)
 
 
 // root container (canvas + overlays)
@@ -133,7 +135,7 @@ async function main() {
   window.__CM.loop = loop;
   window.__CM.store = store;
   window.__CM.game = game;
-  window.__CM.director = (game as any).director;
+  
 
   // ---- Dev API bridge
   window.__CM.dev = {
@@ -146,14 +148,8 @@ async function main() {
     diff: (m: number) => window.__CM.director?.setDifficulty?.(m),
   };
 
-  // ---- DevUI (start OFF)
-  const { DevUI } = await import("./ui/DevUI");
-  (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
-  try {
-    (window as any).__CM.devui?.setVisible?.(false);
-  } catch (_e) {
-    // ignore
-  }
+  // DevUI disabled (we use minimal DevHotkeys overlay instead)
+  // (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
 
   // --- HUD mode mirror (so we can gate pointer/touch)
   type HudMode = "PLAY" | "TITLE" | "GAME_OVER";
@@ -171,9 +167,9 @@ async function main() {
   }
 
   // --- TITLE at boot
-  setHudMode("TITLE");
-  hud.setPaused?.(false);
-  loop.setPaused?.(true);
+  //setHudMode("TITLE");
+  //hud.setPaused?.(false);
+  //loop.setPaused?.(false);
 
   // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
@@ -208,9 +204,10 @@ async function main() {
 
     if (e.code === "KeyN") {
       e.preventDefault();
-      setHudMode("TITLE");
+      setHudMode("PLAY");
       hud.setPaused?.(false);
-      loop.setPaused?.(true);
+      loop.setPaused?.(false);
+    
       return;
     }
   });

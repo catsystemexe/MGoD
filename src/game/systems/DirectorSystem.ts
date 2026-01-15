@@ -27,8 +27,17 @@ export class DirectorSystem {
     private readonly deps: DirectorDeps,
   ) {
     const waveDefs: any[] = Array.isArray((defs as any)?.waves) ? (defs as any).waves : [];
-    console.log("[DIR][INIT] waves=", waveDefs.length, waveDefs.map((w: any) => w.id));
-    this.waves = waveDefs.map(makeWaveRuntime);
+
+    // ✅ build runtime list
+    this.waves = waveDefs.map((w) => makeWaveRuntime(w));
+
+    console.log("[DIR][INIT] waves=", this.waves.length, this.waves.map((w: any) => w.id));
+
+    // testbed: manual waves default OFF (enable only via hotkeys/forceWave)
+    for (const w of this.waves) {
+      if (w.def?.trigger?.kind === "manual") w.enabled = false;
+    }
+
     this.globalMaxAlive = defs.globalMaxAlive ?? Infinity;
   }
 
@@ -53,12 +62,49 @@ export class DirectorSystem {
   triggerWave(id: string): void {
     const w = this.waves.find(x => x.id === id);
     if (!w || !w.enabled) return;
+
+    // původní chování: jen manual
     if (w.def.trigger.kind === "manual") this.activate(w);
+  }
+
+  /**
+   * DEV: force-start wave regardless of trigger kind.
+   * Optionally reset counters so the pattern starts from the beginning.
+   */
+  forceWave(id: string, opts?: { solo?: boolean; reset?: boolean }): void {
+    const w = this.waves.find(x => x.id === id);
+    if (!w) return;
+
+    const solo = !!opts?.solo;
+    const reset = opts?.reset !== false; // default true
+
+    if (solo) {
+      for (const ww of this.waves) {
+        const on = ww.id === id;
+        ww.enabled = on;
+        ww.forced = false;
+        if (!on) this.deactivate(ww);
+      }
+    }
+
+    // ensure enabled + force
+    w.enabled = true;
+    w.forced = true;
+
+    if (reset) {
+      w.t = 0;
+      w.acc = 0;
+      w.spawned = 0;
+    }
+
+    // always start
+    this.activate(w);
   }
 
   stopWave(id: string): void {
     const w = this.waves.find(x => x.id === id);
     if (!w) return;
+    w.forced = false;
     this.deactivate(w);
   }
 
@@ -82,11 +128,13 @@ export class DirectorSystem {
   soloWave(id: string): void {
     for (const w of this.waves) {
       const on = w.id === id;
-      w.enabled = on;
-      if (!on) this.deactivate(w);
+    w.enabled = on;
+    if (!on) {
+      w.forced = false;
+      this.deactivate(w);
     }
   }
-
+  }
   enableAll(): void {
     for (const w of this.waves) w.enabled = true;
   }
@@ -138,7 +186,7 @@ export class DirectorSystem {
       if (this.shouldBeActive(w)) {
         if (!w.active) this.activate(w);
       } else {
-        if (w.active && w.def.trigger.kind === "time") this.deactivate(w);
+        if (w.active && w.def.trigger.kind === "time" && !w.forced) this.deactivate(w);
       }
 
       if (!w.active) continue;
@@ -283,6 +331,9 @@ export class DirectorSystem {
   }
 
   private shouldBeActive(w: WaveRuntime): boolean {
+    // ✅ DEV override
+    if (w.forced) return true;
+
     const tr = w.def.trigger;
 
     if (tr.kind === "manual") {

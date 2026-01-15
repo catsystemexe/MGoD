@@ -1,11 +1,19 @@
 {
   "behaviorPresets": [
     { "id": "none.basic", "behaviorId": "none", "params": {} },
-    { "id": "straight.basic", "behaviorId": "straight", "params": { "speedY": 38 } },
-    { "id": "sine.basic", "behaviorId": "sine", "params": { "speedY": 20, "ampX": 7, "freq": 0.5 } },
-    { "id": "invaders.basic", "behaviorId": "invaders", "params": { "speedY": 14, "ampX": 26, "freq": 0.55, "phaseStep": 0.35, "speedX": 0 } },
-    { "id": "zigzag.basic", "behaviorId": "zigzag", "params": { "speedY": 26, "ampX": 18, "freq": 1.2 } },
-    {"id": "orbit.basic", "behaviorId": "orbit", "params": { "radius": 22, "angularSpeed": 1.1, "speedY": 8  } }
 
+    { "id": "straight.basic", "behaviorId": "straight", "params": { "speedY": 38 } },
+
+    { "id": "sine.basic", "behaviorId": "sine", "params": { "speedY": 20, "ampX": 7, "freq": 0.5 } },
+    { "id": "sine.hold", "behaviorId": "sine", "params": { "speedY": 0, "ampX": 18, "freq": 0.6 } },
+    { "id": "invaders.basic", "behaviorId": "invaders", "params": { "speedY": 14, "ampX": 26, "freq": 0.55, "phaseStep": 0.35, "speedX": 0 } },
+
+    { "id": "zigzag.basic", "behaviorId": "zigzag", "params": { "speedY": 26, "ampX": 18, "freq": 1.2 } },
+    { "id": "zigzag.fast", "behaviorId": "zigzag", "params": { "speedY": 34, "ampX": 24, "freq": 1.8 } },
+    { "id": "zigzag.wide", "behaviorId": "zigzag", "params": { "speedY": 22, "ampX": 42, "freq": 0.9 } },
+
+    { "id": "orbit.basic", "behaviorId": "orbit", "params": { "radius": 22, "angularSpeed": 1.1, "speedY": 8 } },
+    { "id": "orbit.tight", "behaviorId": "orbit", "params": { "radius": 14, "angularSpeed": 2.0, "speedY": 7 } },
+    { "id": "orbit.wide", "behaviorId": "orbit", "params": { "radius": 40, "angularSpeed": 0.75, "speedY": 10 } }
   ]
 }

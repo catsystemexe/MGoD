@@ -17,19 +17,27 @@ function pickWaves() {
 
 export const DIRECTOR_DEFS_MVP: DirectorDefs = {
   globalMaxAlive: 50,
-  waves: pickWaves().map((w) => ({
-    id: w.id,
-    trigger: {
-      kind: "time",
-      startSec: w.startSec,
-      endSec: w.startSec + w.durationSec,
-    },
-    spawnEverySec: w.spawnEverySec,
-    maxAlive: w.maxAlive,
-    enemyTypeId: w.enemyTypeId,
+  waves: pickWaves().map((w) => {
+    const isTest = w.id === "wave.test";
 
-    // take from content (directorWaves.json)
-    pattern: w.pattern,
-    behaviorPresetId: w.behaviorPresetId,
-  })),
+    return {
+      id: w.id,
+
+      // VŠECHNY waves mají time trigger
+      trigger: {
+        kind: "time",
+        startSec: w.startSec,
+        endSec: w.startSec + w.durationSec,
+      },
+
+      // ale jen test wave je defaultně enabled
+      enabled: isTest,
+
+      spawnEverySec: w.spawnEverySec,
+      maxAlive: w.maxAlive,
+      enemyTypeId: w.enemyTypeId,
+      pattern: w.pattern,
+      behaviorPresetId: w.behaviorPresetId,
+    };
+  }),
 };

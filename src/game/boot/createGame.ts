@@ -1,4 +1,5 @@
 import { EventBus } from "../../engine/core/EventBus";
+import { DevHotkeys } from "../../ui/DevHotkeys";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { Loop } from "../../engine/core/Loop";
 import type { CMEventMap } from "../../engine/core/events";
@@ -67,9 +68,9 @@ export async function createGame(
 
   // ---- VFX (cosmetic, per-frame)
   // In browser we expose it for debugging; in Node (smokes) there is no window.
-  if (typeof window !== "undefined") {
-    (window as any).__CM = (window as any).__CM || {};
-    (window as any).__CM.vfx = vfx;
+      if (typeof window !== "undefined") {
+        (window as any).__CM = (window as any).__CM || {};
+        (window as any).__CM.vfx = vfx;
 
 // --- Spawn PLAYER (capture reference to the real entity object)
   let playerEnt: any = null;
@@ -177,6 +178,79 @@ export async function createGame(
     }
   );
 
+      if (typeof window !== "undefined") {
+        (window as any).__CM = (window as any).__CM || {};
+        (window as any).__CM.director = director;
+      }
+      
+
+        // ---- DEV hotkeys: Digit1..9 -> forceWave
+        const DEV_WAVE_KEYS = [
+          "wave.test",         // 1
+          "wave.red",          // 2
+          "wave.green",        // 3
+          "wave.blue",         // 4
+          "wave.orbit.tight",  // 5
+          "wave.orbit.wide",   // 6
+          "wave.zigzag.basic", // 7
+          "wave.zigzag.fast",  // 8
+          "wave.zigzag.wide",  // 9
+        ] as const;
+
+        if (typeof window !== "undefined") {
+          (window as any).__CM = (window as any).__CM || {};
+          (window as any).__CM.director = director;
+
+          // expose mapping for overlay
+          (window as any).__CM.devWaveHotkeys = DEV_WAVE_KEYS.map((id, i) => ({
+            key: String(i + 1),
+            id,
+          }));
+
+          // minimal overlay (non-blocking)
+          const devHotkeys = new DevHotkeys();
+          devHotkeys.refresh();
+
+          window.addEventListener("keydown", (e) => {
+            if (e.repeat) return;
+            if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+            const key = (e as any).key as string | undefined;
+            const code = (e as any).code as string | undefined;
+
+            let n = -1;
+
+            // ✅ primary: e.key ("1".."9") – funguje i na iOS/BT klávesnicích častěji než code
+            if (typeof key === "string" && key.length === 1) {
+              const k = key.charCodeAt(0) - 48; // '1' => 1
+              if (k >= 1 && k <= 9) n = k;
+            }
+
+            // fallback: e.code ("Digit1" / "Numpad1")
+            if (n < 0 && typeof code === "string") {
+              if (code.startsWith("Digit")) n = Number(code.slice(5));
+              else if (code.startsWith("Numpad")) n = Number(code.slice(6));
+            }
+
+            if (!(n >= 1 && n <= 9)) return;
+
+            const waveId = (DEV_WAVE_KEYS as any)[n - 1] as string | undefined;
+            if (!waveId) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            // SOLO+RESET for rapid testing
+            director.forceWave(waveId, { solo: true, reset: true });
+
+            // ensure loop is running if main left it paused
+            const cm = (window as any).__CM;
+            if (cm?.loop?.setPaused) cm.loop.setPaused(false);
+          });
+        }
+    
+
+
   const directorPhase = new DirectorPhaseSystem(session as any, director as any);
 
   // ---- Simulation systems
@@ -274,7 +348,6 @@ export async function createGame(
 
     input: {
       sample: (_ctx) => {
-        // i při game over můžeš klidně dál sampleovat (kvůli Y/N atd.)
         inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
       },
     },
@@ -284,7 +357,6 @@ export async function createGame(
         if (session.gameOver) return;
         directorPhase.update(ctx, events as any);
 
-        // keep numeric wave in session for HUD
         const w = director.getHUDInfo().current;
         if (typeof w === "number" && Number.isFinite(w)) session.wave = w;
       },
@@ -298,11 +370,10 @@ export async function createGame(
         pickupSystem.update(ctx.dt);
         playerSystem.update(ctx.dt, inputRt.actions as any);
 
-        // dead gate: no weapons while dead
         if (Number(playerEnt.deadT ?? 0) <= 0) {
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
-            shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 }, // <-- přidej
+            shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 },
             shipRef: playerRef,
           });
         }
@@ -329,7 +400,6 @@ export async function createGame(
 
     flow: {
       update: (ctx, events) => {
-        // Flow nech běžet vždy – gameOver se často nastaví právě ve Flow
         flow.update(ctx, events as any);
       },
     },
@@ -346,12 +416,12 @@ export async function createGame(
     loop,
     store,
     session,
-    director,// ✅ devui needs director
+    director, // ✅ devui needs director
     vfx,
     inputRt,
     playerRef,
     inputMgr,
     playerEnt,
   };
-     }
-   }
+  }
+}

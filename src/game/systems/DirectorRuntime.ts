@@ -5,6 +5,10 @@ export type WaveRuntime = {
   id: WaveId;
   enabled: boolean;
   active: boolean;
+
+  // ✅ DEV override: bypass time window until stopped/reset
+  forced?: boolean;
+
   spawnBudget: number; // how many spawns are due (accumulated), consumed on emit
   t: number;     // local time since activation
   acc: number;   // spawn accumulator
@@ -16,12 +20,16 @@ export type WaveRuntime = {
 export function makeWaveRuntime(def: WaveDef): WaveRuntime {
   return {
     id: def.id,
-    enabled: true,
+    def,
+    enabled: !!(def as any).enabled,
     active: false,
+
+    forced: false,
+
+    spawnBudget: 0,
+
     t: 0,
     acc: 0,
     spawned: 0,
-    spawnBudget: 0,
-    def,
   };
 }
