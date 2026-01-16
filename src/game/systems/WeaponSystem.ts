@@ -117,10 +117,18 @@ export class WeaponSystem {
     vel: Vec2 | undefined,
     dtSec: number,
   ): void {
+    // --- muzzle offset: spawn projectile in front of ship nose ---
+    // NOTE: tune these constants to match core.png (ship frame 56x56, pivot 28,28)
+    const MUZZLE_OFFSET_PX = 26; // start with ~half sprite; tweak (22..30)
+
+    const o = origin; // ship center
+    const mx = o.x + dir.x * MUZZLE_OFFSET_PX;
+    const my = o.y + dir.y * MUZZLE_OFFSET_PX;
+
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       weapon,
       owner,
-      origin: { ...origin },
+      origin: { x: mx, y: my },
       dir: { ...dir },
     });
 
@@ -131,8 +139,8 @@ export class WeaponSystem {
     // lead = půl ticku (nejbližší tomu, co vidíš v renderu)
     const lead = 0.5 * dtSec;
 
-    const ox = origin.x + vx * lead;
-    const oy = origin.y + vy * lead;
+    const ox = mx + vx * lead;
+    const oy = my + vy * lead;
 
     this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
     this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
