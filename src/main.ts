@@ -288,6 +288,14 @@ async function main() {
         const dy = t.y - game.playerEnt.pos.y;
         const len = Math.hypot(dx, dy) || 1;
 
+        // angle in "logic space" (y is down)
+        const ang = Math.atan2(dy, dx);
+
+        // keep for debug / future (renderer currently uses aimDir)
+        const ROT_OFFSET = Math.PI / 2; // +90° clockwise
+        game.playerEnt.rot = ang + ROT_OFFSET;
+
+        
         game.playerEnt.aimDir.x = dx / len;
         game.playerEnt.aimDir.y = dy / len;
 

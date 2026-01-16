@@ -339,7 +339,9 @@ export async function createGame(
     playerEnt.invulnT = RESET_CFG.invulnSec;
     playerEnt.deadT = 0;
     playerEnt.hitFlashT = 0;
-
+    (playerEnt as any).aimDir = (playerEnt as any).aimDir ?? { x: 1, y: 0 };
+    (playerEnt as any).rot = 0;
+    
     // input (release buffered/held actions)
     try {
       inputRt.actions.firePrimary = false as any;

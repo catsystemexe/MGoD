@@ -172,12 +172,9 @@ export class WebGLSceneRenderer {
 
       if (kind === "player") {
         // --- SPRITE PATH (if ready) ---
-        if (this.sprites?.ready && this.sprites.atlas) {
-          const atlas = this.sprites.atlas;
-
-          // position is computed later (ix/iy) => here only mark we want sprite draw
-          // keep w/h for fallback (unused when sprite draws)
-        } else {
+          if (this.sprites?.ready && this.sprites.atlas) {
+            // sprite path – nothing needed here (actual draw is later)
+          } else {
           // fallback sizes + color (old behavior)
           w = 6;
           h = 6;
@@ -263,43 +260,89 @@ export class WebGLSceneRenderer {
           gl.enable(gl.BLEND);
           gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-          // rotation from aimDir (defaults to +X)
-          const ad = (e as any).aimDir;
-          const ax = typeof ad?.x === "number" ? ad.x : 1;
-          const ay = typeof ad?.y === "number" ? ad.y : 0;
-          const rot = Math.atan2(ay, ax);
+
+
+          // Prefer explicit rot (computed in main), fallback to aimDir ONLY when rot is missing/invalid
+          const entRot = (e as any).rot;
+
+          let rot: number;
+          const hasRot = typeof entRot === "number" && Number.isFinite(entRot);
+
+          if (hasRot) {
+            rot = entRot;
+          } else {
+            const ad = (e as any).aimDir;
+            const ax = typeof ad?.x === "number" ? ad.x : 1;
+            const ay = typeof ad?.y === "number" ? ad.y : 0;
+
+            // core.png orientation tweak:
+            // 0 = sprite points RIGHT (+X)
+            // -PI/2 = sprite points UP
+            // +PI/2 = sprite points DOWN
+            // PI = sprite points LEFT
+            const ROT_OFFSET = 0;
+
+            // our sprite shader flips Y in NDC => -atan2 is typically correct
+            rot = -Math.atan2(ay, ax) + ROT_OFFSET;
+          }
+
+          // hard safety (prevents NaN => "no rotation")
+          if (!Number.isFinite(rot)) rot = 0;
 
           // draw
-          this.sprites.prog.begin(this.logicW, this.logicH, this.sprites.tex.tex, this.sprites.tex.w, this.sprites.tex.h);
+          this.sprites.prog.begin(
+            this.logicW,
+            this.logicH,
+            this.sprites.tex.tex,
+            this.sprites.tex.w,
+            this.sprites.tex.h,
+          );
 
           // body (pivoted)
           this.sprites.prog.draw(
-            ix, iy,
-            body.w, body.h,
-            body.px, body.py,
+            ix,
+            iy,
+            body.w,
+            body.h,
+            body.px,
+            body.py,
             rot,
-            body.x, body.y, body.w, body.h,
-            1, 1, 1, 1
+            body.x,
+            body.y,
+            body.w,
+            body.h,
+            1,
+            1,
+            1,
+            1,
           );
 
           // thruster layer (optional)
           if (thr) {
-            // offset behind ship along -aimDir
-            const len = Math.max(0.0001, Math.hypot(ax, ay));
-            const dx = ax / len;
-            const dy = ay / len;
+            // offset behind ship along -forward (derived from rot)
+            const dx = Math.cos(-rot);
+            const dy = Math.sin(-rot);
 
             const back = 10; // px (tweak later)
             const tx = ix - dx * back;
             const ty = iy - dy * back;
 
             this.sprites.prog.draw(
-              tx, ty,
-              thr.w, thr.h,
-              thr.px, thr.py,
+              tx,
+              ty,
+              thr.w,
+              thr.h,
+              thr.px,
+              thr.py,
               rot,
-              thr.x, thr.y, thr.w, thr.h,
-              1, 1, 1, 1
+              thr.x,
+              thr.y,
+              thr.w,
+              thr.h,
+              1,
+              1,
+              1,
+              1,
             );
           }
 
@@ -310,6 +353,10 @@ export class WebGLSceneRenderer {
 
           // IMPORTANT: skip quad fallback draw
           return;
+
+
+
+          
         }
       }
 
