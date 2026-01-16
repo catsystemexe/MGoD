@@ -31,38 +31,160 @@ export class InputManager {
 
   private prevBombDown = false;
   private bombDown = false;
+  private bound = false;
 
   constructor(private readonly getCanvas: () => HTMLCanvasElement | null) {
     window.addEventListener("keydown", (e) => this.keys.add(e.code));
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
 
-    window.addEventListener("mousemove", (e) => {
-      this.mouseClientX = e.clientX;
-      this.mouseClientY = e.clientY;
-    });
-
-    window.addEventListener("mousedown", (e) => {
-      if (e.button === 0) this.mouseDownL = true;
-      if (e.button === 2) this.mouseDownR = true;
-      if (e.button === 1) this.bombDown = true; // middle click
-    });
-
-    window.addEventListener("mouseup", (e) => {
-      if (e.button === 0) this.mouseDownL = false;
-      if (e.button === 2) this.mouseDownR = false;
-      if (e.button === 1) this.bombDown = false;
-    });
-
+    // global fallback: kill context menu
     window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // safety: when focus is lost, avoid stuck buttons
+    window.addEventListener("blur", () => {
+      this.mouseDownL = false;
+      this.mouseDownR = false;
+      this.bombDown = false;
+      this.prevBombDown = false;
+    });
   }
 
+  private bindCanvasEvents(): void {
+    if (this.bound) return;
+
+    const c = this.getCanvas();
+    if (!c) return;
+
+    this.bound = true;
+
+    // make canvas focusable (keyboard input)
+    try {
+      (c as any).tabIndex = 0;
+      (c.style as any).outline = "none";
+    } catch {}
+
+    // kill touch/drag defaults (Replit popup wrapper)
+    c.style.touchAction = "none";
+    c.style.userSelect = "none";
+    (c.style as any).webkitUserSelect = "none";
+    (c.style as any).webkitTouchCallout = "none";
+
+    const syncButtons = (buttons: number) => {
+      this.mouseDownL = (buttons & 1) !== 0;
+      this.mouseDownR = (buttons & 2) !== 0;
+      this.bombDown = (buttons & 4) !== 0;
+    };
+
+    // Pointer move (reliable in popup wrapper)
+    c.addEventListener(
+      "pointermove",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.mouseClientX = e.clientX;
+        this.mouseClientY = e.clientY;
+
+        const buttons = (e as any).buttons ?? 0;
+        syncButtons(buttons);
+      },
+      { passive: false },
+    );
+
+    c.addEventListener(
+      "pointerdown",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // focus canvas so arrows/WASD go to the game
+        try {
+          (c as any).focus?.();
+        } catch {}
+
+        // capture pointer so we keep getting events
+        try {
+          (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        } catch {}
+
+        const buttons = (e as any).buttons ?? 0;
+        if (buttons) {
+          syncButtons(buttons);
+        } else {
+          // fallback (some browsers)
+          if (e.button === 0) this.mouseDownL = true;
+          if (e.button === 2) this.mouseDownR = true;
+          if (e.button === 1) this.bombDown = true;
+        }
+      },
+      { passive: false, capture: true },
+    );
+
+    c.addEventListener(
+      "pointerup",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        try {
+          (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+        } catch {}
+
+        const buttons = (e as any).buttons ?? 0;
+        if (buttons) {
+          syncButtons(buttons);
+        } else {
+          // fallback
+          if (e.button === 0) this.mouseDownL = false;
+          if (e.button === 2) this.mouseDownR = false;
+          if (e.button === 1) this.bombDown = false;
+        }
+      },
+      { passive: false, capture: true },
+    );
+
+    c.addEventListener(
+      "pointercancel",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.mouseDownL = false;
+        this.mouseDownR = false;
+        this.bombDown = false;
+      },
+      { passive: false, capture: true },
+    );
+
+    // if capture is lost unexpectedly, reset buttons
+    c.addEventListener(
+      "lostpointercapture",
+      (_e) => {
+        this.mouseDownL = false;
+        this.mouseDownR = false;
+        this.bombDown = false;
+      },
+      { passive: true },
+    );
+
+    // disable context menu on canvas (RMB)
+    c.addEventListener(
+      "contextmenu",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false, capture: true },
+    );
+  }
 
   public getAimTargetNow(logicW: number, logicH: number): { x: number; y: number } {
     return this.clientToLogic(logicW, logicH);
   }
-  
+
   /** snapshot actions for current tick (Input phase) */
-  sample(out: PlayerActions, logicW: number, logicH: number): void {
+  public sample(out: PlayerActions, logicW: number, logicH: number): void {
+    this.bindCanvasEvents();
+
     // Move vector (WASD + arrows)
     const left = this.isDown("KeyA") || this.isDown("ArrowLeft");
     const right = this.isDown("KeyD") || this.isDown("ArrowRight");
@@ -89,7 +211,7 @@ export class InputManager {
     out.aimTarget.x = x;
     out.aimTarget.y = y;
 
-    // Fire
+    // Fire (held)
     out.firePrimary = this.mouseDownL;
     out.fireSecondary = this.mouseDownR;
 
@@ -107,7 +229,6 @@ export class InputManager {
   }
 
   private clientToLogic(logicW: number, logicH: number): { x: number; y: number } {
-  
     const pw = this.present.dw;
     const ph = this.present.dh;
     const usePresent = pw > 1 && ph > 1;
@@ -117,20 +238,22 @@ export class InputManager {
     let w = 1;
     let h = 1;
 
+    const c = this.getCanvas();
+    if (!c) return { x: logicW * 0.5, y: logicH * 0.5 };
+
+    const r = c.getBoundingClientRect();
+
     if (usePresent) {
-      // present rect je už ve správných CSS souřadnicích
-      left = this.present.ox;
-      top  = this.present.oy;
-      w    = Math.max(1, pw);
-      h    = Math.max(1, ph);
+      // present rect is RELATIVE to canvas (CSS px), therefore + r.left/top
+      left = r.left + this.present.ox;
+      top = r.top + this.present.oy;
+      w = Math.max(1, this.present.dw);
+      h = Math.max(1, this.present.dh);
     } else {
-      const c = this.getCanvas();
-      if (!c) return { x: logicW * 0.5, y: logicH * 0.5 };
-      const r = c.getBoundingClientRect();
       left = r.left;
-      top  = r.top;
-      w    = Math.max(1, r.width);
-      h    = Math.max(1, r.height);
+      top = r.top;
+      w = Math.max(1, r.width);
+      h = Math.max(1, r.height);
     }
 
     const nx = (this.mouseClientX - left) / w;

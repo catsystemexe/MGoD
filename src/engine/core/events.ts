@@ -41,7 +41,7 @@ export type CMEventMap = {
     owner: EntityRef;
     origin: Vec2;
     dir: Vec2;
-    weapon: "primary" | "secondary";
+    weaponTypeId: string; // concrete weapon id (e.g. "w1.basic")
   };
 
   [EventType.SPAWN_BOMB]: {

@@ -70,6 +70,7 @@ export class WebGLSceneRenderer {
   private uColor: WebGLUniformLocation;
 
   private sprites: SpriteSystem;
+  private projSprites: SpriteSystem;
 
   
   constructor(
@@ -141,6 +142,12 @@ export class WebGLSceneRenderer {
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
+
+    this.projSprites = new SpriteSystem(gl);
+    void this.projSprites
+      .load("/assets/sprites/w1_projectiles.atlas.json", "/assets/sprites/w1_projectiles.png")
+      .catch((err) => console.warn("[SPRITES] projSprites load failed", err));
+    
     }
   
   render(alpha: number = 1): void {
@@ -348,10 +355,13 @@ export class WebGLSceneRenderer {
 
           this.sprites.prog.end();
 
-          // restore for quad path (optional, safe)
+          // restore for quad path
           gl.disable(gl.BLEND);
 
-          // IMPORTANT: skip quad fallback draw
+          // IMPORTANT: sprite path handled, skip quad draw for this entity
+          gl.useProgram(this.prog);
+          gl.bindVertexArray(this.vao);
+          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
           return;
 
 
@@ -360,6 +370,69 @@ export class WebGLSceneRenderer {
         }
       }
 
+
+      // --- SPRITE DRAW (projectile W1) ---
+      if (kind === "projectile" && this.projSprites?.ready && this.projSprites.atlas && this.projSprites.tex.ready) {
+        const atlas = this.projSprites.atlas;
+
+        // anim frame (desync per-entity using ref)
+        const refStr = String(_ref ?? "");
+        let hsh = 0;
+        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
+        const phase = ((hsh >>> 0) % 1000) / 1000;
+
+        const weaponTypeId = String((e as any).weaponTypeId ?? "");
+        const animId =
+          weaponTypeId === "w1.basic" ? "projectile.w1" :
+          "projectile.w1"; // fallback for now
+
+        const fr = atlas.pickAnimFrame(animId, tSec + phase);
+        if (fr) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+          // rotation from velocity
+          const v = (e as any).vel;
+          const vx = typeof v?.x === "number" ? v.x : 1;
+          const vy = typeof v?.y === "number" ? v.y : 0;
+
+          // pokud tvoje střela míří doprava v PNG, ROT_OFFSET = 0
+          const ROT_OFFSET = 0;
+          const rot = Math.atan2(vy, vx) + ROT_OFFSET;
+
+          this.projSprites.prog.begin(
+            this.logicW,
+            this.logicH,
+            this.projSprites.tex.tex,
+            this.projSprites.tex.w,
+            this.projSprites.tex.h,
+          );
+
+          // uPos je střed entity; pivot máme 16,8 => sedí
+          this.projSprites.prog.draw(
+            ix, iy,
+            fr.w, fr.h,
+            fr.px, fr.py,
+            rot,
+            fr.x, fr.y, fr.w, fr.h,
+            1, 1, 1, 1,
+          );
+
+          this.projSprites.prog.end();
+          gl.disable(gl.BLEND);
+
+          // restore quad pipeline for subsequent entities (enemies, pickups, etc.)
+          gl.useProgram(this.prog);
+          gl.bindVertexArray(this.vao);
+          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+
+          return;
+        }
+      }
+
+
+
+      
       // --- QUAD FALLBACK (original) ---
       gl.uniform2f(this.uPos, ix, iy);
       gl.uniform2f(this.uSize, w, h);

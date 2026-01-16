@@ -9,7 +9,7 @@ import { PickupSystem } from "../systems/PickupSystem";
 import { DIRECTOR_DEFS_MVP } from "../defs/DirectorDefs";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import { makeSessionState } from "../data/SessionState";
-
+import { WEAPON_DB } from "../defs/WeaponDB";
 import { FlowDispatcher } from "../systems/FlowDispatcher";
 import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
@@ -34,10 +34,10 @@ import { VFXSystem } from "../vfx/VFXSystem";
 
 
 
-// fallback config kdybys neměl WEAPONS_MVP
 const WEAPONS_FALLBACK: any = {
-  primary: { cooldownSec: 0.12 },
-  secondary: { cooldownSec: 0.25 },
+  primary: "w1.basic",
+  secondary: "w2.basic",
+  bomb: "b1.basic",
   bombCooldownSec: 0.8,
 };
 
@@ -134,15 +134,11 @@ export async function createGame(
 
   const flow = new FlowSystem(flowDispatcher);
   // ---- Spawn system (Director-owned requests are applied here)
-  const spawnCfg = {
-    rng01: Math.random, // ✅ fresh random
-    logicSize: { w: LOGIC_W, h: LOGIC_H },
-    projectile: {
-      primary: { speed: 220, ttlSec: 0.8, damage: 3, radius: 2 },
-      secondary: { speed: 200, ttlSec: 0.8, damage: 2, radius: 2 },
-    },
-    bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
-  };
+        const spawnCfg = {
+          rng01: Math.random,
+          logicSize: { w: LOGIC_W, h: LOGIC_H },
+          weaponDb: WEAPON_DB,
+        };
 
  
   const pickupSystem = new PickupSystem(store as any);
@@ -274,10 +270,10 @@ export async function createGame(
     weaponsCfg = WEAPONS_FALLBACK;
   }
 
-  const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, {
-    onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
-    onTracer: (p: any) => vfx.onTracer(p), // tracer
-  });
+        const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, {
+          onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
+          onTracer: (p: any) => vfx.onTracer(p), // tracer
+        });
   const projectileSystem = new ProjectileSystem(bus as any, store as any);
   const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
   // ---- Impact

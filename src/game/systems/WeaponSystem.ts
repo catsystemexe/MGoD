@@ -17,7 +17,7 @@ import type { EventBus } from "../../engine/core/EventBus";
 import { Phase } from "../../engine/core/EventBus";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
-import type { WeaponsConfig, WeaponId } from "../defs/Weapons";
+import type { WeaponsConfig, WeaponSlotId, WeaponDB, WeaponTypeId } from "../defs/Weapons";
 
 export type WeaponSnapshot = {
   shipRef: EntityRef;
@@ -65,84 +65,86 @@ export class WeaponSystem {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
     private readonly cfg: WeaponsConfig,
+    private readonly db: WeaponDB,
     private readonly opts?: {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
     },
   ) {}
 
-    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
-      // NOTE: Phase guard removed (EventBus doesn't expose getCurrentPhase in current typings).
-      // If you want this check back, add getCurrentPhase() to EventBus implementation + type.
-
-    // cooldown decay
-    this.st.cdPrimary = Math.max(0, this.st.cdPrimary - dtSec);
-    this.st.cdSecondary = Math.max(0, this.st.cdSecondary - dtSec);
-    this.st.cdBomb = Math.max(0, this.st.cdBomb - dtSec);
-
-    const dir = dirFromAimTarget(snap.shipPos, actions.aimTarget);
-
-    this.st.cdPrimary = tryFire(
-      !!actions.firePrimary,
-      this.st.cdPrimary,
-      this.cfg.primary.cooldownSec,
-      () => this.emitProjectile("primary", snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
-    );
-
-    this.st.cdSecondary = tryFire(
-      !!actions.fireSecondary,
-      this.st.cdSecondary,
-      this.cfg.secondary.cooldownSec,
-      () => this.emitProjectile("secondary", snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
-    );
-
-    this.st.cdBomb = tryFire(
-      !!actions.bombPressed,
-      this.st.cdBomb,
-      this.cfg.bombCooldownSec,
-      () => {
-        this.bus.emitNext(EventType.SPAWN_BOMB, {
-          owner: snap.shipRef,
-          origin: { ...snap.shipPos },
-          target: { ...actions.bombTarget },
-        });
-      },
-    );
-  }
   private emitProjectile(
-    weapon: WeaponId,
+    weaponTypeId: WeaponTypeId,
     owner: EntityRef,
-    origin: Vec2,
-    dir: Vec2,
-    vel: Vec2 | undefined,
+    shipPos: Vec2,
+    dirIn: Vec2,
+    shipVel: Vec2 | undefined,
     dtSec: number,
   ): void {
-    // --- muzzle offset: spawn projectile in front of ship nose ---
-    // NOTE: tune these constants to match core.png (ship frame 56x56, pivot 28,28)
-    const MUZZLE_OFFSET_PX = 26; // start with ~half sprite; tweak (22..30)
+    const dir = safeUnitDir(dirIn);
 
-    const o = origin; // ship center
-    const mx = o.x + dir.x * MUZZLE_OFFSET_PX;
-    const my = o.y + dir.y * MUZZLE_OFFSET_PX;
+    // spawn point: před přídí (tweak)
+    const MUZZLE = 12; // px dopředu od středu ship
+    const ox = shipPos.x + dir.x * MUZZLE;
+    const oy = shipPos.y + dir.y * MUZZLE;
 
+    // cosmetic hooks (muzzle + tracer)
+    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+
+    // event pro SpawnSystem (jde do next ticku)
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
-      weapon,
       owner,
-      origin: { x: mx, y: my },
-      dir: { ...dir },
+      origin: { x: ox, y: oy },
+      dir: { x: dir.x, y: dir.y },
+      weaponTypeId: String(weaponTypeId),
     });
 
-    // cosmetic hooks (muzzle + tracer) — lead to match render interpolation
-    const vx = vel?.x ?? 0;
-    const vy = vel?.y ?? 0;
-
-    // lead = půl ticku (nejbližší tomu, co vidíš v renderu)
-    const lead = 0.5 * dtSec;
-
-    const ox = mx + vx * lead;
-    const oy = my + vy * lead;
-
-    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    // tracer hook (volitelně, klidně stejně jako muzzle)
     this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
-}
+  }
+
+  
+   update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
+     // cooldown decay
+     this.st.cdPrimary = Math.max(0, this.st.cdPrimary - dtSec);
+     this.st.cdSecondary = Math.max(0, this.st.cdSecondary - dtSec);
+     this.st.cdBomb = Math.max(0, this.st.cdBomb - dtSec);
+
+     const dir = dirFromAimTarget(snap.shipPos, actions.aimTarget);
+
+     const primaryId = this.cfg.primary;
+     const secondaryId = this.cfg.secondary;
+     const bombId = this.cfg.bomb;
+
+     const primary = this.db[primaryId];
+     const secondary = this.db[secondaryId];
+     const bomb = this.db[bombId];
+
+     this.st.cdPrimary = tryFire(
+       !!actions.firePrimary,
+       this.st.cdPrimary,
+       Number(primary?.cooldownSec ?? 0.12),
+       () => this.emitProjectile(primaryId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
+     );
+
+     this.st.cdSecondary = tryFire(
+       !!actions.fireSecondary,
+       this.st.cdSecondary,
+       Number(secondary?.cooldownSec ?? 0.25),
+       () => this.emitProjectile(secondaryId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
+     );
+
+     this.st.cdBomb = tryFire(
+       !!actions.bombPressed,
+       this.st.cdBomb,
+       Number(bomb?.cooldownSec ?? this.cfg.bombCooldownSec ?? 0.8),
+       () => {
+         this.bus.emitNext(EventType.SPAWN_BOMB, {
+           owner: snap.shipRef,
+           origin: { ...snap.shipPos },
+           target: { ...actions.bombTarget },
+         });
+       },
+     );
+   }
+ 
 }

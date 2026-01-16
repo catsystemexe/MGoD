@@ -14,22 +14,18 @@ import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 
 type Vec2 = { x: number; y: number };
 
-export type WeaponId = "primary" | "secondary";
+import type { WeaponDB } from "../defs/Weapons";
 
 export interface SpawnSystemConfig {
   rng01: () => number;
   logicSize: { w: number; h: number };
-
-  projectile: Record<WeaponId, { speed: number; ttlSec: number; damage: number; radius: number }>;
-  bomb: { travelSec: number; damage: number; radius: number; ttlSec: number };
-  pickup?: { ttlSec: number; radius: number; fallSpeed: number };
-  // onTracer / muzzle sem nepatří (řeší WeaponSystem opts kvůli interpolaci renderu)
+  weaponDb: WeaponDB;
 }
 
 export interface ProjectileEntity extends BaseEntity {
   kind: "projectile";
   owner: EntityRef;
-  weapon: WeaponId;
+  weaponTypeId: string;
   pos: Vec2;
   vel: Vec2;
   ttl: number;
@@ -83,7 +79,9 @@ export class SpawnSystem {
     if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
     }
-    if (!this.cfg.projectile || !this.cfg.bomb) throw new Error(`[SpawnSystem] cfg.projectile and cfg.bomb must be defined`);
+    if (!this.cfg.weaponDb || typeof this.cfg.weaponDb !== "object") {
+      throw new Error(`[SpawnSystem] cfg.weaponDb must be provided (WeaponDB)`);
+    }
   }
 
   update(_ctx: TickContext, events: Array<AnyEvent<CMEventMap>>): void {
@@ -91,55 +89,72 @@ export class SpawnSystem {
       switch (e.type) {
         case EventType.SPAWN_PROJECTILE: {
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
-          const wcfg = this.cfg.projectile[p.weapon];
-          if (!wcfg) break;
+ 
+          
+          const def = this.cfg.weaponDb[p.weaponTypeId];
+          const wcfg = def?.projectile;
+          if (!wcfg) {
+            if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
+              console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", p.weaponTypeId, "def=", def);
+            }
+            break;
+          }
 
+          // DEBUG: enable in browser console: window.__CM_DEBUG_PROJECTILES = true
+          if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
+            // keep it small to avoid spam
+            console.log("[SPAWN_PROJECTILE]", p.weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);
+          }
+          
           const dx = p.dir.x;
           const dy = p.dir.y;
           const len = Math.hypot(dx, dy) || 1;
           const nx = dx / len;
           const ny = dy / len;
+  this.store.spawn((ent: any) => {
+    ent.kind = "projectile";
+    ent.owner = p.owner;
+    ent.weaponTypeId = p.weaponTypeId;
 
-this.store.spawn((ent: any) => {
-ent.kind = "projectile";
-ent.owner = p.owner;
-ent.weapon = p.weapon;
-ent.pos = { x: p.origin.x, y: p.origin.y };
-ent.posPrev = { x: ent.pos.x, y: ent.pos.y };
-ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
-ent.ttl = Math.max(0.001, wcfg.ttlSec);
-ent.damage = wcfg.damage;
-ent.radius = wcfg.radius;
-ent.consumed = false;
-ent.pendingKill = false;
-          });
+    ent.pos = { x: p.origin.x, y: p.origin.y };
+    ent.posPrev = { x: ent.pos.x, y: ent.pos.y };
+
+    ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
+    ent.ttl = Math.max(0.001, wcfg.ttlSec);
+    ent.damage = wcfg.damage;
+    ent.radius = wcfg.radius;
+
+     // keep these for collision/damage
+    ent.consumed = false;
+    ent.pendingKill = false;
+  });
 
           break;
         }
 
-        case EventType.SPAWN_BOMB: {
-          const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
-          const b = this.cfg.bomb;
+         //case EventType.SPAWN_BOMB: {
+           // //const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
+           //const b = this.cfg.bomb;
 
-          const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
-          const travel = Math.max(0.001, b.travelSec);
-          const vx = to.x / travel;
-          const vy = to.y / travel;
+           //const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
+           //const travel = Math.max(0.001, b.travelSec);
+           //const vx = to.x / travel;
+           //const vy = to.y / travel;
 
-          this.store.spawn((ent: any) => {
-            ent.kind = "bomb";
-            ent.owner = p.owner;
-            ent.pos = { x: p.origin.x, y: p.origin.y };
+           //this.store.spawn((ent: any) => {
+           //ent.kind = "bomb";
+           //ent.owner = p.owner;
+           //ent.pos = { x: p.origin.x, y: p.origin.y };
              // ent.posPrev = { x: p.origin.x, y: p.origin.y };
-            ent.vel = { x: vx, y: vy };
-            ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
-            ent.damage = b.damage;
-            ent.radius = b.radius;
-            ent.target = { x: p.target.x, y: p.target.y };
-            ent.pendingKill = false;
-          });
-          break;
-        }
+           //ent.vel = { x: vx, y: vy };
+           //ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
+           //ent.damage = b.damage;
+           //ent.radius = b.radius;
+           //ent.target = { x: p.target.x, y: p.target.y };
+           //ent.pendingKill = false;
+       //});
+           //break;
+       //}
 
         case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
@@ -210,27 +225,27 @@ ent.pendingKill = false;
           break;
         }
 
-        case EventType.SPAWN_PICKUP: {
-          const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-          const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+         //case EventType.SPAWN_PICKUP: {
+           //const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
+           //const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
 
-          this.store.spawn((ent: any) => {
-            ent.kind = "pickup";
-            ent.defId = String(p.defId ?? "unknown");
+           //this.store.spawn((ent: any) => {
+           //ent.kind = "pickup";
+           //ent.defId = String(p.defId ?? "unknown");
 
-            const x = p.pos.x;
-            const y = p.pos.y;
+           //const x = p.pos.x;
+           //const y = p.pos.y;
 
-            ent.pos = { x, y };
-            ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
+           //ent.pos = { x, y };
+           //ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
 
-            ent.vel = { x: 0, y: pcfg.fallSpeed };
-            ent.radius = pcfg.radius;
-            ent.ttl = pcfg.ttlSec;
-            ent.pendingKill = false;
-          });
-          break;
-        }
+           //ent.vel = { x: 0, y: pcfg.fallSpeed };
+           //ent.radius = pcfg.radius;
+           //ent.ttl = pcfg.ttlSec;
+           //ent.pendingKill = false;
+       //});
+           //break;
+       //}
 
         default:
           break;

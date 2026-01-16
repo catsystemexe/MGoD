@@ -103,6 +103,19 @@ function ensureWebGLCanvas(): HTMLCanvasElement {
     c.style.background = "black";
     c.style.imageRendering = "pixelated";
     root.appendChild(c);
+
+    (c as any).tabIndex = 0;
+    (c.style as any).outline = "none";
+
+    // focus canvas so arrows/WASD go to the game (Replit preview otherwise steals keys)
+    c.addEventListener(
+      "pointerdown",
+      (e) => {
+        try { (e as any).preventDefault?.(); } catch {}
+        try { (c as any).focus?.(); } catch {}
+      },
+      { passive: false },
+    );
   }
   return c;
 }
@@ -215,11 +228,16 @@ async function main() {
   // iPad/touch: start also by tapping/clicking anywhere (register ONCE)
   window.addEventListener(
     "pointerdown",
-    () => {
-      // ✅ touch/click starts game ONLY from TITLE
-      if (hudMode === "TITLE") startPlay();
+    (e) => {
+      // start only from TITLE; also prevent wrapper drag/select
+      if (hudMode === "TITLE") {
+        e.preventDefault();
+        e.stopPropagation();
+        startPlay();
+        try { (document.querySelector("canvas#game") as any)?.focus?.(); } catch {}
+      }
     },
-    { passive: true },
+    { passive: false, capture: true },
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
