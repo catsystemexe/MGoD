@@ -15,7 +15,13 @@ export class SpriteAtlas {
     const a = this.anim(animKey);
     if (!a || !a.frames?.length) return null;
     const fps = Number(a.fps ?? 10) || 10;
-    const idx = Math.floor(tSec * fps) % a.frames.length;
+    const raw = Math.floor(tSec * fps);
+
+    const loop = a.loop !== false; // default true
+    const idx = loop
+      ? (raw % a.frames.length)
+      : Math.min(raw, a.frames.length - 1);
+
     return this.frame(a.frames[idx]);
   }
 

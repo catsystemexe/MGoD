@@ -6,7 +6,7 @@ type Vec2 = { x: number; y: number };
 
 // Minimal shape we need from moving ttl entities
 export interface MovingTTL {
-  kind: "projectile" | "particle" | "bomb";
+  kind: "projectile" | "particle" | "bomb" | "fx";
   pos: Vec2;
   vel: Vec2;
   ttl: number;
@@ -27,7 +27,7 @@ export class ProjectileSystem {
 
     this.store.debugForEachAlive((_ref, e: MovingTTL) => {
       if (!e) return;
-      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb") return;
+      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb" && e.kind !== "fx") return;
       if (e.pendingKill) return;
 
       // posPrev snapshot for render interpolation (BEFORE movement)
@@ -48,7 +48,7 @@ export class ProjectileSystem {
       if (e.kind === "projectile") {
         if ((e as any).consumed || e.ttl <= 0) e.pendingKill = true;
       } else {
-        // particle OR bomb
+        // particle OR bomb OR fx
         if (e.ttl <= 0) e.pendingKill = true;
       }
     });

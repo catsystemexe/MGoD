@@ -15,6 +15,27 @@ type DirectorDeps = {
 
 const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 
+function getPatternTotalCap(def: any): number | undefined {
+  const p = def?.pattern;
+  if (!p || typeof p !== "object") return undefined;
+
+  if (p.kind === "ring") {
+    const c = Number(p.count);
+    return Number.isFinite(c) && c > 0 ? c : undefined;
+  }
+
+  // grid/line používá cols/rows u tebe v JSON (viz directorWaves.json)
+  const cols = Number(p.cols);
+  const rows = Number(p.rows);
+
+  if (Number.isFinite(cols) && cols > 0 && Number.isFinite(rows) && rows > 0) {
+    return cols * rows;
+  }
+
+  return undefined;
+}
+
+
 export class DirectorSystem {
   private difficulty = 1;
   private t = 0;
@@ -236,11 +257,21 @@ export class DirectorSystem {
       const MAX_SPAWNS_PER_TICK = 8;
       let spawnedNow = 0;
 
+      const totalCap = getPatternTotalCap(w.def as any);
+
       while (w.acc >= period && spawnedNow < MAX_SPAWNS_PER_TICK) {
+        // ✅ if pattern defines finite slots, spawn only once per slot (no replacements)
+        if (typeof totalCap === "number" && w.spawned >= totalCap) {
+          // prevent accumulator runaway
+          w.acc = Math.min(w.acc, period * 0.99);
+          break;
+        }
+
         w.acc -= period;
 
         // compute spawn for this wave/ordinal
         const idx = w.spawned;
+      
         const ptn: any = (w.def as any).pattern;
         let spawn: any = undefined;
 

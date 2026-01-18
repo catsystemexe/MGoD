@@ -151,6 +151,8 @@ export async function createGame(
     let n = 0;
     store.debugForEachAlive((_ref, e: any) => {
       if (e?.kind === "enemy" && !e.pendingKill) n++;
+      // DEV only
+      // console.log("[DBG] enemy missing waveId", { id: e.id, typeId: e.typeId, spriteId: e.spriteId });
     });
     return n;
   }
@@ -274,8 +276,9 @@ export async function createGame(
           onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
           onTracer: (p: any) => vfx.onTracer(p), // tracer
         });
-  const projectileSystem = new ProjectileSystem(bus as any, store as any);
-  const enemySystem = new EnemySystem(store as any, LOGIC_W, LOGIC_H);
+        const projectileSystem = new ProjectileSystem(bus as any, store as any);
+        const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H);
+        
   // ---- Impact
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
   const caImpact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });

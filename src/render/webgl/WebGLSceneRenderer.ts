@@ -68,9 +68,10 @@ export class WebGLSceneRenderer {
   private uPos: WebGLUniformLocation;
   private uSize: WebGLUniformLocation;
   private uColor: WebGLUniformLocation;
-
+  private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
+  private enemySprites: SpriteSystem;
 
   
   constructor(
@@ -143,10 +144,25 @@ export class WebGLSceneRenderer {
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
 
+
+    this.fxSprites = new SpriteSystem(gl);
+    void this.fxSprites
+      .load("/assets/sprites/explosion_bug1.atlas.json", "/assets/sprites/explosion_bug1.png")
+      .catch((err) => console.warn("[SPRITES] fxSprites load failed", err));
+
+    
     this.projSprites = new SpriteSystem(gl);
     void this.projSprites
       .load("/assets/sprites/w1_projectiles.atlas.json", "/assets/sprites/w1_projectiles.png")
       .catch((err) => console.warn("[SPRITES] projSprites load failed", err));
+
+
+    this.enemySprites = new SpriteSystem(gl);
+    void this.enemySprites
+      .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
+      .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
+
+
     
     }
   
@@ -430,8 +446,101 @@ export class WebGLSceneRenderer {
         }
       }
 
+      // --- SPRITE DRAW (enemy MVP) ---
+      if (kind === "enemy" && this.enemySprites?.ready && this.enemySprites.atlas && this.enemySprites.tex.ready) {
+        const atlas = this.enemySprites.atlas;
 
+        const refStr = String(_ref ?? "");
+        let hsh = 0;
+        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
+        const phase = ((hsh >>> 0) % 1000) / 1000;
 
+        const animId = String((e as any).animId ?? (e as any).spriteId ?? "");
+        const spriteId = String((e as any).spriteId ?? "");
+
+        const fr =
+          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
+          (spriteId && atlas.frame(spriteId)) ||
+          (spriteId && atlas.frame(spriteId + ".0")) ||
+          null;
+
+        if (fr) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+          this.enemySprites.prog.begin(
+            this.logicW,
+            this.logicH,
+            this.enemySprites.tex.tex,
+            this.enemySprites.tex.w,
+            this.enemySprites.tex.h,
+          );
+
+          this.enemySprites.prog.draw(
+            ix, iy,
+            fr.w, fr.h,
+            fr.px, fr.py,
+            0,
+            fr.x, fr.y, fr.w, fr.h,
+            1, 1, 1, 1,
+          );
+
+          this.enemySprites.prog.end();
+          gl.disable(gl.BLEND);
+
+          gl.useProgram(this.prog);
+          gl.bindVertexArray(this.vao);
+          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+          return;
+        }
+      }
+      // --- SPRITE DRAW (fx MVP: explosions) ---
+      if (kind === "fx" && this.fxSprites?.ready && this.fxSprites.atlas && this.fxSprites.tex.ready) {
+        const atlas = this.fxSprites.atlas;
+
+        const refStr = String(_ref ?? "");
+        let hsh = 0;
+        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
+        const phase = ((hsh >>> 0) % 1000) / 1000;
+
+        const animId = String((e as any).animId ?? "");
+        const spriteId = String((e as any).spriteId ?? "");
+
+        const fr =
+          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
+          (spriteId && atlas.frame(spriteId)) ||
+          null;
+
+        if (fr) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+          this.fxSprites.prog.begin(
+            this.logicW,
+            this.logicH,
+            this.fxSprites.tex.tex,
+            this.fxSprites.tex.w,
+            this.fxSprites.tex.h,
+          );
+
+          this.fxSprites.prog.draw(
+            ix, iy,
+            fr.w, fr.h,
+            fr.px, fr.py,
+            0,
+            fr.x, fr.y, fr.w, fr.h,
+            1, 1, 1, 1,
+          );
+
+          this.fxSprites.prog.end();
+          gl.disable(gl.BLEND);
+
+          gl.useProgram(this.prog);
+          gl.bindVertexArray(this.vao);
+          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+          return;
+        }
+      }
       
       // --- QUAD FALLBACK (original) ---
       gl.uniform2f(this.uPos, ix, iy);

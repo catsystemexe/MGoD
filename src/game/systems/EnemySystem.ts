@@ -10,6 +10,15 @@ const DEV = Boolean((globalThis as any).__DEV__);
 const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 const safeNum = (n: unknown, fallback = 0) => (isFiniteNum(n) ? n : fallback);
 
+function smoothTo(cur: number, target: number, easeSec: number, dt: number): number {
+  // exponential smoothing: alpha = 1 - exp(-dt / tau)
+  const tau = Math.max(0.0001, Number.isFinite(easeSec) ? easeSec : 0.12);
+  const a = 1 - Math.exp(-dt / tau);
+  const c = Number.isFinite(cur) ? cur : 0;
+  const t = Number.isFinite(target) ? target : c;
+  return c + (t - c) * a;
+}
+
 export class EnemySystem {
   constructor(
     private readonly store: EntityStore<any>,
@@ -46,15 +55,25 @@ export class EnemySystem {
       const a = e as any;
       if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
       else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
-         
-          
 
       // --- HIT FLASH timer (seconds) ---
-      // normalize to finite number every tick
       {
         const hf = Number(e.hitFlashT ?? 0);
         if (Number.isFinite(hf) && hf > 0) e.hitFlashT = Math.max(0, hf - dt);
         else e.hitFlashT = 0;
+      }
+
+      // --- AI overlay smoothing (future-ready; no effect on vel yet) ---
+      {
+        const hasAi = e.ai && typeof e.ai === "object";
+        if (hasAi) {
+          const curW = Number(e.aiWeight ?? 0);
+          const tgtW = Number(e.aiWeightTarget ?? curW);
+          const easeSec = Number(e.aiEaseSec ?? 0.12);
+          const w = smoothTo(curW, tgtW, easeSec, dt);
+          e.aiWeight = w;
+          if (!Number.isFinite(e.aiWeightTarget)) e.aiWeightTarget = w;
+        }
       }
 
       // behavior id (TS-safe)
@@ -104,13 +123,14 @@ export class EnemySystem {
       if (e.pos.y < -1 && e.vel.y === 0) {
         e.vel.y = 40;
       }
-// integrate movement (single authority)
-e.pos.x += e.vel.x * dt;
-e.pos.y += e.vel.y * dt;
 
-// offscreen cull
-const r = safeNum(e.radius, 4);
-if (e.pos.y > H + r + 8) this.store.markKill(ref);
-});
-}
+      // integrate movement (single authority)
+      e.pos.x += e.vel.x * dt;
+      e.pos.y += e.vel.y * dt;
+
+      // offscreen cull
+      const r = safeNum(e.radius, 4);
+      if (e.pos.y > H + r + 8) this.store.markKill(ref);
+    });
+  }
 }

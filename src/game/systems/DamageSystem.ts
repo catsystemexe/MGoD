@@ -29,17 +29,19 @@ export class DamageSystem<T extends BaseEntity> {
     for (const e of events) {
       switch (e.type) {
         case EventType.PROJECTILE_HIT_ENEMY: {
-          const { enemy, projectile } = e.payload as {
-            enemy: EntityRef;
-            projectile: EntityRef;
-          };
+          const { enemy, projectile } = e.payload as { enemy: EntityRef; projectile: EntityRef };
 
-          // --- HIT FX (state-only)
           const enemyEnt: any = this.store.get(enemy);
           const projEnt: any = this.store.get(projectile);
 
+          // --- HIT FX (state-only)
           if (enemyEnt) {
             enemyEnt.hitFlashT = Math.max(Number(enemyEnt.hitFlashT ?? 0), 0.06);
+
+            // future-ready: rail -> chase trigger on hit (only if enemy has ai overlay)
+            if (enemyEnt.ai && typeof enemyEnt.ai === "object") {
+              enemyEnt.aiWeightTarget = 1;
+            }
           }
 
           // shards particles (optional)
@@ -50,15 +52,13 @@ export class DamageSystem<T extends BaseEntity> {
             const dx = vx / len;
             const dy = vy / len;
 
-            if (enemyEnt && this.rules.onHitSpark) {
-              this.rules.onHitSpark({
-                x: enemyEnt.pos.x,
-                y: enemyEnt.pos.y,
-                dx,
-                dy,
-              });
-            }
-            
+            this.rules.onHitSpark?.({
+              x: Number(enemyEnt.pos?.x ?? 0),
+              y: Number(enemyEnt.pos?.y ?? 0),
+              dx,
+              dy,
+            });
+
             const count = 6;
             const baseSpeed = 120;
             const spread = 0.45;
@@ -75,7 +75,8 @@ export class DamageSystem<T extends BaseEntity> {
 
               (this.store as any).spawn((p: any) => {
                 p.kind = "particle";
-                p.pos = { x: enemyEnt.pos.x, y: enemyEnt.pos.y };
+                p.pos = { x: Number(enemyEnt.pos?.x ?? 0), y: Number(enemyEnt.pos?.y ?? 0) };
+                p.posPrev = { x: p.pos.x, y: p.pos.y };
                 p.vel = { x: sx * sp, y: sy * sp };
                 p.ttl = ttl;
                 p.pendingKill = false;
@@ -130,7 +131,6 @@ export class DamageSystem<T extends BaseEntity> {
     p.invulnT = Math.max(Number(p.invulnT ?? 0), 0.75);
     p.hitFlashT = Math.max(Number(p.hitFlashT ?? 0), 0.1);
 
-    // emit Flow-owned result
     this.bus.emit(EventType.ENTITY_DAMAGED, {
       target: playerRef,
       amount: dmg,
@@ -139,9 +139,9 @@ export class DamageSystem<T extends BaseEntity> {
     });
 
     if (Number(p.energy) <= 0) {
-      // ✅ player entita zůstává (stabilní ref). Jen přepneme do "dead" stavu.
-      p.deadT = Math.max(Number(p.deadT ?? 0), 1.0); // drž mrtvý stav min. 1s (respawn delay)
-      p.invulnT = Math.max(Number(p.invulnT ?? 0), 999); // žádné další kontakty během dead
+      // player entity stays (stable ref). Switch to dead state.
+      p.deadT = Math.max(Number(p.deadT ?? 0), 1.0); // respawn delay
+      p.invulnT = Math.max(Number(p.invulnT ?? 0), 999);
 
       this.bus.emit(EventType.ENTITY_KILLED, {
         target: playerRef,
@@ -154,27 +154,60 @@ export class DamageSystem<T extends BaseEntity> {
   private applyHpDamage(target: EntityRef, amount: number, source: string): void {
     const ent: any = this.store.get(target);
     if (!ent) return;
+
+    // guard: already dead / dying
     if (ent.pendingKill) return;
-
     if (typeof ent.hp !== "number") return;
+    if (ent.hp <= 0) return;
 
-    ent.hp -= amount;
+    const dmg = Math.max(0, Number(amount ?? 0));
+    if (!(dmg > 0)) return;
+
+    ent.hp -= dmg;
 
     this.bus.emit(EventType.ENTITY_DAMAGED, {
       target,
-      amount,
+      amount: dmg,
       hpAfter: ent.hp,
       source,
     });
 
-    if (ent.hp <= 0) {
-      this.store.markKill(target);
+    if (ent.hp > 0) return;
 
-      this.bus.emit(EventType.ENTITY_KILLED, {
-        target,
-        source,
-        isPlayer: false,
+    // idempotent kill path
+    if ((ent as any).__deathFxDone) {
+      this.store.markKill(target);
+      return;
+    }
+    (ent as any).__deathFxDone = true;
+
+    // markKill EARLY so other systems skip it in same tick
+    this.store.markKill(target);
+
+    // explosion FX (sprite-driven)
+    if (typeof (this.store as any).spawn === "function" && ent?.pos) {
+      const ex = Number(ent.pos.x ?? 0);
+      const ey = Number(ent.pos.y ?? 0);
+
+      (this.store as any).spawn((fx: any) => {
+        fx.kind = "fx";
+        fx.pos = { x: ex, y: ey };
+        fx.posPrev = { x: ex, y: ey };
+        fx.vel = { x: 0, y: 0 };
+
+        fx.animId = "fx.explosion.bug1";
+        fx.spriteId = "fx.explosion.bug1.0";
+
+        fx.ttl = 0.45;
+        fx.pendingKill = false;
       });
     }
+
+    // SINGLE kill emit (no duplicates)
+    this.bus.emit(EventType.ENTITY_KILLED, {
+      target,
+      source,
+      isPlayer: false,
+    });
   }
 }

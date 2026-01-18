@@ -26,7 +26,12 @@ export interface ProjectileEntity extends BaseEntity {
   kind: "projectile";
   owner: EntityRef;
   weaponTypeId: string;
-  pos: Vec2;
+  
+    // Sprite MVP v1 (optional; renderer falls back if missing)
+    spriteId?: string;
+    animId?: string;
+
+pos: Vec2;
   vel: Vec2;
   ttl: number;
   damage: number;
@@ -48,7 +53,13 @@ export interface BombEntity extends BaseEntity {
 export interface PickupEntity extends BaseEntity {
   kind: "pickup";
   defId: string;
-  pos: Vec2;
+  
+
+    // Sprite MVP v1 (optional; renderer falls back if missing)
+    spriteId?: string;
+    animId?: string;
+
+pos: Vec2;
   vel: Vec2;
   radius: number;
   ttl: number;
@@ -58,7 +69,13 @@ export interface EnemyEntity extends BaseEntity {
   kind: "enemy";
     typeId: EnemyTypeId;
     waveId?: string;
-  pos: Vec2;
+  
+
+    // Sprite MVP v1 (optional; renderer falls back if missing)
+    spriteId?: string;
+    animId?: string;
+
+pos: Vec2;
   vel: Vec2;
   hp: number;
   radius: number;
@@ -116,6 +133,12 @@ export class SpawnSystem {
     ent.owner = p.owner;
     ent.weaponTypeId = p.weaponTypeId;
 
+
+      // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
+      // Later: weapon DB can override this.
+      ent.animId = "projectile.w1";
+      ent.spriteId = "projectile.w1.0";
+
     ent.pos = { x: p.origin.x, y: p.origin.y };
     ent.posPrev = { x: ent.pos.x, y: ent.pos.y };
 
@@ -132,29 +155,30 @@ export class SpawnSystem {
           break;
         }
 
-         //case EventType.SPAWN_BOMB: {
-           // //const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
-           //const b = this.cfg.bomb;
+          /* case EventType.SPAWN_BOMB: {
+            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
+            // const b = this.cfg.bomb;
 
-           //const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
-           //const travel = Math.max(0.001, b.travelSec);
-           //const vx = to.x / travel;
-           //const vy = to.y / travel;
+            // const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
+            // const travel = Math.max(0.001, b.travelSec);
+            // const vx = to.x / travel;
+            // const vy = to.y / travel;
 
-           //this.store.spawn((ent: any) => {
-           //ent.kind = "bomb";
-           //ent.owner = p.owner;
-           //ent.pos = { x: p.origin.x, y: p.origin.y };
-             // ent.posPrev = { x: p.origin.x, y: p.origin.y };
-           //ent.vel = { x: vx, y: vy };
-           //ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
-           //ent.damage = b.damage;
-           //ent.radius = b.radius;
-           //ent.target = { x: p.target.x, y: p.target.y };
-           //ent.pendingKill = false;
-       //});
-           //break;
-       //}
+            // this.store.spawn((ent: any) => {
+            //   ent.kind = "bomb";
+            //   ent.owner = p.owner;
+            //   ent.pos = { x: p.origin.x, y: p.origin.y };
+            //   ent.posPrev = { x: p.origin.x, y: p.origin.y };
+            //   ent.vel = { x: vx, y: vy };
+            //   ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
+            //   ent.damage = b.damage;
+            //   ent.radius = b.radius;
+            //   ent.target = { x: p.target.x, y: p.target.y };
+            //   ent.pendingKill = false;
+            // });
+
+            // break;
+          } */
 
         case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
@@ -197,6 +221,11 @@ export class SpawnSystem {
             ent.typeId = p.typeId as EnemyTypeId;
             ent.waveId = waveId;
 
+
+              // Sprite MVP v1: convention-based keys (renderer falls back if missing)
+            ent.spriteId = `enemy.${String(p.typeId ?? "")}`;
+            ent.animId = "enemy.bug1";
+
             // ✅ BE V1 deterministic index
             ent.spawnOrdinal = spawnOrdinal;
             // ✅ BE V1 deterministic index
@@ -209,6 +238,12 @@ export class SpawnSystem {
             ent.hp = def.hp;
             ent.radius = r;
             ent.render = def.render ? { ...def.render } : undefined;
+
+            // OPTIONAL AI overlay (disabled unless def.ai exists)
+            ent.ai = (def as any).ai ? { ...(def as any).ai } : undefined;
+            ent.aiWeight = typeof (def as any).aiWeight === "number" ? (def as any).aiWeight : 0;
+            ent.aiWeightTarget = ent.aiWeight;
+            ent.aiEaseSec = typeof (def as any).aiEaseSec === "number" ? (def as any).aiEaseSec : 0.12;
 
             ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
             ent.behavior = { ...(preset.params ?? {}) };
@@ -225,27 +260,28 @@ export class SpawnSystem {
           break;
         }
 
-         //case EventType.SPAWN_PICKUP: {
-           //const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-           //const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+          /* case EventType.SPAWN_PICKUP: {
+            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
+            // const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
 
-           //this.store.spawn((ent: any) => {
-           //ent.kind = "pickup";
-           //ent.defId = String(p.defId ?? "unknown");
+            // this.store.spawn((ent: any) => {
+            //   ent.kind = "pickup";
+            //   ent.defId = String(p.defId ?? "unknown");
 
-           //const x = p.pos.x;
-           //const y = p.pos.y;
+            //   const x = p.pos.x;
+            //   const y = p.pos.y;
 
-           //ent.pos = { x, y };
-           //ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
+            //   ent.pos = { x, y };
+            //   ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
 
-           //ent.vel = { x: 0, y: pcfg.fallSpeed };
-           //ent.radius = pcfg.radius;
-           //ent.ttl = pcfg.ttlSec;
-           //ent.pendingKill = false;
-       //});
-           //break;
-       //}
+            //   ent.vel = { x: 0, y: pcfg.fallSpeed };
+            //   ent.radius = pcfg.radius;
+            //   ent.ttl = pcfg.ttlSec;
+            //   ent.pendingKill = false;
+            // });
+
+            // break;
+          } */
 
         default:
           break;

@@ -13,6 +13,11 @@ export interface EnemyDef {
   scoreOnKill: number;
   behaviorPreset: string;     // content-driven (string); runtime resolves preset map
   render?: EnemyRenderDef;    // OPTIONAL
+
+  // OPTIONAL AI overlay (future-ready; no runtime effect unless EnemySystem uses it)
+  ai?: Record<string, unknown>;
+  aiWeight?: number;          // 0..1 initial blend
+  aiEaseSec?: number;         // smoothing time constant (sec)
 }
 
 /**
@@ -59,6 +64,11 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       t?.renderColor ??
       t?.color;
 
+    // ai overlay (optional)
+    const aiRaw = t?.ai;
+    const aiWeightRaw = t?.aiWeight;
+    const aiEaseSecRaw = t?.aiEaseSec;
+
     const hp = (typeof hpRaw === "number" && Number.isFinite(hpRaw)) ? hpRaw : 1;
     const radius = (typeof radiusRaw === "number" && Number.isFinite(radiusRaw)) ? radiusRaw : 4;
     const scoreOnKill = (typeof scoreRaw === "number" && Number.isFinite(scoreRaw)) ? scoreRaw : 0;
@@ -68,6 +78,10 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       (typeof colorRaw === "string" && colorRaw.length)
         ? colorRaw
         : undefined;
+
+    const ai = (aiRaw && typeof aiRaw === "object") ? (aiRaw as Record<string, unknown>) : undefined;
+    const aiWeight = (typeof aiWeightRaw === "number" && Number.isFinite(aiWeightRaw)) ? aiWeightRaw : undefined;
+    const aiEaseSec = (typeof aiEaseSecRaw === "number" && Number.isFinite(aiEaseSecRaw)) ? aiEaseSecRaw : undefined;
 
     if (hpRaw === undefined || radiusRaw === undefined || scoreRaw === undefined || presetRaw === undefined) {
       console.warn("[EnemyDefs] Using defaults for", id, {
@@ -86,6 +100,9 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       scoreOnKill,
       behaviorPreset,
       ...(color ? { render: { color } } : {}),
+      ...(ai ? { ai } : {}),
+      ...(aiWeight !== undefined ? { aiWeight } : {}),
+      ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),
     };
   }
 

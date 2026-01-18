@@ -6,6 +6,7 @@ export type SpriteFrame = {
 export type SpriteAnim = {
   frames: string[];
   fps: number;
+  loop?: boolean; // default true
 };
 
 export type SpriteAtlasJSON = {

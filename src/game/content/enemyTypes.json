@@ -9,7 +9,7 @@
       "render": { "color": "#ff4444" }
     },
     {
-      "id": "green",
+      "id": "enemy_bug1",
       "hp": 5,
       "radius": 4,
       "scoreOnKill": 12,
