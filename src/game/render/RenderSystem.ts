@@ -1,7 +1,7 @@
 // src/game/render/RenderSystem.ts
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { Vec2 } from "../../engine/math/Vec2";
-
+import type { WorldState } from "../data/WorldState";
 type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
 
@@ -14,12 +14,13 @@ export type ViewportInfo = {
 };
 
 export class RenderSystem {
-  constructor(
-    private readonly ctx: CanvasRenderingContext2D,
-    private readonly store: EntityStore<any>,
-    private readonly logicW: number,
-    private readonly logicH: number,
-  ) {
+    constructor(
+      private readonly ctx: CanvasRenderingContext2D,
+      private readonly store: EntityStore<any>,
+      private readonly logicW: number,
+      private readonly logicH: number,
+      private readonly world: WorldState,
+    ) {
     this.ctx.imageSmoothingEnabled = false;
   }
 
@@ -28,6 +29,49 @@ export class RenderSystem {
     return (k.kind ?? k.type ?? k.tag ?? null) as any;
   }
 
+  private drawDebugBackground(
+    ctx: CanvasRenderingContext2D,
+    view: ViewportInfo,
+    sx: number,
+    sy: number,
+  ) {
+    const { x: ox, y: oy, w, h, scale: s } = view;
+
+    // base fill
+    ctx.fillStyle = "#080810";
+    ctx.fillRect(ox, oy, w, h);
+
+    // grid
+    const grid = 64 * s;
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 1;
+
+    const gx0 = -((sx * s) % grid);
+    const gy0 = -((sy * s) % grid);
+
+    for (let x = gx0; x < w; x += grid) {
+      ctx.beginPath();
+      ctx.moveTo(ox + x, oy);
+      ctx.lineTo(ox + x, oy + h);
+      ctx.stroke();
+    }
+
+    for (let y = gy0; y < h; y += grid) {
+      ctx.beginPath();
+      ctx.moveTo(ox, oy + y);
+      ctx.lineTo(ox + w, oy + y);
+      ctx.stroke();
+    }
+
+    // stars
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    for (let i = 0; i < 40; i++) {
+      const px = ((i * 97) % w + gx0 * 0.3) % w;
+      const py = ((i * 57) % h + gy0 * 0.2) % h;
+      ctx.fillRect(ox + px, oy + py, s, s);
+    }
+  }
+  
   render(view: ViewportInfo): void {
     const ctx = this.ctx;
 
@@ -39,6 +83,12 @@ export class RenderSystem {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
+    const world = (window as any).__CM?.game?.world;
+    const sx = world?.scrollX ?? 0;
+    const sy = world?.scrollY ?? 0;
+
+    this.drawDebugBackground(ctx, view, sx, sy);
+    
     this.store.debugForEachAlive((_ref, e: any) => {
       if (!e) return;
 
@@ -46,8 +96,14 @@ export class RenderSystem {
       const pos = (e as HasPos).pos;
       if (!kind || !pos) return;
 
+      const world = (window as any).__CM?.game?.world;
+      const sx = world?.scrollX ?? 0;
+      const sy = world?.scrollY ?? 0;
+
+      const drawY = (kind === "player") ? pos.y : (pos.y - sy);
+
       const x = (ox + pos.x * s) | 0;
-      const y = (oy + pos.y * s) | 0;
+      const y = (oy + drawY * s) | 0;
 
       if (kind === "player") {
         ctx.fillStyle = "white";

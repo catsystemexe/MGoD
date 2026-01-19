@@ -98,7 +98,7 @@ export class PlayerSystem {
 
     this.player.vel.x = this.player.vel.x + (tvx - this.player.vel.x) * t;
     this.player.vel.y = this.player.vel.y + (tvy - this.player.vel.y) * t;
-
+    
     const nx = this.player.pos.x + this.player.vel.x * dtSec;
     const ny = this.player.pos.y + this.player.vel.y * dtSec;
 

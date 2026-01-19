@@ -29,7 +29,7 @@ export class EnemySystem {
   update(ctx: TickContext): void {
     const dt = safeNum((ctx as any).dt, 0);
     if (dt <= 0) return;
-
+    const W = this.logicW;
     const H = this.logicH;
 
     this.store.debugForEachAlive((ref, e: any) => {
@@ -129,8 +129,16 @@ export class EnemySystem {
       e.pos.y += e.vel.y * dt;
 
       // offscreen cull
+      // offscreen cull
       const r = safeNum(e.radius, 4);
-      if (e.pos.y > H + r + 8) this.store.markKill(ref);
+      const camY = Number((window as any).__CM?.game?.world?.scrollY ?? 0);
+      const band = 120; // px tolerance above/below viewport (turrets/bombers can exist offscreen)
+
+      // kill far outside vertical band
+      if (e.pos.y < camY - r - band) this.store.markKill(ref);
+      if (e.pos.y > camY + H + r + band) this.store.markKill(ref);
+      if (e.pos.x < -r - 8) this.store.markKill(ref);
+      if (e.pos.x > W + r + 8) this.store.markKill(ref);
     });
   }
 }

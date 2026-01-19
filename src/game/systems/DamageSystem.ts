@@ -4,7 +4,6 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import { EntityStore } from "../../engine/ecs/EntityStore";
-
 export type DamageRules = {
   projectileHitEnemyDamage: number;
   playerHitEnemyDamage: number;
@@ -52,6 +51,7 @@ export class DamageSystem<T extends BaseEntity> {
             const dx = vx / len;
             const dy = vy / len;
 
+            // HIT SPARK uses enemy world-pos; camera subtraction happens in renderVFX()
             this.rules.onHitSpark?.({
               x: Number(enemyEnt.pos?.x ?? 0),
               y: Number(enemyEnt.pos?.y ?? 0),

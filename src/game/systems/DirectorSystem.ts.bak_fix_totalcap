@@ -20,25 +20,20 @@ const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number
 
 function getPatternTotalCap(def: any): number | undefined {
   const p = def?.pattern;
-  if (!p) return undefined;
-
-  // finite slot patterns
-  if (p.kind === "grid") {
-    const cols = Number(p.cols);
-    const rows = Number(p.rows);
-    if (Number.isFinite(cols) && Number.isFinite(rows) && cols > 0 && rows > 0) return cols * rows;
-    return undefined;
-  }
+  if (!p || typeof p !== "object") return undefined;
 
   if (p.kind === "ring") {
-    const n = Number(p.count);
-    if (Number.isFinite(n) && n > 0) return n;
-    return undefined;
+    const c = Number(p.count);
+    return Number.isFinite(c) && c > 0 ? c : undefined;
   }
 
-  // line/sine/rand are typically infinite unless an explicit cap exists
-  const explicit = Number(def?.totalCap ?? def?.spawnCap ?? p.totalCap ?? p.spawnCap);
-  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  // grid/line používá cols/rows u tebe v JSON (viz directorWaves.json)
+  const cols = Number(p.cols);
+  const rows = Number(p.rows);
+
+  if (Number.isFinite(cols) && cols > 0 && Number.isFinite(rows) && rows > 0) {
+    return cols * rows;
+  }
 
   return undefined;
 }
@@ -208,8 +203,8 @@ export class DirectorSystem {
     const aliveGlobal = this.deps.getAliveEnemies();
     const globalCapHit = aliveGlobal >= this.globalMaxAlive;
 
-      for (const w of this.waves) {
-        if (!w.enabled && !w.forced) continue;
+    for (const w of this.waves) {
+      if (!w.enabled) continue;
 
       // 1) activation via trigger
       if (this.shouldBeActive(w)) {

@@ -81,17 +81,19 @@ export class VFXSystem {
 
 
 
-  private static readonly DEBUG = false;
-  
+  // DEBUG toggle from console:
+  // globalThis.__CM_DEBUG_VFX = true
+  private static get DEBUG(): boolean {
+    const g: any = globalThis as any;
+    return Boolean(g.__CM_DEBUG_VFX || g.__CM_DEBUG_VFX);
+  }
 
-
-   // --- DEBUG (visible on iPad via hudTop) ---
+  // --- DEBUG (visible on iPad via hudTop) ---
   private _dbgNextMs = 0;
   private _dbgCounts = { muzzle: 0, tracer: 0, hit: 0, update: 0 };
 
   private dbg(tag: "muzzle" | "tracer" | "hit" | "update", payload?: any) {
     if (!VFXSystem.DEBUG) return;
-
     this._dbgCounts[tag]++;
 
     const now = typeof performance !== "undefined" ? performance.now() : Date.now();

@@ -348,9 +348,15 @@ async function main() {
               )},${(pr.y / dpr).toFixed(1)},${(pr.w / dpr).toFixed(1)},${(pr.h / dpr).toFixed(1)})`
             : `PR ?`;
 
+          const world = (window as any).__CM?.game?.world;
+          const sx = world?.scrollX ?? 0;
+          const sy = world?.scrollY ?? 0;
+          const py = (window as any).__CM?.game?.playerEnt?.pos?.y ?? NaN;
+          
           setHudTop(
             `tick=${loop.getTick?.() ?? "?"} paused=${(loop as any).isPaused?.() ?? "?"} dt=${dt.toFixed(3)}\n` +
               `alive=${store.getAliveCount?.() ?? "?"} P=${nPlayer} E=${nEnemy} PRJ=${nProj} B=${nBomb}\n` +
+              `worldScroll sx=${sx.toFixed(1)} sy=${sy.toFixed(1)} | playerY=${Number(py).toFixed(1)}\n` +
               `css=(${window.innerWidth}x${window.innerHeight}) dpr=${dpr}\n` +
               prLine,
           );

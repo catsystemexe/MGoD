@@ -6,7 +6,7 @@ run = "npm run dev"
 expertMode = true
 
 [nix]
-packages = ["tree", "jq", "et"]
+packages = ["et", "jq", "tree"]
 
 [[ports]]
 localPort = 5173

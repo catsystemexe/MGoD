@@ -18,6 +18,7 @@ export const sineBehavior: EnemyBehavior = {
     const st = e.bState as any;
     const p = (e.behavior ?? {}) as any;
 
+    const speedX = num(p.speedX, 0);
     const speedY = num(p.speedY, 35);
     const driftX = num(p.driftX, 0);
 
@@ -37,6 +38,7 @@ export const sineBehavior: EnemyBehavior = {
     st.baseX = num(st.baseX, x0);
     st.baseY = num(st.baseY, y0);
 
+    st.baseSpeedX = num(st.baseSpeedX, speedX);
     st.baseSpeedY = num(st.baseSpeedY, speedY);
     st.driftX = num(st.driftX, driftX);
     st.phase = num(st.phase, phase);
@@ -72,13 +74,16 @@ export const sineBehavior: EnemyBehavior = {
     const phase = num(st.phase, 0);
 
     const driftX = num(st.driftX, 0);
+    const speedX = num(st.baseSpeedX, 0);
     const speedY = num(st.baseSpeedY, 35);
 
     const a = omega * t + phase;
 
-    return {
-      x: baseX + Math.sin(a) * ampX + driftX * t,
-      y: baseY + speedY * t,
-    };
+    const vx = speedX + driftX;
+
+      return {
+        x: baseX + Math.sin(a) * ampX + vx * t,
+        y: baseY + speedY * t,
+      };
   },
 };

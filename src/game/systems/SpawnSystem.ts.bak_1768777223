@@ -140,8 +140,12 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
       ent.animId = "projectile.w1";
       ent.spriteId = "projectile.w1.0";
 
-    const x = Number(p.origin.x);
-    const y = Number(p.origin.y);
+    const sx = Number(this.world?.scrollX ?? 0);
+    const sy = Number(this.world?.scrollY ?? 0);
+
+    const x = Number(p.origin.x) + sx;
+    const y = Number(p.origin.y) + sy;
+
     ent.pos = { x, y };
     ent.posPrev = { x, y };
 
@@ -214,9 +218,14 @@ const spawnPos =
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          const sy = Number((this as any).world?.scrollY ?? 0); // cameraY (safe)
-          const x = Number(spawnPos.x);
-          const y = Number(spawnPos.y) + sy; // pattern is relative to viewport, store worldY
+
+          
+          const sx = Number(this.world?.scrollX ?? 0);
+          const sy = Number(this.world?.scrollY ?? 0);
+
+          const x = Number(spawnPos.x) + sx;
+          const y = Number(spawnPos.y) + sy;
+
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;

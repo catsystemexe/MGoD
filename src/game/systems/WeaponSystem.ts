@@ -87,21 +87,23 @@ export class WeaponSystem {
     const ox = shipPos.x + dir.x * MUZZLE;
     const oy = shipPos.y + dir.y * MUZZLE;
 
-    // cosmetic hooks (muzzle + tracer)
-    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    // A+ cameraY: projectiles live in worldY, player is screenY
+    let sy = 0;
+    try {
+      const world = (window as any).__CM?.game?.world;
+      sy = Number(world?.scrollY ?? 0);
+    } catch {}
 
-    // event pro SpawnSystem (jde do next ticku)
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       owner,
-      origin: { x: ox, y: oy },
+      origin: { x: ox, y: oy + sy },
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
     });
-
-    // tracer hook (volitelně, klidně stejně jako muzzle)
-    this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+      // tracer hook (same space as entities)
+      // ✅ MVP: tracer is in screen-space (parallax scroll does NOT shift entities)
+      this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
   }
-
   
    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
      // cooldown decay
@@ -138,10 +140,16 @@ export class WeaponSystem {
        this.st.cdBomb,
        Number(bomb?.cooldownSec ?? this.cfg.bombCooldownSec ?? 0.8),
        () => {
+         let sy = 0;
+         try {
+           const world = (window as any).__CM?.game?.world;
+           sy = Number(world?.scrollY ?? 0);
+         } catch {}
+
          this.bus.emitNext(EventType.SPAWN_BOMB, {
            owner: snap.shipRef,
-           origin: { ...snap.shipPos },
-           target: { ...actions.bombTarget },
+           origin: { x: snap.shipPos.x, y: snap.shipPos.y + sy },
+           target: { x: actions.bombTarget.x, y: actions.bombTarget.y + sy },
          });
        },
      );

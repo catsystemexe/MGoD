@@ -13,7 +13,8 @@ import { WEAPON_DB } from "../defs/WeaponDB";
 import { FlowDispatcher } from "../systems/FlowDispatcher";
 import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
-
+import { createWorldState } from "../data/WorldState";
+import { WorldScrollSystem } from "../systems/WorldScrollSystem";
 import { SpawnSystem } from "../systems/SpawnSystem";
 import { DirectorSystem } from "../systems/DirectorSystem";
 import { DirectorPhaseSystem } from "../systems/DirectorPhaseSystem";
@@ -96,6 +97,16 @@ export async function createGame(
 
   if (!playerEnt) throw new Error("[createGame] playerEnt not captured");
 
+        // ---- World scroll (autoscroll + Y follow)
+        const world = createWorldState();
+        const worldScroll = new WorldScrollSystem(
+          world,
+          playerEnt,
+          LOGIC_W,
+          LOGIC_H
+        );
+
+        
   // ---- Flow
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
 
@@ -144,7 +155,7 @@ export async function createGame(
   const pickupSystem = new PickupSystem(store as any);
 
   
-  const spawn = new SpawnSystem(store as any, spawnCfg);
+        const spawn = new SpawnSystem(store as any, spawnCfg, world as any);
 
   // ---- Alive counting for caps
   function countAliveEnemies(): number {
@@ -166,16 +177,41 @@ export async function createGame(
     return n;
   }
 
-  // ---- Director
-  const director = new DirectorSystem(
-    bus as any,
-    DIRECTOR_DEFS_MVP as any,
-    {
-      getAliveEnemies: countAliveEnemies,
-      getAliveEnemiesForWave: countAliveEnemiesForWave,
-    }
-  );
 
+        function killEnemiesForWave(waveId: string): void {
+          // mark alive enemies of this wave to be cleaned up in Cleanup phase
+          store.debugForEachAlive((_ref: any, e: any) => {
+            if (e?.kind !== "enemy") return;
+            if (e.pendingKill) return;
+            if (e.waveId !== waveId) return;
+            e.pendingKill = true;
+          });
+        }
+
+        
+
+
+
+        
+
+        const director = new DirectorSystem(
+          bus as any,
+          DIRECTOR_DEFS_MVP as any,
+          {
+            getAliveEnemies: countAliveEnemies,
+            getAliveEnemiesForWave: countAliveEnemiesForWave,
+            killEnemiesForWave,
+          }
+        );
+
+        // ✅ DEV: force wave.test immediately on boot (bypasses respawn)
+        if ((globalThis as any).__DEV__) {
+          director.forceWave("wave.test", { solo: true, reset: true });
+          console.log("[DEV] forceWave(wave.test) on boot");
+        }
+
+
+        
       if (typeof window !== "undefined") {
         (window as any).__CM = (window as any).__CM || {};
         (window as any).__CM.director = director;
@@ -350,6 +386,9 @@ export async function createGame(
 
     // director runtime reset (keeps same instance)
     director.reset();
+
+    // ✅ DEV: always restart wave.test after respawn for target practice
+    director.forceWave("wave.test", { solo: true, reset: true });
   }
 
   const loop = new Loop<CMEventMap>({
@@ -364,7 +403,6 @@ export async function createGame(
     director: {
       update: (ctx, events) => {
         if (session.gameOver) return;
-        directorPhase.update(ctx, events as any);
 
         const w = director.getHUDInfo().current;
         if (typeof w === "number" && Number.isFinite(w)) session.wave = w;
@@ -378,7 +416,7 @@ export async function createGame(
         respawn.tick();
         pickupSystem.update(ctx.dt);
         playerSystem.update(ctx.dt, inputRt.actions as any);
-
+        worldScroll.update(ctx.dt);
         if (Number(playerEnt.deadT ?? 0) <= 0) {
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
@@ -387,6 +425,11 @@ export async function createGame(
           });
         }
 
+        // ✅ Director must run in Simulation because it emits SPAWN_* (Simulation-owned)
+        directorPhase.update(ctx, events as any);
+
+      
+        
         spawn.update(ctx, events as any);
         projectileSystem.update(ctx.dt);
         enemySystem.update(ctx);
@@ -431,6 +474,7 @@ export async function createGame(
     playerRef,
     inputMgr,
     playerEnt,
+    world,
   };
   }
 }

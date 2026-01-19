@@ -161,10 +161,41 @@ export class WebGLSceneRenderer {
     void this.enemySprites
       .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
       .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
-
-
-    
     }
+
+  private drawDebugBackground(sx: number, sy: number): void {
+    const gl = this.gl;
+
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.prog);
+    gl.bindVertexArray(this.vao);
+
+    // dark bg
+    gl.uniform4f(this.uColor, 0.04, 0.05, 0.08, 1.0);
+    gl.uniform2f(this.uPos, this.logicW * 0.5, this.logicH * 0.5);
+    gl.uniform2f(this.uSize, this.logicW, this.logicH);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    const grid = 64;
+
+    // vertical
+    gl.uniform4f(this.uColor, 1.0, 1.0, 1.0, 0.035);
+    const ox = -((sx % grid + grid) % grid);
+    for (let x = ox; x < this.logicW; x += grid) {
+      gl.uniform2f(this.uPos, x + 0.5, this.logicH * 0.5);
+      gl.uniform2f(this.uSize, 1, this.logicH);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    // horizontal
+    gl.uniform4f(this.uColor, 1.0, 1.0, 1.0, 0.02);
+    const oy = -((sy % grid + grid) % grid);
+    for (let y = oy; y < this.logicH; y += grid) {
+      gl.uniform2f(this.uPos, this.logicW * 0.5, y + 0.5);
+      gl.uniform2f(this.uSize, this.logicW, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+  }
   
   render(alpha: number = 1): void {
     const gl = this.gl;
@@ -174,7 +205,14 @@ export class WebGLSceneRenderer {
 
     gl.uniform2f(this.uLogic, this.logicW, this.logicH);
 
-    // clamp once per frame
+
+    // --- DEBUG BACKGROUND (world scroll aware)
+    const world = (window as any).__CM?.game?.world;
+    const sx = world?.scrollX ?? 0;
+    const sy = world?.scrollY ?? 0;
+
+    this.drawDebugBackground(sx, sy);
+// clamp once per frame
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
 
     // sprite anim time
@@ -270,6 +308,21 @@ export class WebGLSceneRenderer {
         ix = Math.round(ix);
         iy = Math.round(iy);
       }
+      // A+ mode: X is screen-space, Y is world-space. Camera is world.scrollY.
+      if (kind !== "player") {
+        iy -= sy;
+      }
+        // --- CAMERA (world scroll)
+        // A-mode: entities are simulated in SCREEN SPACE.
+        // world.scrollX/Y is for background/parallax only.
+
+      
+      // --- CAMERA (world scroll)
+      // NOTE: Entities are currently simulated in screen/logic space (0..LOGIC_W/H).
+      // world.scrollX/Y is used for background parallax only, not for shifting entity coords.
+      // If we later move to world-space simulation, we can re-enable camera subtraction.
+      
+
 
       // --- SPRITE DRAW (player only) ---
       if (kind === "player" && this.sprites?.ready && this.sprites.atlas) {
@@ -551,12 +604,16 @@ export class WebGLSceneRenderer {
     gl.bindVertexArray(null);
   }
 // --- VFX: muzzle + tracers + hits (no ECS, no allocations) ---
-renderVFX(vfx: any): void {
-  if (!vfx) return;
+  renderVFX(vfx: any): void {
+    if (!vfx) return;
 
-  const gl = this.gl;
+    const gl = this.gl;
 
-  gl.useProgram(this.prog);
+    const world = (window as any).__CM?.game?.world;
+    const sx = Number(world?.scrollX ?? 0);
+    const sy = Number(world?.scrollY ?? 0);
+
+    gl.useProgram(this.prog);
   gl.bindVertexArray(this.vao);
 
   // logic space (same as main render)
