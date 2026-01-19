@@ -118,7 +118,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
             break;
           }
 
-          // DEBUG: enable in browser console: window.__CM_DEBUG_PROJECTILES = true
+          // DEBUG: enable in browser console: __CM_DEBUG_PROJECTILES = true
           if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
             // keep it small to avoid spam
             console.log("[SPAWN_PROJECTILE]", p.weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);

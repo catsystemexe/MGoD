@@ -308,12 +308,12 @@ export async function createGame(
     weaponsCfg = WEAPONS_FALLBACK;
   }
 
-        const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, {
+        const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
           onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
           onTracer: (p: any) => vfx.onTracer(p), // tracer
         });
-        const projectileSystem = new ProjectileSystem(bus as any, store as any);
-        const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H);
+        const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
+        const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
         
   // ---- Impact
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };

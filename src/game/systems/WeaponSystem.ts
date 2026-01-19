@@ -61,12 +61,12 @@ function dirFromAimTarget(shipPos: Vec2, aimTarget?: Vec2 | null): Vec2 {
 
 export class WeaponSystem {
   private st: WeaponSystemState = { cdPrimary: 0, cdSecondary: 0, cdBomb: 0 };
-
-  constructor(
-    private readonly bus: EventBus<CMEventMap>,
-    private readonly cfg: WeaponsConfig,
-    private readonly db: WeaponDB,
-    private readonly opts?: {
+       constructor(
+         private readonly bus: EventBus<CMEventMap>,
+          private readonly cfg: WeaponsConfig,
+            private readonly db: WeaponDB,
+           private readonly world: { scrollY: number },
+           private readonly opts?: {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
     },
@@ -87,12 +87,8 @@ export class WeaponSystem {
     const ox = shipPos.x + dir.x * MUZZLE;
     const oy = shipPos.y + dir.y * MUZZLE;
 
-    // A+ cameraY: projectiles live in worldY, player is screenY
-    let sy = 0;
-    try {
-      const world = (window as any).__CM?.game?.world;
-      sy = Number(world?.scrollY ?? 0);
-    } catch {}
+        // A+ cameraY: projectiles live in worldY, player is screenY
+        const sy = Number((this.world as any)?.scrollY ?? 0);
 
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       owner,
@@ -140,11 +136,7 @@ export class WeaponSystem {
        this.st.cdBomb,
        Number(bomb?.cooldownSec ?? this.cfg.bombCooldownSec ?? 0.8),
        () => {
-         let sy = 0;
-         try {
-           const world = (window as any).__CM?.game?.world;
-           sy = Number(world?.scrollY ?? 0);
-         } catch {}
+         const sy = Number((this.world as any)?.scrollY ?? 0);
 
          this.bus.emitNext(EventType.SPAWN_BOMB, {
            owner: snap.shipRef,

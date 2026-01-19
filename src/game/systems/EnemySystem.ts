@@ -24,6 +24,7 @@ export class EnemySystem {
     private readonly store: EntityStore<any>,
     private readonly logicW: number,
     private readonly logicH: number,
+    private readonly world: { scrollY: number },
   ) {}
 
   update(ctx: TickContext): void {
@@ -131,7 +132,7 @@ export class EnemySystem {
       // offscreen cull
       // offscreen cull
       const r = safeNum(e.radius, 4);
-      const camY = Number((window as any).__CM?.game?.world?.scrollY ?? 0);
+      const camY = safeNum((this.world as any)?.scrollY, 0);
       const band = 120; // px tolerance above/below viewport (turrets/bombers can exist offscreen)
 
       // kill far outside vertical band
