@@ -100,7 +100,7 @@ export class RenderSystem {
       const sx = world?.scrollX ?? 0;
       const sy = world?.scrollY ?? 0;
 
-      const drawY = (kind === "player") ? pos.y : (pos.y - sy);
+      const drawY = pos.y - sy;
 
       const x = (ox + pos.x * s) | 0;
       const y = (oy + drawY * s) | 0;

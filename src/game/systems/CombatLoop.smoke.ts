@@ -53,7 +53,7 @@ function main() {
     (e as any).consumed = false;
   });
 
-  const collision = new CollisionSystem(bus as any, store as any);
+  const collision = new CollisionSystem(bus as any, store as any, { scrollY: 0 });
 
   // Legacy DamageSystem – config only
   const damage = new DamageSystem(bus as any, store as any, {

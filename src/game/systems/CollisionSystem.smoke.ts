@@ -60,7 +60,7 @@ function main() {
     ent.pendingKill = false;
   });
 
-  const col = new CollisionSystem(bus, store);
+  const col = new CollisionSystem(bus, store, { scrollY: 0 });
 
   bus.beginTick(0);
 

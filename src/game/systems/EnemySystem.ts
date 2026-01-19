@@ -132,14 +132,15 @@ export class EnemySystem {
       // offscreen cull
       // offscreen cull
       const r = safeNum(e.radius, 4);
-      const camY = safeNum((this.world as any)?.scrollY, 0);
-      const band = 120; // px tolerance above/below viewport (turrets/bombers can exist offscreen)
+      const camX = safeNum((this.world as any)?.scrollX, 0);const camY = safeNum((this.world as any)?.scrollY, 0);
+      const band = 120; // px tolerance above/below viewport
+        const xBand = 160; // px tolerance left/right (allows offscreen spawns)
 
-      // kill far outside vertical band
-      if (e.pos.y < camY - r - band) this.store.markKill(ref);
-      if (e.pos.y > camY + H + r + band) this.store.markKill(ref);
-      if (e.pos.x < -r - 8) this.store.markKill(ref);
-      if (e.pos.x > W + r + 8) this.store.markKill(ref);
+        // kill far outside bands
+        if (e.pos.y < camY - r - band) this.store.markKill(ref);
+        if (e.pos.y > camY + H + r + band) this.store.markKill(ref);
+        if (e.pos.x < camX - r - xBand) this.store.markKill(ref);
+        if (e.pos.x > camX + W + r + xBand) this.store.markKill(ref);
     });
   }
 }

@@ -270,8 +270,7 @@ export async function createGame(
         window.addEventListener("keydown", (e) => {
           const key = (e as any).key as string | undefined;
           const code = (e as any).code as string | undefined;
-          
-        
+
           // Toggle preset list visibility (DEV UI only)
           if (devHotkeys && (key === "i" || key === "I")) {
             devHotkeys.toggle();
@@ -309,9 +308,7 @@ export async function createGame(
           // ensure loop is running if main left it paused
           const cm = (window as any).__CM;
           if (cm?.loop?.setPaused) cm.loop.setPaused(false);
-          },
-          { capture: true }
-        );
+        });
 
 
   const directorPhase = new DirectorPhaseSystem(session as any, director as any);

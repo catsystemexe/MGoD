@@ -4,9 +4,27 @@ import { CONTENT } from "../content/CONTENT";
 export type EnemyTypeId = string;
 
 export interface EnemyRenderDef {
-  color: string; // CSS color, typicky "#rrggbb"
-}
+  // OPTIONAL: base color (fallback)
+  color?: string; // CSS color, typicky "#rrggbb"
 
+  // OPTIONAL: pixel-glyph id (render/glyphs)
+  glyphId?: string;
+
+  // OPTIONAL: procedural vector parts (rendered as quads)
+  proc?: {
+    kind: "parts";
+    parts: Array<{
+      dx: number; // offset from entity center
+      dy: number;
+      w: number;
+      h: number;
+      color?: string;   // overrides base color
+      alpha?: number;   // 0..1
+      pulseHz?: number; // if set => sin pulse alpha
+      pulseAmp?: number;// 0..1
+    }>;
+  };
+}
 export interface EnemyDef {
   hp: number;
   radius: number;
@@ -60,11 +78,19 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     // - preferred: t.render.color
     // - alternates: t.color, t.renderColor
     const colorRaw =
-      t?.render?.color ??
-      t?.renderColor ??
-      t?.color;
+        t?.render?.color ??
+        t?.renderColor ??
+        t?.color;
 
-    // ai overlay (optional)
+      const glyphIdRaw =
+        t?.render?.glyphId ??
+        t?.glyphId;
+
+      const procRaw =
+        t?.render?.proc ??
+        t?.proc;
+
+      // ai overlay (optional) (optional)
     const aiRaw = t?.ai;
     const aiWeightRaw = t?.aiWeight;
     const aiEaseSecRaw = t?.aiEaseSec;
@@ -75,9 +101,19 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     const behaviorPreset = (typeof presetRaw === "string" && presetRaw.length) ? presetRaw : "none.basic";
 
     const color =
-      (typeof colorRaw === "string" && colorRaw.length)
-        ? colorRaw
-        : undefined;
+        (typeof colorRaw === "string" && colorRaw.length)
+          ? colorRaw
+          : undefined;
+
+      const glyphId =
+        (typeof glyphIdRaw === "string" && glyphIdRaw.length)
+          ? glyphIdRaw
+          : undefined;
+
+      const proc =
+        (procRaw && typeof procRaw === "object")
+          ? procRaw
+          : undefined;
 
     const ai = (aiRaw && typeof aiRaw === "object") ? (aiRaw as Record<string, unknown>) : undefined;
     const aiWeight = (typeof aiWeightRaw === "number" && Number.isFinite(aiWeightRaw)) ? aiWeightRaw : undefined;
@@ -99,7 +135,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       radius,
       scoreOnKill,
       behaviorPreset,
-      ...(color ? { render: { color } } : {}),
+      ...(color || glyphId || proc ? { render: { ...(color ? { color } : {}), ...(glyphId ? { glyphId } : {}), ...(proc ? { proc } : {}) } } : {}),
       ...(ai ? { ai } : {}),
       ...(aiWeight !== undefined ? { aiWeight } : {}),
       ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),

@@ -64,7 +64,7 @@ function main() {
     ent.consumed = false;
   });
 
-  const collision = new CollisionSystem(bus, store);
+  const collision = new CollisionSystem(bus, store, { scrollY: 0 });
 
   // Legacy DamageSystem config
   const damage = new DamageSystem(bus, store as any, {

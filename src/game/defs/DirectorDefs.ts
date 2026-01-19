@@ -9,9 +9,20 @@ function pickWaves() {
       ? (window as any).__CM_DEV_SOLO_WAVE__
       : undefined;
 
-  if (typeof solo === "string" && solo.length > 0) {
-    return CONTENT.waves.filter((w) => w.id === solo);
+  const isDev =
+    typeof import.meta !== "undefined" && (import.meta as any).env && (import.meta as any).env.DEV;
+
+  if (isDev && typeof solo === "string" && solo.length > 0) {
+    const filtered = CONTENT.waves.filter((w) => w.id === solo);
+    console.log("[DIR][SOLO] __CM_DEV_SOLO_WAVE__=", solo, "waves=", filtered.map((w) => w.id));
+    return filtered;
   }
+
+  if (typeof solo === "string" && solo.length > 0) {
+    // someone set it in prod — ignore it, but warn
+    console.warn("[DIR][SOLO] Ignored __CM_DEV_SOLO_WAVE__ outside DEV:", solo);
+  }
+
   return CONTENT.waves;
 }
 
@@ -31,7 +42,7 @@ export const DIRECTOR_DEFS_MVP: DirectorDefs = {
       },
 
       // ale jen test wave je defaultně enabled
-      enabled: isTest,
+      enabled: !isTest,
 
       spawnEverySec: w.spawnEverySec,
       maxAlive: w.maxAlive,

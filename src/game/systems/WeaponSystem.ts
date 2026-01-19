@@ -64,7 +64,7 @@ export class WeaponSystem {
          private readonly bus: EventBus<CMEventMap>,
           private readonly cfg: WeaponsConfig,
             private readonly db: WeaponDB,
-           private readonly world: { scrollY: number },
+         private readonly world: { scrollX: number; scrollY: number },
            private readonly opts?: {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
@@ -86,8 +86,9 @@ export class WeaponSystem {
     const ox = shipPos.x + dir.x * MUZZLE;
     const oy = shipPos.y + dir.y * MUZZLE;
 
-        // A+ cameraY: projectiles live in worldY, player is screenY
-        const sy = Number((this.world as any)?.scrollY ?? 0);
+    // camera: player is SCREEN, projectiles live in WORLD
+   
+    const sy = Number((this.world as any)?.scrollY ?? 0);
 
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       owner,
@@ -95,9 +96,6 @@ export class WeaponSystem {
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
     });
-      // tracer hook (same space as entities)
-      // ✅ MVP: tracer is in screen-space (parallax scroll does NOT shift entities)
-      this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
   }
   
    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
@@ -106,7 +104,9 @@ export class WeaponSystem {
      this.st.cdSecondary = Math.max(0, this.st.cdSecondary - dtSec);
      this.st.cdBomb = Math.max(0, this.st.cdBomb - dtSec);
 
-     const dir = dirFromAimTarget(snap.shipPos, actions.aimTarget);
+     // const dir = dirFromAimTarget(snap.shipPos, actions.aimTarget);
+
+     const dir = { x: 1, y: 0 }; // default forward fire (no mouse aim)
 
      const primaryId = this.cfg.primary;
      const secondaryId = this.cfg.secondary;

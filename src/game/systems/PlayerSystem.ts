@@ -11,8 +11,11 @@ type PlayerBounds = {
   maxY: number;
 };
 
+type WorldScroll = { scrollX: number; scrollY: number };
+
 type PlayerConfig = {
   bounds: PlayerBounds;
+  world?: WorldScroll;
 };
 
 function clamp(v: number, a: number, b: number): number {
@@ -104,6 +107,10 @@ export class PlayerSystem {
 
     // clamp to bounds, respecting radius
     const r = this.player.radius ?? 0;
+
+    const sx = Number(this.cfg.world?.scrollX ?? 0);
+    const sy = Number(this.cfg.world?.scrollY ?? 0);
+
     this.player.pos.x = clamp(nx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
     this.player.pos.y = clamp(ny, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
   }

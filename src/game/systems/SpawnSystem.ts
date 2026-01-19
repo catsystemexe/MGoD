@@ -135,6 +135,8 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
     ent.weaponTypeId = p.weaponTypeId;
 
 
+
+      ent.render = { glyphId: "proj.capsule" };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
       // Later: weapon DB can override this.
       ent.animId = "projectile.w1";
@@ -185,6 +187,9 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
         case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
+            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
+              console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
+            }
           const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
 
           const spawnOrdinal = (typeof (p as any)?.spawnOrdinal === "number" && Number.isFinite((p as any).spawnOrdinal))
@@ -200,10 +205,11 @@ const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
 if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
 
 const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.radius > 0) ? def.radius : 4;
-const spawnPos =
-(p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
-              ? { x: p.spawn.x, y: p.spawn.y }
-              : this.pickEdgeSpawn(r);
+
+              const spawnPos =
+                (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
+                  ? { x: Number(p.spawn.x), y: Number(p.spawn.y) }
+                  : this.pickEdgeSpawn(r);
 
           const forcedPresetId =
             (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
@@ -214,9 +220,9 @@ const spawnPos =
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          const sy = Number((this as any).world?.scrollY ?? 0); // cameraY (safe)
-          const x = Number(spawnPos.x);
-          const y = Number(spawnPos.y) + sy; // pattern is relative to viewport, store worldY
+          // pattern is relative to viewport => store WORLD coords (add camera ONCE)
+          const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
+          const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
@@ -247,9 +253,15 @@ const spawnPos =
             ent.vel = { x: 0, y: 0 };
             ent.hp = def.hp;
             ent.radius = r;
-            ent.render = def.render ? { ...def.render } : undefined;
-
-            // OPTIONAL AI overlay (disabled unless def.ai exists)
+            ent.render = def.render ? { ...def.render } : {};
+      if (ent.render) {
+  const rr: any = ent.render as any;
+  if (!rr.glyphId && !rr.proc) {
+    const tid = String(ent.typeId ?? "");
+    rr.glyphId = tid ? ("enemy." + tid) : "enemy.diamond";
+  }
+}
+// OPTIONAL AI overlay (disabled unless def.ai exists)
             ent.ai = (def as any).ai ? { ...(def as any).ai } : undefined;
             ent.aiWeight = typeof (def as any).aiWeight === "number" ? (def as any).aiWeight : 0;
             ent.aiWeightTarget = ent.aiWeight;
@@ -299,11 +311,17 @@ const spawnPos =
     }
   }
 
-  private pickEdgeSpawn(radius: number): Vec2 {
-    const w = this.cfg.logicSize.w;
-    const r = Math.max(1, radius);
-    const x = this.cfg.rng01() * (w - 2 * r) + r;
-    const y = -r - 1;
-    return { x, y };
-  }
+      private pickEdgeSpawn(radius: number): Vec2 {
+        const w = this.cfg.logicSize.w;
+        const h = this.cfg.logicSize.h;
+        const r = Math.max(1, radius);
+
+        // spawn slightly OFFSCREEN on the right edge (viewport space)
+        const x = w + r + 1;
+
+        // random y within viewport
+        const y = this.cfg.rng01() * (h - 2 * r) + r;
+
+        return { x, y };
+      }
 }

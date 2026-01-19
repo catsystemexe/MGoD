@@ -373,8 +373,7 @@ export class DirectorSystem {
           };
         }
 
-        console.log("[DIR][SPAWN_ENEMY]", w.id, "idx=", idx, "spawn=", spawn);
-          this.bus.emitNext(EventType.SPAWN_ENEMY, {
+        this.bus.emitNext(EventType.SPAWN_ENEMY, {
           typeId: w.def.enemyTypeId,
           waveId: w.id,
           spawn,

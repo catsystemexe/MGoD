@@ -13,18 +13,7 @@ export class WorldScrollSystem {
     // --- konstantní autoscroll doprava
     this.world.scrollX += this.world.speedX * dt;
 
-    // --- jemné Y-follow (pocit prostoru) - dt stable
-    const centerY = this.logicH * 0.5;
-    const dy = this.player.pos.y - centerY;
-
-    // target camera offset = "kolik je hráč mimo střed"
-    const target = dy;
-
-    // easing rychlost (vyšší = rychleji dohání), dt-stable
-    const followK = 2.5; // 1/s (zkus 1.5 až 4.0)
-    const t = 1 - Math.exp(-followK * dt);
-
-    // lerp world.scrollY -> target
-    this.world.scrollY += (target - this.world.scrollY) * t;
-  }
+    // --- Y-follow disabled (MVP): keep camera Y fixed
+      this.world.scrollY = 0;
+}
 }
