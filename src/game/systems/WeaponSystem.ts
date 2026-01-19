@@ -18,7 +18,6 @@ import { Phase } from "../../engine/core/EventBus";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { WeaponsConfig, WeaponSlotId, WeaponDB, WeaponTypeId } from "../defs/Weapons";
-
 export type WeaponSnapshot = {
   shipRef: EntityRef;
   shipPos: Vec2;
