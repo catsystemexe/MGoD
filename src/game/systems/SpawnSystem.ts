@@ -67,15 +67,17 @@ pos: Vec2;
 
 export interface EnemyEntity extends BaseEntity {
   kind: "enemy";
-    typeId: EnemyTypeId;
-    waveId?: string;
-  
+  typeId: EnemyTypeId;
+  waveId?: string;
 
-    // Sprite MVP v1 (optional; renderer falls back if missing)
-    spriteId?: string;
-    animId?: string;
+  // stable per-spawn index (used for desync: phases, patterns, etc.)
+  spawnOrdinal?: number;
 
-pos: Vec2;
+  // Sprite MVP v1 (optional; renderer falls back if missing)
+  spriteId?: string;
+  animId?: string;
+
+  pos: Vec2;
   vel: Vec2;
   hp: number;
   radius: number;
@@ -229,9 +231,9 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.waveId = waveId;
 
 
-              // Sprite MVP v1: convention-based keys (renderer falls back if missing)
-            ent.spriteId = `enemy.${String(p.typeId ?? "")}`;
-            ent.animId = "enemy.bug1";
+            // Sprite keys: keep empty by default (glyph/proc are default MVP)
+            ent.spriteId = "";
+            ent.animId = "";
 
             if ((globalThis as any).__DEV__) {
               if (Math.random() < 0.05) {
@@ -253,10 +255,20 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.vel = { x: 0, y: 0 };
             ent.hp = def.hp;
             ent.radius = r;
-            ent.render = def.render ? { ...def.render } : {};
+            const dr: any = def.render;
+            ent.render = dr
+              ? {
+                  ...(dr.color ? { color: dr.color } : {}),
+                  ...(dr.glyphId ? { glyphId: dr.glyphId } : {}),
+                  ...(dr.glyphs ? { glyphs: (Array.isArray(dr.glyphs) ? dr.glyphs.map((g: any) => ({ ...g })) : undefined) } : {}),
+                  ...(dr.proc ? { proc: (dr.proc && typeof dr.proc === "object"
+                      ? { ...dr.proc, parts: Array.isArray(dr.proc.parts) ? dr.proc.parts.map((p: any) => ({ ...p })) : dr.proc.parts }
+                      : dr.proc) } : {}),
+                }
+              : {};
       if (ent.render) {
   const rr: any = ent.render as any;
-  if (!rr.glyphId && !rr.proc) {
+    if (!rr.glyphId && !rr.proc && !(Array.isArray(rr.glyphs) && rr.glyphs.length)) {
     const tid = String(ent.typeId ?? "");
     rr.glyphId = tid ? ("enemy." + tid) : "enemy.diamond";
   }

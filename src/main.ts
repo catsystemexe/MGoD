@@ -30,6 +30,15 @@ document.body.style.height = "100vh";
 document.body.style.display = "block";
 document.body.style.overflow = "hidden";
 
+// force-hide cursor over game canvas (some wrappers override inline style)
+const cursorStyle = document.createElement("style");
+cursorStyle.textContent = `
+  html, body, #root, canvas#game { cursor: none !important; }
+  #root * { cursor: none !important; }
+`;
+document.head.appendChild(cursorStyle);
+
+
 const DEV = Boolean((globalThis as any).__DEV__);
 
 let hudTop: HTMLDivElement | null = null;
@@ -103,7 +112,11 @@ function ensureWebGLCanvas(): HTMLCanvasElement {
     c.style.background = "black";
     c.style.imageRendering = "pixelated";
     root.appendChild(c);
+    c.style.cursor = "none";
 
+    (document.body.style as any).cursor = "none";
+    (root.style as any).cursor = "none";
+    
     (c as any).tabIndex = 0;
     (c.style as any).outline = "none";
 

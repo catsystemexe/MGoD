@@ -24,10 +24,16 @@ export class InputManager {
 
   private keys = new Set<string>();
 
+  // EXISTUJÍCÍ
   private mouseClientX = 0;
   private mouseClientY = 0;
   private mouseDownL = false;
   private mouseDownR = false;
+
+  // NOVÝ KÓD (ponech existující a doplň hned pod ně)
+  private mouseMoveActive = false;
+  private mousePrevX = 0;
+  private mousePrevY = 0;
 
   private prevBombDown = false;
   private bombDown = false;
@@ -64,10 +70,12 @@ export class InputManager {
     } catch {}
 
     // kill touch/drag defaults (Replit popup wrapper)
+   
     c.style.touchAction = "none";
     c.style.userSelect = "none";
     (c.style as any).webkitUserSelect = "none";
     (c.style as any).webkitTouchCallout = "none";
+    c.style.cursor = "none";
 
     const syncButtons = (buttons: number) => {
       this.mouseDownL = (buttons & 1) !== 0;
@@ -102,6 +110,11 @@ export class InputManager {
           (c as any).focus?.();
         } catch {}
 
+        // start mouse-move drag baseline
+        this.mouseMoveActive = true;
+        this.mousePrevX = e.clientX;
+        this.mousePrevY = e.clientY;
+        
         // capture pointer so we keep getting events
         try {
           (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -134,6 +147,8 @@ export class InputManager {
         if (buttons) {
           syncButtons(buttons);
         } else {
+
+        
           // fallback
           if (e.button === 0) this.mouseDownL = false;
           if (e.button === 2) this.mouseDownR = false;
@@ -143,6 +158,8 @@ export class InputManager {
       { passive: false, capture: true },
     );
 
+    this.mouseMoveActive = false;
+    
     c.addEventListener(
       "pointercancel",
       (e) => {
@@ -154,7 +171,9 @@ export class InputManager {
       },
       { passive: false, capture: true },
     );
+    this.mouseMoveActive = false;
 
+    
     // if capture is lost unexpectedly, reset buttons
     c.addEventListener(
       "lostpointercapture",
@@ -164,8 +183,11 @@ export class InputManager {
         this.bombDown = false;
       },
       { passive: true },
+      
     );
+    this.mouseMoveActive = false;
 
+    
     // disable context menu on canvas (RMB)
     c.addEventListener(
       "contextmenu",
@@ -203,14 +225,40 @@ export class InputManager {
       my = 0;
     }
 
-    out.move.x = mx;
-    out.move.y = my;
+    // default from keyboard
+    let outMx = mx;
+    let outMy = my;
+
+    // mouse drag => analog move (dx/dy in client px)
+    if (this.mouseMoveActive && !this.mouseDownR) {
+      const dx = this.mouseClientX - this.mousePrevX;
+      const dy = this.mouseClientY - this.mousePrevY;
+
+      this.mousePrevX = this.mouseClientX;
+      this.mousePrevY = this.mouseClientY;
+
+      const scale = 4;
+      const boost = 2;
+
+      const sx = dx / scale;
+      const sy = dy / scale;
+
+      const mdx = Math.tanh(Math.sign(sx) * Math.pow(Math.abs(sx), 0.75) * boost);
+      const mdy = Math.tanh(Math.sign(sy) * Math.pow(Math.abs(sy), 0.75) * boost);
+      // if mouse moved enough, override keyboard
+      if (Math.abs(mdx) > 0.001 || Math.abs(mdy) > 0.001) {
+        outMx = mdx;
+        outMy = mdy;
+      }
+    }
+
+    out.move.x = outMx;
+    out.move.y = outMy;
 
     // Aim target (mouse -> logic coords)
     const { x, y } = this.clientToLogic(logicW, logicH);
     out.aimTarget.x = x;
     out.aimTarget.y = y;
-
     // Fire (held)
     out.firePrimary = this.mouseDownL;
     out.fireSecondary = this.mouseDownR;

@@ -229,11 +229,77 @@ export class WebGLSceneRenderer {
         gl.uniform2f(this.uPos, pxX, pxY);
         gl.uniform2f(this.uSize, px, px);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
-       }
       }
-      return true;
+    }
+    return true;
   }
-      
+
+  private drawGlyphStackAt(
+    gl: WebGL2RenderingContext,
+    cx: number,
+    cy: number,
+    tSec: number,
+    phase: number,
+    baseCol: string | null,
+    glyphs: any
+  ): boolean {
+    if (!Array.isArray(glyphs) || glyphs.length === 0) return false;
+
+    const parseHex = (c: string | null | undefined): [number, number, number] => {
+      if (!c || typeof c !== "string") return [1, 1, 1];
+      const m = /^#?([0-9a-fA-F]{6})$/.exec(c.trim());
+      if (!m) return [1, 1, 1];
+      const n = parseInt(m[1], 16);
+      const r = ((n >> 16) & 255) / 255;
+      const g = ((n >> 8) & 255) / 255;
+      const b = (n & 255) / 255;
+      return [r, g, b];
+    };
+
+    const [br, bg, bb] = parseHex(baseCol);
+    let blendOn = false;
+
+    for (const it of glyphs) {
+      if (!it) continue;
+
+      const id = String(it.id ?? "");
+      if (!id) continue;
+
+      const dx = Number(it.dx ?? 0);
+      const dy = Number(it.dy ?? 0);
+
+      const col = (typeof it.color === "string" && it.color.length) ? it.color : null;
+      const [r, g, b] = col ? parseHex(col) : [br, bg, bb];
+
+      let a = Number(it.alpha ?? 1);
+      if (!Number.isFinite(a)) a = 1;
+      a = Math.max(0, Math.min(1, a));
+
+      const pulseHz = Number(it.pulseHz ?? 0);
+      const pulseAmp = Number(it.pulseAmp ?? 0);
+      if (pulseHz > 0 && pulseAmp > 0) {
+        const s = Math.sin((tSec + phase) * Math.PI * 2 * pulseHz);
+        const k = 1 + s * Math.max(0, Math.min(1, pulseAmp));
+        a = Math.max(0, Math.min(1, a * k));
+      }
+
+      if (!blendOn && a < 0.999) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        blendOn = true;
+      }
+
+      gl.uniform4f(this.uColor, r, g, b, a);
+      this.drawGlyphAt(gl, cx + dx, cy + dy, id);
+    }
+
+    if (blendOn) gl.disable(gl.BLEND);
+    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+
+    return true;
+  }
+
+  
   private drawProcPartsAt(
     gl: WebGL2RenderingContext,
     cx: number,
@@ -420,23 +486,36 @@ export class WebGLSceneRenderer {
       }
 
       
-        // --- PROC PARTS PATH (vector parts)
-        const baseColStr = (e as any).render?.color;
-        const baseCol = (typeof baseColStr === "string" && baseColStr.length) ? baseColStr : null;
-        const proc = (e as any).render?.proc ?? (e as any).proc;
-        if (proc && proc.kind === "parts") {
-          const okp = this.drawProcPartsAt(gl, ix, iy, tSec, 0, baseCol, proc);
-          if (okp) return;
-        }
+      // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
+      const baseColStr = (e as any).render?.color;
+      const baseCol = (typeof baseColStr === "string" && baseColStr.length) ? baseColStr : null;
 
-      
-        // --- GLYPH PATH (vector/pixel-glyph fallback)
-        // If entity provides glyphId, draw it and skip the fallback rect.
-        const glyphId = (e as any).render?.glyphId ?? (e as any).glyphId;
-        if (glyphId) {
-          const ok = this.drawGlyphAt(gl, ix, iy, String(glyphId));
-          if (ok) return;
-        }
+      // stable phase seed for desync (prefer spawnOrdinal, fallback to id)
+      const phaseSeed =
+        (typeof (e as any).spawnOrdinal === "number" && Number.isFinite((e as any).spawnOrdinal))
+          ? (e as any).spawnOrdinal
+          : ((e as any).id ?? 0);
+
+      // 1) procedural parts
+      const proc = (e as any).render?.proc ?? (e as any).proc;
+      if (proc && proc.kind === "parts") {
+        const okp = this.drawProcPartsAt(gl, ix, iy, tSec, phaseSeed, baseCol, proc);
+        if (okp) return;
+      }
+
+      // 2) glyph stack
+      const glyphs = (e as any).render?.glyphs;
+      if (glyphs && Array.isArray(glyphs) && glyphs.length) {
+        const okg = this.drawGlyphStackAt(gl, ix, iy, tSec, phaseSeed, baseCol, glyphs);
+        if (okg) return;
+      }
+
+       // 3) single glyph fallback
+       const glyphId = (e as any).render?.glyphId ?? (e as any).glyphId;
+       if (glyphId) {
+         const ok = this.drawGlyphAt(gl, ix, iy, String(glyphId));
+         if (ok) return;
+       }
 
         // --- SPRITE DRAW (player only) ---
       if (kind === "player" && this.sprites?.ready && this.sprites.atlas) {

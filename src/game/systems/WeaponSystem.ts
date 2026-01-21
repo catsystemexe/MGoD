@@ -85,14 +85,9 @@ export class WeaponSystem {
     const MUZZLE = 12; // px dopředu od středu ship
     const ox = shipPos.x + dir.x * MUZZLE;
     const oy = shipPos.y + dir.y * MUZZLE;
-
-    // camera: player is SCREEN, projectiles live in WORLD
-   
-    const sy = Number((this.world as any)?.scrollY ?? 0);
-
-    this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
-      owner,
-      origin: { x: ox, y: oy + sy },
+      this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
+        owner,
+        origin: { x: ox, y: oy },
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
     });
@@ -135,13 +130,11 @@ export class WeaponSystem {
        this.st.cdBomb,
        Number(bomb?.cooldownSec ?? this.cfg.bombCooldownSec ?? 0.8),
        () => {
-         const sy = Number((this.world as any)?.scrollY ?? 0);
-
-         this.bus.emitNext(EventType.SPAWN_BOMB, {
-           owner: snap.shipRef,
-           origin: { x: snap.shipPos.x, y: snap.shipPos.y + sy },
-           target: { x: actions.bombTarget.x, y: actions.bombTarget.y + sy },
-         });
+          this.bus.emitNext(EventType.SPAWN_BOMB, {
+            owner: snap.shipRef,
+            origin: { x: snap.shipPos.x, y: snap.shipPos.y },
+            target: { x: actions.bombTarget.x, y: actions.bombTarget.y },
+          });
        },
      );
    }

@@ -91,8 +91,8 @@ export class PlayerSystem {
     const tvy = actions.move.y * this.player.speed;
 
     // smoothing: faster stop than start (feels tight)
-    const accel = 22; // 1/s
-    const decel = 28; // 1/s
+    const accel = 300; // 1/s
+    const decel = 300; // 1/s
     const hasInput = (actions.move.x !== 0 || actions.move.y !== 0);
     const k = hasInput ? accel : decel;
 

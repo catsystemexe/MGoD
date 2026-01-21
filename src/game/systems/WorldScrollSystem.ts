@@ -1,6 +1,16 @@
 import type { WorldState } from "../data/WorldState";
 import type { PlayerData } from "../entities/PlayerTypes";
 
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+function smoothTo(cur: number, target: number, easeSec: number, dt: number): number {
+  const tau = Math.max(0.0001, Number.isFinite(easeSec) ? easeSec : 0.12);
+  const a = 1 - Math.exp(-dt / tau);
+  const c = Number.isFinite(cur) ? cur : 0;
+  const t = Number.isFinite(target) ? target : c;
+  return c + (t - c) * a;
+}
+
 export class WorldScrollSystem {
   constructor(
     private readonly world: WorldState,
@@ -13,7 +23,30 @@ export class WorldScrollSystem {
     // --- konstantní autoscroll doprava
     this.world.scrollX += this.world.speedX * dt;
 
-    // --- Y-follow disabled (MVP): keep camera Y fixed
-      this.world.scrollY = 0;
-}
+    const H = this.logicH;
+
+    // camera range in world-space
+    const worldH = Number.isFinite((this.world as any).worldH) ? Number((this.world as any).worldH) : H;
+    const camMinY = 0;
+    const camMaxY = Math.max(0, worldH - H);
+
+    // dead-band padding (top/bottom)
+    const padTop = Number.isFinite((this.world as any).cameraPadTop) ? Number((this.world as any).cameraPadTop) : 140;
+    const padBot = Number.isFinite((this.world as any).cameraPadBottom) ? Number((this.world as any).cameraPadBottom) : 140;
+
+    const py = Number((this.player as any).pos?.y ?? H * 0.5);
+
+    const camY = Number((this.world as any).scrollY ?? 0);
+    const topLine = camY + padTop;
+    const botLine = camY + (H - padBot);
+
+    let desired = camY;
+    if (py < topLine) desired = py - padTop;
+    else if (py > botLine) desired = py - (H - padBot);
+
+    desired = clamp(desired, camMinY, camMaxY);
+
+    const ease = Number.isFinite((this.world as any).camEaseSec) ? Number((this.world as any).camEaseSec) : 0.12;
+    (this.world as any).scrollY = smoothTo(camY, desired, ease, dt);
+  }
 }

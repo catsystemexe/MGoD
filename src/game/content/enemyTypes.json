@@ -6,15 +6,33 @@
       "radius": 4,
       "scoreOnKill": 10,
       "behaviorPresetId": "straight.basic",
-      "render": { "color": "#ff4444" }
+      "render": {
+        "color": "#ff4444",
+        "glyphs": [
+          { "id": "enemy.red", "dx": 0, "dy": 0 },
+
+          { "id": "field.ring8", "dx": 0, "dy": 0, "color": "#ffcc88", "alpha": 0, "pulseHz": 2.0, "pulseAmp": 0.35 },
+          { "id": "node.eye", "dx": 0, "dy": 0, "color": "#ffffff", "alpha": 0.90 },
+          { "id": "edge.chevron", "dx": -14, "dy": -8, "color": "#ffffff", "alpha": 0.80 },
+          { "id": "edge.chevron", "dx": 14,  "dy": -8, "color": "#ffffff", "alpha": 0.80 }
+        ]
+      }
     },
     {
-      "id": "enemy_bug1",
+      "id": "bug1",
       "hp": 5,
       "radius": 4,
       "scoreOnKill": 12,
       "behaviorPresetId": "sine.basic",
-      "render": { "color": "#44ff44" }
+      "render": {
+        "color": "#44ff44",
+        "glyphs": [
+          { "id": "enemy.bug1", "dx": 0, "dy": 0 },
+
+          { "id": "field.ring8", "dx": 0, "dy": 0, "color": "#44ff44", "alpha": 0, "pulseHz": 3.0, "pulseAmp": 0.45 },
+          { "id": "node.eye", "dx": 0, "dy": 0, "color": "#ffffff", "alpha": 0.85 }
+        ]
+      }
     },
     {
       "id": "blue",
@@ -22,7 +40,17 @@
       "radius": 4,
       "scoreOnKill": 14,
       "behaviorPresetId": "invaders.basic",
-      "render": { "color": "#4488ff" }
+      "render": {
+        "color": "#4488ff",
+        "glyphs": [
+          { "id": "enemy.blue", "dx": 0, "dy": 0 },
+
+          { "id": "field.ring8", "dx": 0, "dy": 0, "color": "#88bbff", "alpha": 0, "pulseHz": 1.5, "pulseAmp": 0.30 },
+          { "id": "edge.chevron", "dx": -16, "dy": 0, "color": "#ffffff", "alpha": 0.78 },
+          { "id": "edge.chevron", "dx": 16,  "dy": 0, "color": "#ffffff", "alpha": 0.50 },
+          { "id": "node.eye", "dx": 0, "dy": 0, "color": "#ffffff", "alpha": 0.75 }
+        ]
+      }
     }
   ]
 }

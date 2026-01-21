@@ -6,12 +6,12 @@
       "durationSec": 999,
       "spawnEverySec": 0.1,
       "maxAlive": 5,
-      "enemyTypeId": "enemy_bug1",
+      "enemyTypeId": "bug1",
       "behaviorPresetId": "sine.hold",
       "pattern": {
         "kind": "ring",
         "centerX": 936,
-        "centerY": 90,
+        "centerY": 0,
         "radius": 50,
         "count": 5
       }
@@ -27,7 +27,7 @@
       "pattern": {
         "kind": "line",
         "originX": 936,
-        "originY": 90,
+        "originY": 200,
         "spacingX": 16,
         "slopeY": 0
       }
@@ -38,15 +38,48 @@
       "durationSec": 16,
       "spawnEverySec": 0.5,
       "maxAlive": 5,
-      "enemyTypeId": "enemy_bug1",
+      "enemyTypeId": "bug1",
       "behaviorPresetId": "sine.basic",
       "pattern": {
         "kind": "line",
         "originX": 936,
-        "originY": 90,
+        "originY": 200,
         "spacingX": 12,
         "slopeY": 0
       }
     }
+    ,
+    {
+      "id": "wave.red.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "red",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    },
+    {
+      "id": "wave.bug1.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "bug1",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    },
+    {
+      "id": "wave.blue.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "blue",
+      "behaviorPresetId": "invaders.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    }
+
+    
   ]
 }

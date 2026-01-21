@@ -86,7 +86,7 @@ export async function createGame(
     ent.pos = { x: START_X, y: START_Y };
     ent.vel = { x: 0, y: 0 };
    
-    ent.speed = 140;
+    ent.speed = 700;
     ent.radius = 3;
     ent.pendingKill = false;
 
@@ -379,7 +379,7 @@ export async function createGame(
     (playerEnt as any).posPrev = { x: playerEnt.pos.x, y: playerEnt.pos.y };
     playerEnt.vel = { x: 0, y: 0 };
     
-    playerEnt.speed = Number(playerEnt.speed ?? 240);
+    playerEnt.speed = Number(playerEnt.speed ??700);
     playerEnt.radius = Number(playerEnt.radius ?? 3);
     playerEnt.pendingKill = false;
 
