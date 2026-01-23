@@ -2,6 +2,10 @@ import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
 import { getGlyph } from "../glyphs/GlyphDB";
 
+import { DemosceneBg } from "./bg/DemosceneBg";
+import { FlowRibbonBg } from "./bg/FlowRibbonBg";
+import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
+
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
@@ -65,10 +69,17 @@ export class WebGLSceneRenderer {
 
   private aPos: number;
 
+  // ✅ BG demoscene pass
+
   private uLogic: WebGLUniformLocation;
   private uPos: WebGLUniformLocation;
   private uSize: WebGLUniformLocation;
   private uColor: WebGLUniformLocation;
+
+  private bg: DemosceneBg;
+  private bgFlowRibbon: FlowRibbonBg;
+  private bgFlowSegments: FlowSegmentsBg;
+
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
@@ -121,7 +132,7 @@ export class WebGLSceneRenderer {
     this.uSize = uSize;
     this.uColor = uColor;
 
-    const verts = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]);
+      const verts = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]);
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -134,13 +145,18 @@ export class WebGLSceneRenderer {
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(this.aPos);
     gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.CULL_FACE);
       gl.disable(gl.BLEND);
 
+
+       this.bg = new DemosceneBg(gl);
+    this.bgFlowRibbon = new FlowRibbonBg(gl);
+    this.bgFlowSegments = new FlowSegmentsBg(gl);
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -164,6 +180,8 @@ export class WebGLSceneRenderer {
       .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
     }
 
+
+  
   private drawDebugBackground(sx: number, sy: number): void {
     const gl = this.gl;
 
@@ -211,12 +229,18 @@ export class WebGLSceneRenderer {
     if (w <= 0 || h <= 0) return false;
     if (bits.length !== w * h) return false;
 
-    // center glyph on (cx, cy); uPos expects center coordinates
-    const halfW = (w * px) * 0.5;
-    const halfH = (h * px) * 0.5;
+    const isObelisk = glyphId.startsWith("enemy.obelisk.");
 
-    const x0 = cx - halfW + px * 0.5;
-    const y0 = cy - halfH + px * 0.5;
+    // center glyph on (cx, cy); uPos expects center coordinates
+    const outW = isObelisk ? h : w; // rotated 90° => width becomes h
+    const outH = isObelisk ? w : h; // rotated 90° => height becomes w
+
+    const halfW = (outW * px) * 0.5;
+    const halfH = (outH * px) * 0.5;
+
+    // IMPORTANT: snap base to integer to kill shimmer
+    const baseX0 = Math.round(cx - halfW + px * 0.5);
+    const baseY0 = Math.round(cy - halfH + px * 0.5);
 
     // draw each "on" cell as a tiny quad (existing debug program)
     // NOTE: color must already be set via uColor by caller
@@ -224,15 +248,21 @@ export class WebGLSceneRenderer {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
         if (bits.charCodeAt(i) !== 49) continue; // '1'
-        const pxX = Math.round(x0 + x * px);
-        const pxY = Math.round(y0 + y * px);
+
+        // rotate 90° left for obelisk glyphs
+        const xx = isObelisk ? y : x;
+        const yy = isObelisk ? (w - 1 - x) : y;
+
+        const pxX = baseX0 + Math.round(xx * px);
+        const pxY = baseY0 + Math.round(yy * px);
+
         gl.uniform2f(this.uPos, pxX, pxY);
         gl.uniform2f(this.uSize, px, px);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
     }
     return true;
-  }
+    }
 
   private drawGlyphStackAt(
     gl: WebGL2RenderingContext,
@@ -262,11 +292,38 @@ export class WebGLSceneRenderer {
     for (const it of glyphs) {
       if (!it) continue;
 
-      const id = String(it.id ?? "");
+      const rawId = (it as any).id;
+      if (!(typeof rawId === "string" || typeof rawId === "number")) continue;
+
+      const id = String(rawId);
       if (!id) continue;
 
-      const dx = Number(it.dx ?? 0);
-      const dy = Number(it.dy ?? 0);
+      const dx0 = Number(it.dx ?? 0);
+      const dy0 = Number(it.dy ?? 0);
+
+      // optional per-glyph bob (dev-friendly idle motion)
+      const bobHz = Number(it.bobHz ?? 0);
+      const bobAmpX = Number(it.bobAmpX ?? 0);
+      const bobAmpY = Number(it.bobAmpY ?? 0);
+      const bobPhase = Number(it.bobPhase ?? 0);
+
+      let dx = dx0;
+      let dy = dy0;
+
+      if (Number.isFinite(bobHz) && bobHz > 0 && (bobAmpX || bobAmpY)) {
+        const tt = (tSec + (Number.isFinite(bobPhase) ? bobPhase : 0)) * Math.PI * 2 * bobHz;
+        const s = Math.sin(tt);
+        const c = Math.cos(tt);
+        if (Number.isFinite(bobAmpX) && bobAmpX) dx += c * bobAmpX;
+        if (Number.isFinite(bobAmpY) && bobAmpY) dy += s * bobAmpY;
+      }
+
+     
+
+
+
+      
+
 
       const col = (typeof it.color === "string" && it.color.length) ? it.color : null;
       const [r, g, b] = col ? parseHex(col) : [br, bg, bb];
@@ -275,10 +332,10 @@ export class WebGLSceneRenderer {
       if (!Number.isFinite(a)) a = 1;
       a = Math.max(0, Math.min(1, a));
 
-      const pulseHz = Number(it.pulseHz ?? 0);
-      const pulseAmp = Number(it.pulseAmp ?? 0);
-      if (pulseHz > 0 && pulseAmp > 0) {
-        const s = Math.sin((tSec + phase) * Math.PI * 2 * pulseHz);
+        const pulseHz = Number(it.pulseHz ?? 0);
+        const pulseAmp = Number(it.pulseAmp ?? 0);
+        if (Number.isFinite(pulseHz) && pulseHz > 0 && Number.isFinite(pulseAmp) && pulseAmp > 0) {
+          const s = Math.sin((tSec + phase) * Math.PI * 2 * pulseHz);
         const k = 1 + s * Math.max(0, Math.min(1, pulseAmp));
         a = Math.max(0, Math.min(1, a * k));
       }
@@ -290,14 +347,18 @@ export class WebGLSceneRenderer {
       }
 
       gl.uniform4f(this.uColor, r, g, b, a);
-      this.drawGlyphAt(gl, cx + dx, cy + dy, id);
-    }
 
+      // IMPORTANT: snap final to integer to kill shimmer
+      const x = Math.round(cx + dx);
+      const y = Math.round(cy + dy);
+
+      this.drawGlyphAt(gl, x, y, id);
+      }
     if (blendOn) gl.disable(gl.BLEND);
     gl.uniform4f(this.uColor, 1, 1, 1, 1);
 
     return true;
-  }
+      }
 
   
   private drawProcPartsAt(
@@ -379,15 +440,49 @@ export class WebGLSceneRenderer {
 
     // --- DEBUG BACKGROUND (world scroll aware)
     const world = (window as any).__CM?.game?.world;
-    const sx = world?.scrollX ?? 0;
-    const sy = world?.scrollY ?? 0;
-
-    this.drawDebugBackground(sx, sy);
-// clamp once per frame
-    const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+    const sx = Number(world?.scrollX ?? 0);
+    const sy = Number(world?.scrollY ?? 0);
 
     // sprite anim time
     const tSec = performance.now() * 0.001;
+    // BG pass (shader or flow)
+    if (bgKind === "flow") {
+      const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
+
+      if (labKind === "flowSegments") {
+        this.bgSegments.draw({
+          logicW: this.logicW,
+          logicH: this.logicH,
+          timeSec: tSec,
+          scrollX: sx,
+          scrollY: sy,
+          presetIndex,
+        });
+      } else {
+        // default: flowRibbon
+        this.bgFlow.draw({
+          logicW: this.logicW,
+          logicH: this.logicH,
+          timeSec: tSec,
+          scrollX: sx,
+          scrollY: sy,
+          presetIndex,
+        });
+      }
+    } else {
+      this.bg.draw({
+        logicW: this.logicW,
+        logicH: this.logicH,
+        timeSec: tSec,
+        scrollX: sx,
+        scrollY: sy,
+        presetIndex,
+      });
+    }
+    // this.drawDebugBackground(sx, sy);
+
+    // clamp once per frame
+    const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
 
     this.store.debugForEachAlive((_ref, e: any) => {
       if (!e) return;
@@ -903,7 +998,7 @@ export class WebGLSceneRenderer {
 
   gl.bindVertexArray(null);
 }
-  }
-
+  
+                                 }
   
   

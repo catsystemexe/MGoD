@@ -175,6 +175,15 @@ async function main() {
   };
 
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
+
+  // ---- BG Lab UI (F7 toggle) ----
+  try {
+    const mod = await import("./ui/BgLabUI");
+    (globalThis as any).__CM_BG_LAB_UI__ = new mod.BgLabUI();
+  } catch (e) {
+    console.warn("[BG_LAB] init failed", e);
+  }
+
   // (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
 
   // --- HUD mode mirror (so we can gate pointer/touch)
@@ -218,7 +227,35 @@ async function main() {
       return;
     }
 
-    // Game over keys (Y/N)
+    // BG preset hotswap ([ / ])
+    if (e.key === "[" || e.code === "BracketLeft") {
+      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) - 1;
+      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
+      return;
+    }
+    if (e.key === "]" || e.code === "BracketRight") {
+      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) + 1;
+      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
+      return;
+    }
+
+    // BG kind toggle (B): shader <-> flow
+    if (e.code === "KeyB") {
+      const cur = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
+      const next = cur === "flow" ? "shader" : "flow";
+      (globalThis as any).__CM_BG_KIND__ = next;
+      console.log("[BG] kind", next);
+      return;
+    }
+    
+    
+
+    if (e.key === "u" || e.key === "U") {
+      const ui = (globalThis as any).__CM_BG_LAB_UI__;
+      if (ui && typeof ui.toggle === "function") ui.toggle();
+      else console.log("[BG_LAB] UI not ready");
+    }
+// Game over keys (Y/N)
     if (!session?.gameOver) return;
 
     if (e.code === "KeyY") {
@@ -254,7 +291,7 @@ async function main() {
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
-
+  (globalThis as any).__CM_BG_PRESET__ ??= 0;
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
