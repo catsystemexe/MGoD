@@ -87,22 +87,19 @@ export class BgDevUI {
     this.root.style.cssText = [
       "position:fixed",
       "right:8px",
-      "top:8px",
+      "top:10px",
       "z-index:99999",
       "pointer-events:auto",
       "color:#fff",
       "font:10px monospace",
       "background:rgba(10,12,15,0.80)",
       "border:1px solid rgba(255,255,255,0.18)",
-      "border-radius:9px",
+      "border-radius:5px",
       "padding:5px",
-      "min-width:180px",
-      "max-width:220px",
+      "min-width:200px",
+      "max-width:240px",
       `display:${this.visible ? "block" : "none"}`,
       "user-select:none",
-        "max-height:calc(100vh - 16px)",
-        "overflow:auto",
-        "overflow-x:hidden",
     ].join(";");
 
     // Capture-phase stop so canvas never sees it.
@@ -146,8 +143,8 @@ export class BgDevUI {
         "border:1px solid rgba(255,255,255,0.15)",
         "color:white",
         "padding:3px 5px",
-        "border-radius:9px",
-        "font:10px monospace",
+        "border-radius:5px",
+        "font:11px monospace",
         "line-height:5px",
       ].join(";");
       b.onclick = (e) => {
@@ -179,7 +176,7 @@ export class BgDevUI {
         "border:1px solid rgba(255,255,255,0.15)",
         "color:white",
         "padding:5px 5px",
-        "border-radius:9px",
+        "border-radius:5px",
         "font:10px monospace",
         "text-align:left",
         "width:100%",
@@ -210,7 +207,7 @@ export class BgDevUI {
       "margin-top:5px",
       "padding:5px 5px",
       "border:1px solid rgba(255,255,255,0.10)",
-      "border-radius:9px",
+      "border-radius:5px",
       "background:rgba(255,255,255,0.04)",
       "display:flex",
       "justify-content:space-between",
@@ -256,7 +253,7 @@ export class BgDevUI {
 
     if (ctrl.type !== "button") {
       const label = el("div");
-      label.style.cssText = "opacity:0.9;margin-bottom:1px;";
+      label.style.cssText = "opacity:0.9;margin-bottom:4px;";
       label.textContent = ctrl.path;
       wrap.appendChild(label);
     }
@@ -273,7 +270,7 @@ export class BgDevUI {
         "border:1px solid rgba(255,255,255,0.15)",
         "color:white",
         "padding:3px 3px",
-        "border-radius:9px",
+        "border-radius:3px",
         "font:10px monospace",
         "width:100%",
         "text-align:center",
@@ -297,7 +294,7 @@ export class BgDevUI {
         "width:100%",
         "background:rgba(0,0,0,0.35)",
         "border:1px solid rgba(255,255,255,0.15)",
-        "border-radius:9px",
+        "border-radius:4px",
         "color:white",
         "padding:4px 4px",
         "font:10px monospace",
@@ -356,7 +353,7 @@ export class BgDevUI {
         "width:20px",
         "background:rgba(0,0,0,0.35)",
         "border:1px solid rgba(255,255,255,0.15)",
-        "border-radius:9px",
+        "border-radius:4px",
         "color:white",
         "padding:4px 5px",
         "font:10px monospace",
@@ -476,7 +473,7 @@ export class BgDevUI {
 
   private mkRow(): HTMLDivElement {
     const r = el("div");
-    r.style.cssText = "display:grid;grid-template-columns:90px 1fr;gap:5px;align-items:center;margin:3px 0;";
+    r.style.cssText = "display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center;margin:6px 0;";
     return r;
   }
 
@@ -487,7 +484,7 @@ export class BgDevUI {
     if (opts.step != null) i.step = String(opts.step);
     if (opts.min != null) i.min = String(opts.min);
     if (opts.max != null) i.max = String(opts.max);
-    i.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:3px;padding:3px 5px;";
+    i.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:3px;padding:4px 6px;";
     return i;
   }
 
@@ -544,7 +541,7 @@ export class BgDevUI {
       "border:1px solid rgba(255,255,255,0.15)",
       "color:white",
       "padding:3px 2px",
-      "border-radius:9px",
+      "border-radius:2px",
       "font:10px monospace",
       "line-height:3px",
       this.rebuildDirty ? "opacity:1" : "opacity:0.5",
@@ -577,11 +574,28 @@ export class BgDevUI {
       r.appendChild(n);
       box.appendChild(r);
     }
+
+    // kind-specific base preset (structural)
+    if (activePreset?.kind === "flow") {
+      const r = this.mkRow();
+      r.appendChild(this.mkLabel("flow.preset"));
+      const cur = String(this.getOverride("base.flow.preset") ?? (activePreset.base as any)?.flow?.preset ?? "segments");
+      const sel = this.mkSelect(cur, ["segments", "ribbon"]);
+      sel.onpointerdown = (e) => stopProp(e);
+      sel.onchange = (e) => {
+        stopProp(e);
+        this.setOverride("structural", "base.flow.preset", String(sel.value));
+        this.render();
+      };
+      r.appendChild(sel);
+      box.appendChild(r);
+    }
+
     if (activePreset?.kind === "shader") {
       const r = this.mkRow();
       r.appendChild(this.mkLabel("shader.preset"));
       const cur = String(this.getOverride("base.shader.preset") ?? (activePreset.base as any)?.shader?.preset ?? "gradient");
-      const sel = this.mkSelect(cur, ["gradient", "plasma", "nebula", "stripes"]);
+      const sel = this.mkSelect(cur, ["gradient", "plasma", "noise"]);
       sel.onpointerdown = (e) => stopProp(e);
       sel.onchange = (e) => {
         stopProp(e);
