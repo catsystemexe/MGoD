@@ -88,15 +88,17 @@ export function getBgLabState(): BgLabState {
 export function setBgGlobalsFromState(st: BgLabState): void {
   const g = globalThis as any;
 
-  // když je BG Lab aktivní, vynutíme flow pass
-  if (st.enabled) {
+  // BG režim řídí výhradně st.kind (UI selection)
+  if (st.kind === "shader") {
+    g.__CM_BG_KIND__ = "shader";
+  } else {
     g.__CM_BG_KIND__ = "flow";
   }
 
-  // pokud chceš mít možnost Lab vypnout a vrátit shader:
-  // else g.__CM_BG_KIND__ = "shader";
+  // renderer čte __CM_BG_LAB__.kind (flowRibbon / flowSegments)
+  g.__CM_BG_LAB__ = st;
 
-  // zachovej presetIndex pokud existuje v state (jestli ho tam máš)
+  // presetIndex globál
   if (Number.isFinite((st as any).presetIndex)) {
     g.__CM_BG_PRESET__ = ((st as any).presetIndex | 0);
   }
@@ -232,9 +234,9 @@ export class BgLabUI {
     `;
 
     const h = el("h3");
-    h.textContent = "BG Lab · Flow / Ribbon / Shader";
+    h.textContent = "BG Lab · Shader / FlowRibbon / FlowSegments";
     const hint = el("div");
-    hint.innerHTML = `<small>Toggle: <b>F7</b> · Apply: auto · Saves: localStorage</small>`;
+    hint.innerHTML = `<small>Toggle UI: <b>U</b> · Kind toggle: <b>B</b> · Apply: auto · Saves: localStorage</small>`;
     root.appendChild(h);
     root.appendChild(hint);
 
@@ -440,7 +442,6 @@ export class BgLabUI {
   toggle(): void {
     this.visible = !this.visible;
     this.root.style.display = this.visible ? "block" : "none";
-    const st = getBgLabState();
-    st.enabled = this.visible;
+    // UI toggle nesmí měnit background režim; ten řídí st.kind
   }
 }

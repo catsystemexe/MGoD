@@ -446,6 +446,10 @@ export class WebGLSceneRenderer {
     // sprite anim time
     const tSec = performance.now() * 0.001;
     // BG pass (shader or flow)
+    const g = globalThis as any;
+    const bgKind = String(g.__CM_BG_KIND__ ?? "shader");
+    const presetIndex = Number(g.__CM_BG_PRESET__ ?? 0) | 0;
+
     if (bgKind === "flow") {
       const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
 
@@ -482,6 +486,18 @@ export class WebGLSceneRenderer {
     // this.drawDebugBackground(sx, sy);
 
     // clamp once per frame
+    // --- sanitize GL state after BG pass (prevent state leak from bg shaders)
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // --- restore main renderer program/VAO after BG pass (bg draw() swaps program/VAO)
+    gl.useProgram(this.prog);
+    gl.bindVertexArray(this.vao);
+    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
 
     this.store.debugForEachAlive((_ref, e: any) => {
