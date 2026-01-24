@@ -249,13 +249,11 @@ if (presetId && Array.isArray(presets)) {
                 g.__CM_BG_LAB__ ??= {};
                 g.__CM_BG_LAB__.enabled = false;
                 g.__CM_BG_LAB__.kind = p.kind;
-                g.__CM_BG_LAB__.flow = p.flow ?? {};                  // keep presetIndex stable (legacy param for bg shaders)
-                  if (p.kind === "shader") {
-                    const ix = Number((p as any).shader?.presetIndex ?? 0);
-                    g.__CM_BG_PRESET__ = Number.isFinite(ix) ? (ix | 0) : 0;
-                  } else {
-                    g.__CM_BG_PRESET__ ??= 0;
-                  }
+                g.__CM_BG_LAB__.flow = p.flow ?? {};
+
+                // keep presetIndex stable (legacy param for bg shaders)
+                g.__CM_BG_PRESET__ ??= 0;
+
                 g.__CM_BG_CONTENT_LAST_PRESET_ID__ = presetId;
               }
             }

@@ -54,7 +54,6 @@ export type CMEventMap = {
     typeId: string;
     waveId?: string;
     spawn?: { x: number; y: number };
-      spawnSpace?: "screen" | "world"; // "screen" => add camera; "world" => absolute
     behaviorPresetId?: string;
     spawnOrdinal?: number; // ✅ BE V1: deterministic index within wave
     spawnAgeSec?: number;  // ✅ director backlog catch-up (seconds since scheduled spawn)

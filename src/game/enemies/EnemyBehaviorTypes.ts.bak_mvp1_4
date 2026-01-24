@@ -77,13 +77,7 @@ export type BgPresetContent = {
   name: string;
   kind: BgKind;
 
-  
-  // shader-only params (legacy index-based shader presets)
-  shader?: {
-    presetIndex?: number; // 0..n-1 in BG_PRESETS
-  };
-
-// MVP: only flow params (shared by ribbon/segments; each renderer uses what it needs)
+  // MVP: only flow params (shared by ribbon/segments; each renderer uses what it needs)
   flow?: {
     // colors (hex) + alpha
     colorsFar?: string;

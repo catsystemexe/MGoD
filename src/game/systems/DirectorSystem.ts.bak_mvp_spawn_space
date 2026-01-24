@@ -375,13 +375,12 @@ export class DirectorSystem {
 
         console.log("[DIR][SPAWN_ENEMY]", w.id, "idx=", idx, "spawn=", spawn);
           this.bus.emitNext(EventType.SPAWN_ENEMY, {
-            typeId: w.def.enemyTypeId,
-            waveId: w.id,
-            spawn,
-            spawnSpace: "screen",
-            spawnOrdinal: w.spawned,
-            behaviorPresetId: (w.def as any).behaviorPresetId,
-          } as any);
+          typeId: w.def.enemyTypeId,
+          waveId: w.id,
+          spawn,
+          spawnOrdinal: w.spawned,
+          behaviorPresetId: (w.def as any).behaviorPresetId,
+        } as any);
 
         w.spawned++;
         spawnedNow++;

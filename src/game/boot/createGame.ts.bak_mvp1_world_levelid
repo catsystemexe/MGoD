@@ -76,16 +76,6 @@ export async function createGame(
 
 
          const world = createWorldState();
-
-  // BG MVP1: ensure a stable level identity for bgBindings (fallback)
-  // If your future Level/Scene system sets this, it will override naturally.
-  (world as any).levelId ??= (world as any).sceneId ??= "debug";
-
-
-  // BG MVP1: ensure a stable level identity for bgBindings (fallback)
-  // If your future Level/Scene system sets this, it will override naturally.
-  (world as any).levelId ??= (world as any).sceneId ??= "debug";
-
         
 // --- Spawn PLAYER (capture reference to the real entity object)
   let playerEnt: any = null;

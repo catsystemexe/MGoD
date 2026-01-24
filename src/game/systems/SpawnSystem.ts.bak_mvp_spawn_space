@@ -222,26 +222,9 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          const camX = Number(this.world?.scrollX ?? 0);
-            const camY = Number(this.world?.scrollY ?? 0);
-
-            const spawnSpace =
-              ((p as any)?.spawnSpace === "world") ? "world" : "screen";
-
-            // store WORLD coords; if spawn is screen-relative, add camera ONCE
-            const x = (spawnSpace === "world") ? Number(spawnPos.x) : (Number(spawnPos.x) + camX);
-            const y = (spawnSpace === "world") ? Number(spawnPos.y) : (Number(spawnPos.y) + camY);
-
-            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
-              console.log("[SPAWN_SYS][SPACE]", {
-                typeId: (p as any)?.typeId,
-                waveId: (p as any)?.waveId,
-                spawnSpace,
-                cam: { x: camX, y: camY },
-                spawnScreen: { x: Number(spawnPos.x), y: Number(spawnPos.y) },
-                spawnWorld: { x, y },
-              });
-            }
+          // pattern is relative to viewport => store WORLD coords (add camera ONCE)
+          const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
+          const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;

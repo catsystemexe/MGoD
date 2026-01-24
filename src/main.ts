@@ -162,7 +162,16 @@ async function main() {
   window.__CM.store = store;
   window.__CM.game = game;
   
+  // --- Content -> globals (MVP1 BG presets/bindings need this) ---
+  const { CONTENT } = await import("./game/content/CONTENT");
 
+  // expose on multiple keys (renderer probes these)
+  window.__CM.content = CONTENT;
+  window.__CM.CONTENT = CONTENT;
+
+  // also attach to game for completeness
+  window.__CM.game.content = CONTENT;
+  
   // ---- Dev API bridge
   window.__CM.dev = {
     waves: () => window.__CM.director?.getWaveStates?.(),

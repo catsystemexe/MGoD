@@ -215,28 +215,12 @@ export class WebGLSceneRenderer {
             null;
 
           const bindings = content?.bgBindings;
-            const presetsDb = content?.bgPresets;
+          const presetsDb = content?.bgPresets;
 
-            // Resolve levelId (MVP: best-effort, fallback to "debug")
-            const world = cm?.game?.world ?? (globalThis as any).__CM?.game?.world ?? null;
-            const levelId =
-              String(
-                world?.levelId ??
-                world?.sceneId ??
-                cm?.levelId ??
-                cm?.game?.levelId ??
-                "debug"
-              );
+          const presetId = bindings?.defaultPresetId;
+          const presets = presetsDb?.presets;
 
-            // binding override (levelId -> presetId) else default
-            const bound =
-              Array.isArray(bindings?.bindings)
-                ? bindings!.bindings!.find((b: any) => b && b.levelId === levelId)
-                : null;
-
-            const presetId = String(bound?.presetId ?? bindings?.defaultPresetId ?? "");
-            const presets = presetsDb?.presets;
-if (presetId && Array.isArray(presets)) {
+          if (presetId && Array.isArray(presets)) {
             const lastApplied = g.__CM_BG_CONTENT_LAST_PRESET_ID__;
             if (lastApplied !== presetId) {
               const p = presets.find((x: any) => x?.id === presetId) ?? null;
@@ -249,13 +233,11 @@ if (presetId && Array.isArray(presets)) {
                 g.__CM_BG_LAB__ ??= {};
                 g.__CM_BG_LAB__.enabled = false;
                 g.__CM_BG_LAB__.kind = p.kind;
-                g.__CM_BG_LAB__.flow = p.flow ?? {};                  // keep presetIndex stable (legacy param for bg shaders)
-                  if (p.kind === "shader") {
-                    const ix = Number((p as any).shader?.presetIndex ?? 0);
-                    g.__CM_BG_PRESET__ = Number.isFinite(ix) ? (ix | 0) : 0;
-                  } else {
-                    g.__CM_BG_PRESET__ ??= 0;
-                  }
+                g.__CM_BG_LAB__.flow = p.flow ?? {};
+
+                // keep presetIndex stable (legacy param for bg shaders)
+                g.__CM_BG_PRESET__ ??= 0;
+
                 g.__CM_BG_CONTENT_LAST_PRESET_ID__ = presetId;
               }
             }

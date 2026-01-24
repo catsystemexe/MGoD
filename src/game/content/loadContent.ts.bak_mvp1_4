@@ -92,14 +92,6 @@ function validateBgPresetsFile(raw: any): BgPresetsFile {
       for (const k of nums) {
         if (f[k] !== undefined) assert(isNum(f[k]), `bgPresets(${String(p.id)}).flow.${k} must be number if provided`);
       }
-
-      if (p.shader !== undefined) {
-        assert(p.shader && typeof p.shader === "object", `bgPresets(${String(p.id)}).shader must be object if provided`);
-        const s = p.shader as any;
-        if (s.presetIndex !== undefined) {
-          assert(isNum(s.presetIndex), `bgPresets(${String(p.id)}).shader.presetIndex must be number if provided`);
-        }
-      }
       if (f.blend !== undefined) {
         assert(f.blend === "alpha" || f.blend === "add", `bgPresets(${String(p.id)}).flow.blend invalid`);
       }
