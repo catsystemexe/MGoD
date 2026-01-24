@@ -103,10 +103,10 @@ export class BgDevUI {
     ].join(";");
 
     // Capture-phase stop so canvas never sees it.
-    this.root.addEventListener("pointerdown", stopProp);
-    this.root.addEventListener("pointerup", stopProp);
-    this.root.addEventListener("click", stopProp);
-    this.root.addEventListener("wheel", stopProp);
+    this.root.addEventListener("pointerdown", stopProp, { capture: true });
+    this.root.addEventListener("pointerup", stopProp, { capture: true });
+    this.root.addEventListener("click", stopProp, { capture: true });
+    this.root.addEventListener("wheel", stopProp, { capture: true });
 
     document.body.appendChild(this.root);
     this.render();
@@ -430,199 +430,10 @@ export class BgDevUI {
     this.renderActiveLine(active);
 
     this.renderPresetsList(presets, active);
-
-    // Base Layer (Layer 1)
-    const activePreset = presets.find((p) => p.id === active) ?? null;
-    this.renderBaseLayerControls(activePreset);
-
     this.renderLayout(bgBaseUiLayout, snapshot);
   }
 
   destroy(): void {
     this.root.remove();
   }
-
-
-  // --- Base Layer (MVP) -------------------------------------------------
-  // Writes to BgLabState.overrides only. Runtime listens via BgLabBus.
-
-  private getOverride(path: string): any {
-    const st = getGlobalLabState();
-    return getByPath(st.overrides, path);
-  }
-
-  private setOverride(changeType: BgChangeType, path: string, value: any): void {
-    const cur = getGlobalLabState();
-    const nextOverrides = setByPath(cur.overrides ?? {}, path, value);
-    setGlobalLabState({ ...cur, overrides: nextOverrides });
-
-    if (changeType === "rebuild" || changeType === "structural") {
-      this.rebuildDirty = true;
-    }
-
-    // IMPORTANT: we emit only, runtime decides how to apply
-    this.emit(changeType, path);
-  }
-
-  private mkLabel(text: string): HTMLDivElement {
-    const d = el("div");
-    d.textContent = text;
-    d.style.cssText = "opacity:0.85;";
-    return d;
-  }
-
-  private mkRow(): HTMLDivElement {
-    const r = el("div");
-    r.style.cssText = "display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center;margin:6px 0;";
-    return r;
-  }
-
-  private mkNumber(value: number, opts: { step?: number; min?: number; max?: number } = {}): HTMLInputElement {
-    const i = el("input");
-    i.type = "number";
-    i.value = String(value);
-    if (opts.step != null) i.step = String(opts.step);
-    if (opts.min != null) i.min = String(opts.min);
-    if (opts.max != null) i.max = String(opts.max);
-    i.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;padding:4px 6px;";
-    return i;
-  }
-
-  private mkRange(value: number, opts: { step?: number; min: number; max: number }): HTMLInputElement {
-    const i = el("input");
-    i.type = "range";
-    i.value = String(value);
-    i.min = String(opts.min);
-    i.max = String(opts.max);
-    if (opts.step != null) i.step = String(opts.step);
-    i.style.cssText = "width:100%;";
-    return i;
-  }
-
-  private mkSelect(value: string, options: string[]): HTMLSelectElement {
-    const sel = el("select");
-    sel.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;padding:4px 6px;";
-    for (const opt of options) {
-      const o = el("option");
-      o.value = opt;
-      o.textContent = opt;
-      sel.appendChild(o);
-    }
-    sel.value = value;
-    return sel;
-  }
-
-  private renderBaseLayerControls(activePreset: BgPreset | null): void {
-    // Header row (with Apply Rebuild)
-    const box = el("div");
-    box.style.cssText = "margin-top:10px;padding:8px;border:1px solid rgba(255,255,255,0.10);border-radius:10px;background:rgba(255,255,255,0.03);";
-
-    const head = el("div");
-    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;";
-
-    const t = el("div");
-    t.textContent = "BASE (Layer 1)";
-    t.style.cssText = "font-weight:700;opacity:0.95;";
-    head.appendChild(t);
-
-    const right = el("div");
-    right.style.cssText = "display:flex;gap:8px;align-items:center;";
-
-    const dirty = el("div");
-    dirty.textContent = this.rebuildDirty ? "⟳ rebuild pending" : "";
-    dirty.style.cssText = "opacity:0.8;";
-    right.appendChild(dirty);
-
-    const apply = el("button");
-    apply.textContent = "Apply Rebuild";
-    apply.style.cssText = [
-      "cursor:pointer",
-      "background:rgba(255,255,255,0.08)",
-      "border:1px solid rgba(255,255,255,0.15)",
-      "color:white",
-      "padding:3px 8px",
-      "border-radius:8px",
-      "font:11px monospace",
-      "line-height:12px",
-      this.rebuildDirty ? "opacity:1" : "opacity:0.5",
-    ].join(";");
-    apply.disabled = !this.rebuildDirty;
-    apply.onclick = (e) => {
-      stopProp(e);
-      this.rebuildDirty = false;
-      BgLabBus.emit({ changeType: "rebuild", path: "*" });
-      this.render();
-    };
-    right.appendChild(apply);
-
-    head.appendChild(right);
-    box.appendChild(head);
-
-    // seed (rebuild)
-    {
-      const r = this.mkRow();
-      r.appendChild(this.mkLabel("seed"));
-      const cur = Number(this.getOverride("seed") ?? (activePreset?.seed ?? 1));
-      const n = this.mkNumber(cur, { step: 1, min: 0, max: 999999 });
-      n.onpointerdown = (e) => stopProp(e);
-      n.oninput = (e) => stopProp(e);
-      n.onchange = (e) => {
-        stopProp(e);
-        this.setOverride("rebuild", "seed", Number(n.value));
-        this.render();
-      };
-      r.appendChild(n);
-      box.appendChild(r);
-    }
-
-    // kind-specific base preset (structural)
-    if (activePreset?.kind === "flow") {
-      const r = this.mkRow();
-      r.appendChild(this.mkLabel("flow.preset"));
-      const cur = String(this.getOverride("base.flow.preset") ?? (activePreset.base as any)?.flow?.preset ?? "segments");
-      const sel = this.mkSelect(cur, ["segments", "ribbon"]);
-      sel.onpointerdown = (e) => stopProp(e);
-      sel.onchange = (e) => {
-        stopProp(e);
-        this.setOverride("structural", "base.flow.preset", String(sel.value));
-        this.render();
-      };
-      r.appendChild(sel);
-      box.appendChild(r);
-    }
-
-    if (activePreset?.kind === "shader") {
-      const r = this.mkRow();
-      r.appendChild(this.mkLabel("shader.preset"));
-      const cur = String(this.getOverride("base.shader.preset") ?? (activePreset.base as any)?.shader?.preset ?? "gradient");
-      const sel = this.mkSelect(cur, ["gradient", "plasma", "noise"]);
-      sel.onpointerdown = (e) => stopProp(e);
-      sel.onchange = (e) => {
-        stopProp(e);
-        this.setOverride("structural", "base.shader.preset", String(sel.value));
-        this.render();
-      };
-      r.appendChild(sel);
-      box.appendChild(r);
-    }
-
-    // MVP realtime knob
-    {
-      const r = this.mkRow();
-      r.appendChild(this.mkLabel("timeScale (rt)"));
-      const cur = Number(this.getOverride("base.common.timeScale") ?? 1.0);
-      const range = this.mkRange(cur, { min: 0, max: 3, step: 0.01 });
-      range.onpointerdown = (e) => stopProp(e);
-      range.oninput = (e) => {
-        stopProp(e);
-        const v = Number(range.value);
-        this.setOverride("realtime", "base.common.timeScale", v);
-      };
-      r.appendChild(range);
-      box.appendChild(r);
-    }
-
-    this.root.appendChild(box);
-  }
-
 }

@@ -103,10 +103,10 @@ export class BgDevUI {
     ].join(";");
 
     // Capture-phase stop so canvas never sees it.
-    this.root.addEventListener("pointerdown", stopProp);
-    this.root.addEventListener("pointerup", stopProp);
-    this.root.addEventListener("click", stopProp);
-    this.root.addEventListener("wheel", stopProp);
+    this.root.addEventListener("pointerdown", stopProp, { capture: true });
+    this.root.addEventListener("pointerup", stopProp, { capture: true });
+    this.root.addEventListener("click", stopProp, { capture: true });
+    this.root.addEventListener("wheel", stopProp, { capture: true });
 
     document.body.appendChild(this.root);
     this.render();
