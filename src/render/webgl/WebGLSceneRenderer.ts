@@ -1,7 +1,5 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
-import { getGlyph } from "../glyphs/GlyphDB";
-
 import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
@@ -179,272 +177,28 @@ export class WebGLSceneRenderer {
       .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
       .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
     }
-
-
-  
-  private drawDebugBackground(sx: number, sy: number): void {
-    const gl = this.gl;
-
-    gl.disable(gl.BLEND);
-    gl.useProgram(this.prog);
-    gl.bindVertexArray(this.vao);
-
-    // dark bg
-    gl.uniform4f(this.uColor, 0.04, 0.05, 0.08, 1.0);
-    gl.uniform2f(this.uPos, this.logicW * 0.5, this.logicH * 0.5);
-    gl.uniform2f(this.uSize, this.logicW, this.logicH);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    const grid = 64;
-
-    // vertical
-    gl.uniform4f(this.uColor, 1.0, 1.0, 1.0, 0.035);
-    const ox = -((sx % grid + grid) % grid);
-    for (let x = ox; x < this.logicW; x += grid) {
-      gl.uniform2f(this.uPos, x + 0.5, this.logicH * 0.5);
-      gl.uniform2f(this.uSize, 1, this.logicH);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-
-    // horizontal
-    gl.uniform4f(this.uColor, 1.0, 1.0, 1.0, 0.02);
-    const oy = -((sy % grid + grid) % grid);
-    for (let y = oy; y < this.logicH; y += grid) {
-      gl.uniform2f(this.uPos, this.logicW * 0.5, y + 0.5);
-      gl.uniform2f(this.uSize, this.logicW, 1);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-  }
-  
-  
-  private drawGlyphAt(gl: WebGL2RenderingContext, cx: number, cy: number, glyphId: string): boolean {
-    const g = getGlyph(glyphId);
-    if (!g) return false;
-
-    const w = Number(g.w) | 0;
-    const h = Number(g.h) | 0;
-    const px = (Number(g.px ?? 1) || 1);
-    const bits = String(g.bits ?? "");
-
-    if (w <= 0 || h <= 0) return false;
-    if (bits.length !== w * h) return false;
-
-    const isObelisk = glyphId.startsWith("enemy.obelisk.");
-
-    // center glyph on (cx, cy); uPos expects center coordinates
-    const outW = isObelisk ? h : w; // rotated 90° => width becomes h
-    const outH = isObelisk ? w : h; // rotated 90° => height becomes w
-
-    const halfW = (outW * px) * 0.5;
-    const halfH = (outH * px) * 0.5;
-
-    // IMPORTANT: snap base to integer to kill shimmer
-    const baseX0 = Math.round(cx - halfW + px * 0.5);
-    const baseY0 = Math.round(cy - halfH + px * 0.5);
-
-    // draw each "on" cell as a tiny quad (existing debug program)
-    // NOTE: color must already be set via uColor by caller
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (bits.charCodeAt(i) !== 49) continue; // '1'
-
-        // rotate 90° left for obelisk glyphs
-        const xx = isObelisk ? y : x;
-        const yy = isObelisk ? (w - 1 - x) : y;
-
-        const pxX = baseX0 + Math.round(xx * px);
-        const pxY = baseY0 + Math.round(yy * px);
-
-        gl.uniform2f(this.uPos, pxX, pxY);
-        gl.uniform2f(this.uSize, px, px);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-      }
-    }
-    return true;
-    }
-
-  private drawGlyphStackAt(
-    gl: WebGL2RenderingContext,
-    cx: number,
-    cy: number,
-    tSec: number,
-    phase: number,
-    baseCol: string | null,
-    glyphs: any
-  ): boolean {
-    if (!Array.isArray(glyphs) || glyphs.length === 0) return false;
-
-    const parseHex = (c: string | null | undefined): [number, number, number] => {
-      if (!c || typeof c !== "string") return [1, 1, 1];
-      const m = /^#?([0-9a-fA-F]{6})$/.exec(c.trim());
-      if (!m) return [1, 1, 1];
-      const n = parseInt(m[1], 16);
-      const r = ((n >> 16) & 255) / 255;
-      const g = ((n >> 8) & 255) / 255;
-      const b = (n & 255) / 255;
-      return [r, g, b];
-    };
-
-    const [br, bg, bb] = parseHex(baseCol);
-    let blendOn = false;
-
-    for (const it of glyphs) {
-      if (!it) continue;
-
-      const rawId = (it as any).id;
-      if (!(typeof rawId === "string" || typeof rawId === "number")) continue;
-
-      const id = String(rawId);
-      if (!id) continue;
-
-      const dx0 = Number(it.dx ?? 0);
-      const dy0 = Number(it.dy ?? 0);
-
-      // optional per-glyph bob (dev-friendly idle motion)
-      const bobHz = Number(it.bobHz ?? 0);
-      const bobAmpX = Number(it.bobAmpX ?? 0);
-      const bobAmpY = Number(it.bobAmpY ?? 0);
-      const bobPhase = Number(it.bobPhase ?? 0);
-
-      let dx = dx0;
-      let dy = dy0;
-
-      if (Number.isFinite(bobHz) && bobHz > 0 && (bobAmpX || bobAmpY)) {
-        const tt = (tSec + (Number.isFinite(bobPhase) ? bobPhase : 0)) * Math.PI * 2 * bobHz;
-        const s = Math.sin(tt);
-        const c = Math.cos(tt);
-        if (Number.isFinite(bobAmpX) && bobAmpX) dx += c * bobAmpX;
-        if (Number.isFinite(bobAmpY) && bobAmpY) dy += s * bobAmpY;
-      }
-
-     
-
-
-
-      
-
-
-      const col = (typeof it.color === "string" && it.color.length) ? it.color : null;
-      const [r, g, b] = col ? parseHex(col) : [br, bg, bb];
-
-      let a = Number(it.alpha ?? 1);
-      if (!Number.isFinite(a)) a = 1;
-      a = Math.max(0, Math.min(1, a));
-
-        const pulseHz = Number(it.pulseHz ?? 0);
-        const pulseAmp = Number(it.pulseAmp ?? 0);
-        if (Number.isFinite(pulseHz) && pulseHz > 0 && Number.isFinite(pulseAmp) && pulseAmp > 0) {
-          const s = Math.sin((tSec + phase) * Math.PI * 2 * pulseHz);
-        const k = 1 + s * Math.max(0, Math.min(1, pulseAmp));
-        a = Math.max(0, Math.min(1, a * k));
-      }
-
-      if (!blendOn && a < 0.999) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        blendOn = true;
-      }
-
-      gl.uniform4f(this.uColor, r, g, b, a);
-
-      // IMPORTANT: snap final to integer to kill shimmer
-      const x = Math.round(cx + dx);
-      const y = Math.round(cy + dy);
-
-      this.drawGlyphAt(gl, x, y, id);
-      }
-    if (blendOn) gl.disable(gl.BLEND);
-    gl.uniform4f(this.uColor, 1, 1, 1, 1);
-
-    return true;
-      }
-
-  
-  private drawProcPartsAt(
-    gl: WebGL2RenderingContext,
-    cx: number,
-    cy: number,
-    tSec: number,
-    phase: number,
-    baseCol: string | null,
-    proc: any
-  ): boolean {
-    if (!proc || proc.kind !== "parts" || !Array.isArray(proc.parts)) return false;
-
-    const parseHex = (c: string | null | undefined): [number, number, number] => {
-      if (!c || typeof c !== "string") return [1, 1, 1];
-      const m = /^#?([0-9a-fA-F]{6})$/.exec(c.trim());
-      if (!m) return [1, 1, 1];
-      const n = parseInt(m[1], 16);
-      const r = ((n >> 16) & 255) / 255;
-      const g = ((n >> 8) & 255) / 255;
-      const b = (n & 255) / 255;
-      return [r, g, b];
-    };
-
-    const [br, bg, bb] = parseHex(baseCol);
-
-    let blendOn = false;
-
-    for (const part of proc.parts) {
-      if (!part) continue;
-
-      const dx = Number(part.dx ?? 0);
-      const dy = Number(part.dy ?? 0);
-      const w = Number(part.w ?? 0);
-      const h = Number(part.h ?? 0);
-      if (!(w > 0) || !(h > 0)) continue;
-
-      const col = (typeof part.color === "string" && part.color.length) ? part.color : null;
-      const [r, g, b] = col ? parseHex(col) : [br, bg, bb];
-
-      let a = Number(part.alpha ?? 1);
-      if (!Number.isFinite(a)) a = 1;
-      a = Math.max(0, Math.min(1, a));
-
-      const pulseHz = Number(part.pulseHz ?? 0);
-      const pulseAmp = Number(part.pulseAmp ?? 0);
-      if (Number.isFinite(pulseHz) && pulseHz > 0 && Number.isFinite(pulseAmp) && pulseAmp > 0) {
-        const s = Math.sin((tSec + (Number.isFinite(phase) ? phase : 0)) * Math.PI * 2 * pulseHz);
-        const k = 1 + s * Math.max(0, Math.min(1, pulseAmp));
-        a = Math.max(0, Math.min(1, a * k));
-      }
-
-      if (!blendOn && a < 0.999) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        blendOn = true;
-      }
-
-      gl.uniform2f(this.uPos, cx + dx, cy + dy);
-      gl.uniform2f(this.uSize, w, h);
-      gl.uniform4f(this.uColor, r, g, b, a);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-
-    if (blendOn) gl.disable(gl.BLEND);
-    gl.uniform4f(this.uColor, 1, 1, 1, 1);
-
-    return true;
-  }
-
   render(alpha: number = 1): void {
     const gl = this.gl;
 
+
+    const world = (window as any).__CM?.game?.world;
+    const sx = Number(world?.scrollX ?? 0);
+    const sy = Number(world?.scrollY ?? 0);
     gl.useProgram(this.prog);
     gl.bindVertexArray(this.vao);
 
     gl.uniform2f(this.uLogic, this.logicW, this.logicH);
 
 
-    // --- DEBUG BACKGROUND (world scroll aware)
-    const world = (window as any).__CM?.game?.world;
-    const sx = Number(world?.scrollX ?? 0);
-    const sy = Number(world?.scrollY ?? 0);
 
+
+    
+
+    // --- DEBUG BACKGROUND (world scroll aware)
+    // world scroll currently not needed here
     // sprite anim time
     const tSec = performance.now() * 0.001;
+
     // BG pass (shader or flow)
     const g = globalThis as any;
     const bgKind = String(g.__CM_BG_KIND__ ?? "shader");
@@ -454,7 +208,7 @@ export class WebGLSceneRenderer {
       const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
 
       if (labKind === "flowSegments") {
-        this.bgSegments.draw({
+        this.bgFlowSegments.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,
@@ -464,7 +218,7 @@ export class WebGLSceneRenderer {
         });
       } else {
         // default: flowRibbon
-        this.bgFlow.draw({
+        this.bgFlowRibbon.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,
@@ -474,6 +228,7 @@ export class WebGLSceneRenderer {
         });
       }
     } else {
+      // default: shader background
       this.bg.draw({
         logicW: this.logicW,
         logicH: this.logicH,
@@ -483,21 +238,23 @@ export class WebGLSceneRenderer {
         presetIndex,
       });
     }
-    // this.drawDebugBackground(sx, sy);
-
     // clamp once per frame
-    // --- sanitize GL state after BG pass (prevent state leak from bg shaders)
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.CULL_FACE);
-    gl.disable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // --- restore main GL state after BG pass
+    this.restoreMainState();
 
-    // --- restore main renderer program/VAO after BG pass (bg draw() swaps program/VAO)
-    gl.useProgram(this.prog);
-    gl.bindVertexArray(this.vao);
-    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+    // --- DEBUG: force one visible quad at center (verifies quad pipeline after BG) ---
+    {
+      const gl = this.gl;
+      gl.useProgram(this.prog);
+      gl.bindVertexArray(this.vao);
+      gl.uniform2f(this.uLogic, this.logicW, this.logicH);
 
+      gl.uniform4f(this.uColor, 1, 0.5, 0, 1); // orange
+      gl.uniform2f(this.uPos, Math.round(this.logicW * 0.5), Math.round(this.logicH * 0.5));
+      gl.uniform2f(this.uSize, 40, 40);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
 
     this.store.debugForEachAlive((_ref, e: any) => {
@@ -515,7 +272,7 @@ export class WebGLSceneRenderer {
 
       if (kind === "player") {
         // --- SPRITE PATH (if ready) ---
-          if (this.sprites?.ready && this.sprites.atlas) {
+          if (false) {
             // sprite path – nothing needed here (actual draw is later)
           } else {
           // fallback sizes + color (old behavior)
@@ -549,7 +306,7 @@ export class WebGLSceneRenderer {
         if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
         else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
         else if (defId === "score") gl.uniform4f(this.uColor, 0, 1, 1, 1);
-        else gl.uniform4f(this.uColor, 1, 0, 1, 1);
+        else gl.uniform4f(this.uColor, 1, 0.5, 0, 1);
       } else if (kind === "particle") {
         const sz = Number((e as any).size ?? 2);
         w = sz;
@@ -590,12 +347,12 @@ export class WebGLSceneRenderer {
         ix = Math.round(ix);
         iy = Math.round(iy);
       }
-      // Camera: world-space entities -> convert to screen-space
-      if (!(kind === "player" || kind === "projectile" || kind === "bomb")) {
+      // Camera: enemy is in WORLD space => subtract camera scroll to get SCREEN space.
+      // (Player stays in SCREEN space.)
+      if (kind === "enemy") {
         ix -= sx;
         iy -= sy;
       }
-
       
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
       const baseColStr = (e as any).render?.color;
@@ -608,315 +365,86 @@ export class WebGLSceneRenderer {
           : ((e as any).id ?? 0);
 
       // 1) procedural parts
+      // IMPORTANT: for sprite-based kinds, prefer sprite draw first.
+      // (We keep PROC as fallback mainly for non-sprite entities / debug.)
       const proc = (e as any).render?.proc ?? (e as any).proc;
-      if (proc && proc.kind === "parts") {
+      const spriteFirst = false;
+if (proc && proc.kind === "parts" && !spriteFirst) {
         const okp = this.drawProcPartsAt(gl, ix, iy, tSec, phaseSeed, baseCol, proc);
         if (okp) return;
       }
 
-      // 2) glyph stack
-      const glyphs = (e as any).render?.glyphs;
-      if (glyphs && Array.isArray(glyphs) && glyphs.length) {
-        const okg = this.drawGlyphStackAt(gl, ix, iy, tSec, phaseSeed, baseCol, glyphs);
-        if (okg) return;
-      }
-
-       // 3) single glyph fallback
-       const glyphId = (e as any).render?.glyphId ?? (e as any).glyphId;
-       if (glyphId) {
-         const ok = this.drawGlyphAt(gl, ix, iy, String(glyphId));
-         if (ok) return;
-       }
-
-        // --- SPRITE DRAW (player only) ---
-      if (kind === "player" && this.sprites?.ready && this.sprites.atlas) {
-        const atlas = this.sprites.atlas;
-
-        const body = atlas.frame("ship.player.body.0");
-        const thr = atlas.pickAnimFrame("ship.player.thruster", tSec);
-
-        if (body && this.sprites.tex.ready) {
-          // enable alpha for sprite pass
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-
-
-          // Prefer explicit rot (computed in main), fallback to aimDir ONLY when rot is missing/invalid
-          const entRot = (e as any).rot;
-
-          let rot: number;
-          const hasRot = typeof entRot === "number" && Number.isFinite(entRot);
-
-          if (hasRot) {
-            rot = entRot;
-          } else {
-            const ad = (e as any).aimDir;
-            const ax = typeof ad?.x === "number" ? ad.x : 1;
-            const ay = typeof ad?.y === "number" ? ad.y : 0;
-
-            // core.png orientation tweak:
-            // 0 = sprite points RIGHT (+X)
-            // -PI/2 = sprite points UP
-            // +PI/2 = sprite points DOWN
-            // PI = sprite points LEFT
-            const ROT_OFFSET = 0;
-
-            // our sprite shader flips Y in NDC => -atan2 is typically correct
-            rot = -Math.atan2(ay, ax) + ROT_OFFSET;
-          }
-
-          // hard safety (prevents NaN => "no rotation")
-          if (!Number.isFinite(rot)) rot = 0;
-
-          // draw
-          this.sprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.sprites.tex.tex,
-            this.sprites.tex.w,
-            this.sprites.tex.h,
-          );
-
-          // body (pivoted)
-          this.sprites.prog.draw(
-            ix,
-            iy,
-            body.w,
-            body.h,
-            body.px,
-            body.py,
-            rot,
-            body.x,
-            body.y,
-            body.w,
-            body.h,
-            1,
-            1,
-            1,
-            1,
-          );
-
-          // thruster layer (optional)
-          if (thr) {
-            // offset behind ship along -forward (derived from rot)
-            const dx = Math.cos(-rot);
-            const dy = Math.sin(-rot);
-
-            const back = 10; // px (tweak later)
-            const tx = ix - dx * back;
-            const ty = iy - dy * back;
-
-            this.sprites.prog.draw(
-              tx,
-              ty,
-              thr.w,
-              thr.h,
-              thr.px,
-              thr.py,
-              rot,
-              thr.x,
-              thr.y,
-              thr.w,
-              thr.h,
-              1,
-              1,
-              1,
-              1,
-            );
-          }
-
-          this.sprites.prog.end();
-
-          // restore for quad path
-          gl.disable(gl.BLEND);
-
-          // IMPORTANT: sprite path handled, skip quad draw for this entity
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-          return;
-
-
-
-          
-        }
-      }
-
-
-      // --- SPRITE DRAW (projectile W1) ---
-      if (kind === "projectile" && this.projSprites?.ready && this.projSprites.atlas && this.projSprites.tex.ready) {
-        const atlas = this.projSprites.atlas;
-
-        // anim frame (desync per-entity using ref)
-        const refStr = String(_ref ?? "");
-        let hsh = 0;
-        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
-        const phase = ((hsh >>> 0) % 1000) / 1000;
-
-        const weaponTypeId = String((e as any).weaponTypeId ?? "");
-        const animId =
-          weaponTypeId === "w1.basic" ? "projectile.w1" :
-          "projectile.w1"; // fallback for now
-
-        const fr = atlas.pickAnimFrame(animId, tSec + phase);
-        if (fr) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-          // rotation from velocity
-          const v = (e as any).vel;
-          const vx = typeof v?.x === "number" ? v.x : 1;
-          const vy = typeof v?.y === "number" ? v.y : 0;
-
-          // pokud tvoje střela míří doprava v PNG, ROT_OFFSET = 0
-          const ROT_OFFSET = 0;
-          const rot = Math.atan2(vy, vx) + ROT_OFFSET;
-
-          this.projSprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.projSprites.tex.tex,
-            this.projSprites.tex.w,
-            this.projSprites.tex.h,
-          );
-
-          // uPos je střed entity; pivot máme 16,8 => sedí
-          this.projSprites.prog.draw(
-            ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
-            rot,
-            fr.x, fr.y, fr.w, fr.h,
-            1, 1, 1, 1,
-          );
-
-          this.projSprites.prog.end();
-          gl.disable(gl.BLEND);
-
-          // restore quad pipeline for subsequent entities (enemies, pickups, etc.)
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-
-          return;
-        }
-      }
-
-      // --- SPRITE DRAW (enemy MVP) ---
-      if (kind === "enemy" && this.enemySprites?.ready && this.enemySprites.atlas && this.enemySprites.tex.ready) {
-        const atlas = this.enemySprites.atlas;
-
-        const refStr = String(_ref ?? "");
-        let hsh = 0;
-        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
-        const phase = ((hsh >>> 0) % 1000) / 1000;
-
-        const animId = String((e as any).animId ?? (e as any).spriteId ?? "");
-        const spriteId = String((e as any).spriteId ?? "");
-
-        const fr =
-          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-          (spriteId && atlas.frame(spriteId)) ||
-          (spriteId && atlas.frame(spriteId + ".0")) ||
-          null;
-
-        if (fr) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-          this.enemySprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.enemySprites.tex.tex,
-            this.enemySprites.tex.w,
-            this.enemySprites.tex.h,
-          );
-
-          this.enemySprites.prog.draw(
-            ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
-            0,
-            fr.x, fr.y, fr.w, fr.h,
-            1, 1, 1, 1,
-          );
-
-          this.enemySprites.prog.end();
-          gl.disable(gl.BLEND);
-
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-          return;
-        }
-      }
-      // --- SPRITE DRAW (fx MVP: explosions) ---
-      if (kind === "fx" && this.fxSprites?.ready && this.fxSprites.atlas && this.fxSprites.tex.ready) {
-        const atlas = this.fxSprites.atlas;
-
-        const refStr = String(_ref ?? "");
-        let hsh = 0;
-        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
-        const phase = ((hsh >>> 0) % 1000) / 1000;
-
-        const animId = String((e as any).animId ?? "");
-        const spriteId = String((e as any).spriteId ?? "");
-
-        const fr =
-          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-          (spriteId && atlas.frame(spriteId)) ||
-          null;
-
-        if (fr) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-          this.fxSprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.fxSprites.tex.tex,
-            this.fxSprites.tex.w,
-            this.fxSprites.tex.h,
-          );
-
-          this.fxSprites.prog.draw(
-            ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
-            0,
-            fr.x, fr.y, fr.w, fr.h,
-            1, 1, 1, 1,
-          );
-
-          this.fxSprites.prog.end();
-          gl.disable(gl.BLEND);
-
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-          return;
-        }
-      }
       
       // --- QUAD FALLBACK (original) ---
+      // safety: ensure we draw *something* even if w/h were not set
+      let qw = Number(w), qh = Number(h);
+      if (!Number.isFinite(qw) || qw <= 0 || !Number.isFinite(qh) || qh <= 0) {
+        const rr = Number((e as any).radius ?? 6);
+        const s = Number.isFinite(rr) && rr > 0 ? Math.max(2, rr * 2) : 12;
+        qw = s; qh = s;
+      }
+        // TEMP DEBUG: force visible placeholder
+      // Placeholder quad (◻️)
+      if (qw < 6) qw = 6;
+      if (qh < 6) qh = 6;
+
+      // default colors by kind (simple + readable)
+      if (kind === "player") gl.uniform4f(this.uColor, 0, 1, 1, 1);          // cyan
+      else if (kind === "enemy") gl.uniform4f(this.uColor, 1, 0, 0, 1);      // red
+      else if (kind === "projectile") gl.uniform4f(this.uColor, 0.6, 1, 0.6, 1); // green-ish
+      else if (kind === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);       // yellow
+      else if (kind === "powerup") gl.uniform4f(this.uColor, 1, 0, 1, 1);    // magenta
+      else gl.uniform4f(this.uColor, 1, 1, 1, 1);                            // white fallback
+
       gl.uniform2f(this.uPos, ix, iy);
-      gl.uniform2f(this.uSize, w, h);
+      gl.uniform2f(this.uSize, qw, qh);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     });
 
     gl.bindVertexArray(null);
   }
 // --- VFX: muzzle + tracers + hits (no ECS, no allocations) ---
-  renderVFX(vfx: any): void {
+  
+  // --- TEMP STUBS (cleanup phase): keep compile while we render placeholders only
+  private restoreMainState(): void {
+      const gl = this.gl;
+
+      // IMPORTANT: do not touch framebuffer/viewport here.
+      // Graphics.renderScene() owns SceneRT binding + viewport (logicW x logicH).
+      gl.disable(gl.SCISSOR_TEST);
+      gl.depthMask(true);
+      gl.colorMask(true, true, true, true);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+
+      gl.useProgram(this.prog);
+      gl.bindVertexArray(this.vao);
+
+      // keep logic uniforms consistent with SceneRT
+      gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+      gl.uniform4f(this.uColor, 1, 1, 1, 1);
+    }
+
+  private drawProcPartsAt(
+    _gl: WebGL2RenderingContext,
+    _cx: number,
+    _cy: number,
+    _tSec: number,
+    _seed: number,
+    _baseCol: any,
+    _proc: any
+  ): boolean {
+    // Proc parts removed for placeholder stage
+    return false;
+  }
+
+
+renderVFX(vfx: any): void {
     if (!vfx) return;
 
     const gl = this.gl;
-
-    const world = (window as any).__CM?.game?.world;
-    const sx = Number(world?.scrollX ?? 0);
-    const sy = Number(world?.scrollY ?? 0);
-
+    // world scroll currently not needed here
     gl.useProgram(this.prog);
   gl.bindVertexArray(this.vao);
 

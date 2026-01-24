@@ -6,13 +6,11 @@ export type EnemyTypeId = string;
 export interface EnemyRenderDef {
   // OPTIONAL: base color (fallback)
   color?: string; // CSS color, typicky "#rrggbb"
-
-  // OPTIONAL: pixel-glyph id (render/glyphs)
   glyphId?: string;
 
   // OPTIONAL: stacked glyphs (composite entity)
   glyphs?: Array<{
-    id: string; // glyph id in GlyphDB
+  id: string;
     dx?: number; // offset from entity center
     dy?: number;
     color?: string; // overrides base color
