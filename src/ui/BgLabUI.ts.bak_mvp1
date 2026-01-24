@@ -86,27 +86,6 @@ function colorInput(value: string, onChange: (v: string) => void): HTMLInputElem
 async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
-type BgPresetClean = {
-  id: string;
-  name: string;
-  kind: "shader" | "flowRibbon" | "flowSegments";
-  flow?: BgLabState["flow"];
-};
-
-function cleanPresetFromState(id: string, name: string, st: BgLabState): BgPresetClean {
-  const preset: BgPresetClean = {
-    id: (id || "").trim(),
-    name: (name || "").trim(),
-    kind: st.kind,
-    flow: st.flow ? JSON.parse(JSON.stringify(st.flow)) : undefined,
-  };
-
-  if (!preset.flow || (typeof preset.flow === "object" && !Object.keys(preset.flow as any).length)) {
-    delete (preset as any).flow;
-  }
-  return preset;
-}
-
 
 export class BgLabUI {
   private root: HTMLDivElement;
@@ -278,83 +257,33 @@ export class BgLabUI {
     root.appendChild(el("div","cm-bglab-hr"));
 
     // --- EXPORT / IMPORT (clipboard) ---
-      {
-        const wrap = el("div");
-        wrap.style.display = "flex";
-        wrap.style.flexDirection = "column";
-        wrap.style.gap = "6px";
+    {
+      const r = el("div");
+      r.style.display = "flex";
+      r.style.gap = "6px";
 
-        // preset id + name
-        const rMeta = el("div");
-        rMeta.style.display = "flex";
-        rMeta.style.gap = "6px";
+      r.appendChild(btn("copy state", async () => {
+        await copyToClipboard(JSON.stringify(getBgLabState(), null, 2));
+      }));
 
-        const presetIdIn = el("input","cm-bglab-in") as HTMLInputElement;
-        presetIdIn.placeholder = "preset id (e.g. bg.flowRibbon.my01)";
-        presetIdIn.style.flex = "1";
+      r.appendChild(btn("paste state", async () => {
+        const ta = el("textarea","cm-bglab-text") as HTMLTextAreaElement;
+        ta.value = JSON.stringify(getBgLabState(), null, 2);
+        root.appendChild(ta);
 
-        const presetNameIn = el("input","cm-bglab-in") as HTMLInputElement;
-        presetNameIn.placeholder = "preset name";
-        presetNameIn.style.flex = "1";
+        const apply = btn("apply pasted", () => {
+          const next = safeJsonParse<any>(ta.value, getBgLabState());
+          (globalThis as any).__CM_BG_LAB__ = next;
+          setBgGlobalsFromState(getBgLabState());
+        });
+        root.appendChild(apply);
+      }));
 
-        rMeta.appendChild(presetIdIn);
-        rMeta.appendChild(presetNameIn);
-        wrap.appendChild(rMeta);
+      r.appendChild(btn("reload", () => location.reload()));
+      root.appendChild(r);
+    }
 
-        // buttons row
-        const r = el("div");
-        r.style.display = "flex";
-        r.style.gap = "6px";
-
-        r.appendChild(btn("copy PRESET (clean)", async () => {
-          const st = getBgLabState();
-          const id = presetIdIn.value || `${st.kind}.preset`;
-          const nm = presetNameIn.value || `Preset (${st.kind})`;
-          const clean = cleanPresetFromState(id, nm, st);
-          await copyToClipboard(JSON.stringify(clean, null, 2));
-        }));
-
-        r.appendChild(btn("paste PRESET (clean)", async () => {
-          const ta = el("textarea","cm-bglab-text") as HTMLTextAreaElement;
-          ta.value = `{\n  "id": "bg.flowRibbon.custom01",\n  "name": "My Preset",\n  "kind": "flowRibbon",\n  "flow": {}\n}\n`;
-          root.appendChild(ta);
-
-          const apply = btn("apply preset", () => {
-            const raw = safeJsonParse<any>(ta.value, null as any);
-            if (!raw || typeof raw !== "object") return;
-
-            const st = getBgLabState();
-            if (typeof raw.kind === "string") (st as any).kind = raw.kind;
-            if (raw.flow && typeof raw.flow === "object") (st as any).flow = raw.flow;
-
-            setBgGlobalsFromState(st);
-          });
-          root.appendChild(apply);
-        }));
-
-        r.appendChild(btn("copy state", async () => {
-          await copyToClipboard(JSON.stringify(getBgLabState(), null, 2));
-        }));
-
-        r.appendChild(btn("paste state", async () => {
-          const ta = el("textarea","cm-bglab-text") as HTMLTextAreaElement;
-          ta.value = JSON.stringify(getBgLabState(), null, 2);
-          root.appendChild(ta);
-
-          const apply = btn("apply pasted", () => {
-            const next = safeJsonParse<any>(ta.value, getBgLabState());
-            (globalThis as any).__CM_BG_LAB__ = next;
-            setBgGlobalsFromState(getBgLabState());
-          });
-          root.appendChild(apply);
-        }));
-
-        r.appendChild(btn("reload", () => location.reload()));
-
-        wrap.appendChild(r);
-        root.appendChild(wrap);
-      }
-document.head.appendChild(style);
+    document.head.appendChild(style);
     document.body.appendChild(root);
   }
 

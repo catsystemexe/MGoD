@@ -70,65 +70,11 @@ export type WaveDef = {
   behaviorPresetId?: string;
   pattern?: any;
 };
-export type BgKind = "shader" | "flowRibbon" | "flowSegments";
-
-export type BgPresetContent = {
-  id: string;
-  name: string;
-  kind: BgKind;
-
-  // MVP: only flow params (shared by ribbon/segments; each renderer uses what it needs)
-  flow?: {
-    // colors (hex) + alpha
-    colorsFar?: string;
-    colorsMid?: string;
-    colorsNear?: string;
-    alphaFar?: number;
-    alphaMid?: number;
-    alphaNear?: number;
-
-    // ribbon
-    ribbonLanes?: number;
-    ribbonStepPx?: number;
-    thicknessMulFar?: number;
-    thicknessMulMid?: number;
-    thicknessMulNear?: number;
-
-    // segments
-    segCountBase?: number;
-    segYJitterPx?: number;
-    segSpeedBase?: number;
-
-    // blend mode for BG-only pass
-    blend?: "alpha" | "add";
-  };
-};
-
-export type BgPresetsFile = {
-  schemaVersion: number;
-  presets: BgPresetContent[];
-};
-
-export type BgBinding = {
-  levelId: string;
-  presetId: string;
-};
-
-export type BgBindingsFile = {
-  schemaVersion: number;
-  defaultPresetId: string;
-  bindings?: BgBinding[];
-};
-
 
 export type ContentBundle = {
   enemyTypes: EnemyTypeDef[];
   behaviorPresets: BehaviorPreset[];
   waves: WaveDef[];
-
-
-  bgPresets: BgPresetsFile;
-  bgBindings: BgBindingsFile;
 };
 // ---- Runtime guard (single source of truth)
 export const ENEMY_BEHAVIOR_IDS = [

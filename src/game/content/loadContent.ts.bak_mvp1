@@ -5,10 +5,7 @@ import behaviorPresetsJson from "./behaviorPresets.json";
 import directorWavesJson from "./directorWaves.json";
 
 import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
-import type {
-  ContentBundle, EnemyTypeDef, BehaviorPreset, WaveDef,
-  BgPresetsFile, BgBindingsFile,
-} from "../enemies/EnemyBehaviorTypes";
+import type { ContentBundle, EnemyTypeDef, BehaviorPreset, WaveDef } from "../enemies/EnemyBehaviorTypes";
 
 function assert(cond: any, msg: string): asserts cond {
   if (!cond) throw new Error("[Content] " + msg);
@@ -63,70 +60,10 @@ function validateWaves(list: any[]): WaveDef[] {
   return list as WaveDef[];
 }
 
-function validateBgPresetsFile(raw: any): BgPresetsFile {
-  assert(raw && typeof raw === "object", "bgPresets must be an object");
-  assert(isNum(raw.schemaVersion), "bgPresets.schemaVersion must be number");
-  assert(raw.schemaVersion === 1, "bgPresets.schemaVersion must be 1 (MVP)");
-
-  const presets = raw.presets;
-  assert(Array.isArray(presets), "bgPresets.presets must be an array");
-
-  for (const p of presets as any[]) {
-    assert(p && typeof p === "object", "bgPresets.presets item must be object");
-    assert(isStr(p.id), "bgPresets.presets.id must be string");
-    assert(isStr(p.name), `bgPresets(${String(p.id)}).name must be string`);
-    assert(isStr(p.kind), `bgPresets(${String(p.id)}).kind must be string`);
-    assert(
-      p.kind === "shader" || p.kind === "flowRibbon" || p.kind === "flowSegments",
-      `bgPresets(${String(p.id)}).kind invalid: ${String(p.kind)}`
-    );
-
-    if (p.flow !== undefined) {
-      assert(p.flow && typeof p.flow === "object", `bgPresets(${String(p.id)}).flow must be object if provided`);
-      const f = p.flow;
-      const nums = [
-        "alphaFar","alphaMid","alphaNear",
-        "ribbonLanes","ribbonStepPx","thicknessMulFar","thicknessMulMid","thicknessMulNear",
-        "segCountBase","segYJitterPx","segSpeedBase",
-      ] as const;
-      for (const k of nums) {
-        if (f[k] !== undefined) assert(isNum(f[k]), `bgPresets(${String(p.id)}).flow.${k} must be number if provided`);
-      }
-      if (f.blend !== undefined) {
-        assert(f.blend === "alpha" || f.blend === "add", `bgPresets(${String(p.id)}).flow.blend invalid`);
-      }
-    }
-  }
-
-  return raw as BgPresetsFile;
-}
-
-function validateBgBindingsFile(raw: any): BgBindingsFile {
-  assert(raw && typeof raw === "object", "bgBindings must be an object");
-  assert(isNum(raw.schemaVersion), "bgBindings.schemaVersion must be number");
-  assert(raw.schemaVersion === 1, "bgBindings.schemaVersion must be 1 (MVP)");
-  assert(isStr(raw.defaultPresetId), "bgBindings.defaultPresetId must be string");
-
-  if (raw.bindings !== undefined) {
-    assert(Array.isArray(raw.bindings), "bgBindings.bindings must be array if provided");
-    for (const b of raw.bindings as any[]) {
-      assert(b && typeof b === "object", "bgBindings.bindings item must be object");
-      assert(isStr(b.levelId), "bgBindings.bindings.levelId must be string");
-      assert(isStr(b.presetId), "bgBindings.bindings.presetId must be string");
-    }
-  }
-
-  return raw as BgBindingsFile;
-}
-
 export function loadContent(): ContentBundle {
   const enemyTypes = validateEnemyTypes((enemyTypesJson as any).enemyTypes);
   const behaviorPresets = validateBehaviorPresets((behaviorPresetsJson as any).behaviorPresets);
   const waves = validateWaves((directorWavesJson as any).waves);
-
-
-  const bgPresets = validateBgPresetsFile(bgPresetsJson as any);
-  const bgBindings = validateBgBindingsFile(bgBindingsJson as any);
 
   // cross-ref checks
   const presetIds = new Set(behaviorPresets.map(b => b.id));
@@ -149,11 +86,6 @@ export function loadContent(): ContentBundle {
       );
     }
   }
-  // BG cross-ref checks
-  const bgPresetIds = new Set(bgPresets.presets.map(p => p.id));
-  assert(bgPresetIds.has(bgBindings.defaultPresetId), `bgBindings.defaultPresetId missing presetId=${bgBindings.defaultPresetId}`);
-  for (const b of (bgBindings.bindings ?? [])) {
-    assert(bgPresetIds.has(b.presetId), `bgBindings(levelId=${b.levelId}) references missing presetId=${b.presetId}`);
-  }
-  return { enemyTypes, behaviorPresets, waves, bgPresets, bgBindings };
+
+  return { enemyTypes, behaviorPresets, waves };
 }

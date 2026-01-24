@@ -201,6 +201,50 @@ export class WebGLSceneRenderer {
 
     // BG pass (shader or flow)
     const g = globalThis as any;
+
+
+      // If BG Lab is NOT enabled, apply BG preset from content (once, cached)
+      {
+        const labEnabled = !!g.__CM_BG_LAB__?.enabled;
+        if (!labEnabled) {
+          const cm = g.__CM;
+          const content =
+            cm?.content ??
+            cm?.CONTENT ??
+            cm?.game?.content ??
+            null;
+
+          const bindings = content?.bgBindings;
+          const presetsDb = content?.bgPresets;
+
+          const presetId = bindings?.defaultPresetId;
+          const presets = presetsDb?.presets;
+
+          if (presetId && Array.isArray(presets)) {
+            const lastApplied = g.__CM_BG_CONTENT_LAST_PRESET_ID__;
+            if (lastApplied !== presetId) {
+              const p = presets.find((x: any) => x?.id === presetId) ?? null;
+
+              if (p) {
+                // kind -> globals
+                g.__CM_BG_KIND__ = (p.kind === "shader") ? "shader" : "flow";
+
+                // provide a minimal lab-like state for flow renderers
+                g.__CM_BG_LAB__ ??= {};
+                g.__CM_BG_LAB__.enabled = false;
+                g.__CM_BG_LAB__.kind = p.kind;
+                g.__CM_BG_LAB__.flow = p.flow ?? {};
+
+                // keep presetIndex stable (legacy param for bg shaders)
+                g.__CM_BG_PRESET__ ??= 0;
+
+                g.__CM_BG_CONTENT_LAST_PRESET_ID__ = presetId;
+              }
+            }
+          }
+        }
+      }
+
     const bgKind = String(g.__CM_BG_KIND__ ?? "shader");
     const presetIndex = Number(g.__CM_BG_PRESET__ ?? 0) | 0;
 

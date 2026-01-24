@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "presets": [
+    {
+      "id": "bg.flowRibbon.default",
+      "name": "Flow Ribbon // Default",
+      "kind": "flowRibbon",
+      "flow": {
+        "colorsFar": "#5aa0ff",
+        "colorsMid": "#8fefff",
+        "colorsNear": "#e6ffff",
+        "alphaFar": 0.10,
+        "alphaMid": 0.14,
+        "alphaNear": 0.18,
+        "ribbonLanes": 90,
+        "ribbonStepPx": 6,
+        "thicknessMulFar": 0.8,
+        "thicknessMulMid": 1.0,
+        "thicknessMulNear": 1.2,
+        "blend": "add"
+      }
+    },
+    {
+      "id": "bg.flowSegments.default",
+      "name": "Flow Segments // Default",
+      "kind": "flowSegments",
+      "flow": {
+        "colorsFar": "#5aa0ff",
+        "colorsMid": "#8fefff",
+        "colorsNear": "#e6ffff",
+        "alphaFar": 0.10,
+        "alphaMid": 0.14,
+        "alphaNear": 0.18,
+        "segCountBase": 1400,
+        "segYJitterPx": 10,
+        "segSpeedBase": 44,
+        "blend": "add"
+      }
+    }
+  ]
+}
