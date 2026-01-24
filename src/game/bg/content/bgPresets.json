@@ -1,0 +1,26 @@
+[
+  {
+    "id": "default-flow",
+    "kind": "flow",
+    "seed": 1,
+    "base": {
+      "version": 1,
+      "flow": {
+        "preset": "segments"
+      }
+    },
+    "audio": {}
+  },
+  {
+    "id": "default-shader",
+    "kind": "shader",
+    "seed": 2,
+    "base": {
+      "version": 1,
+      "shader": {
+        "preset": "gradient"
+      }
+    },
+    "audio": {}
+  }
+]

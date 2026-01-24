@@ -8,7 +8,8 @@
       "maxAlive": 5,
       "enemyTypeId": "bug1",
       "behaviorPresetId": "sine.hold",
-      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 50, "count": 5 }
+      "pattern": { "kind": "ring",
+        "space": "world", "centerX": 936, "centerY": 0, "radius": 50, "count": 5 }
     },
     {
       "id": "wave.red",
@@ -102,7 +103,8 @@
       "maxAlive": 8,
       "enemyTypeId": "orb",
       "behaviorPresetId": "straight.basic",
-      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 80, "count": 6 }
+      "pattern": { "kind": "ring",
+        "space": "world", "centerX": 936, "centerY": 0, "radius": 80, "count": 6 }
     },
     {
       "id": "wave.mandala.ring",
@@ -112,7 +114,8 @@
       "maxAlive": 3,
       "enemyTypeId": "mandala",
       "behaviorPresetId": "sine.basic",
-      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 60, "count": 4 }
+      "pattern": { "kind": "ring",
+        "space": "world", "centerX": 936, "centerY": 0, "radius": 60, "count": 4 }
     }
   ]
 }

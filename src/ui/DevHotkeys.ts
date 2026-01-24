@@ -8,10 +8,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
  * Minimal overlay that does NOT block canvas (pointer-events:none).
  * Reads mapping from window.__CM.devWaveHotkeys.
  *
- * Requirements:
- * - default hidden (keys still active elsewhere)
- * - positioned below top dev UI (roughly mid-screen)
- * - toggle visibility via "I" key handled in createGame.ts
+ * Responsibilities:
+ * - display only (NO key handling)
+ * - default hidden
+ * - safe against missing __CM
+ * - auto-refresh (MVP)
  */
 export class DevHotkeys {
   private root: HTMLDivElement;
@@ -24,7 +25,6 @@ export class DevHotkeys {
     this.root.id = "devhotkeys";
 
     const left = opts?.left ?? "8px";
-    // Put it under the top debug/dev overlays. "50vh" ≈ middle of canvas/screen.
     const top = opts?.top ?? "50vh";
 
     this.root.style.cssText = [
@@ -42,7 +42,14 @@ export class DevHotkeys {
     ].join(";");
 
     document.body.appendChild(this.root);
-    this.refresh();
+
+    // MVP auto-refresh loop (cheap, safe)
+    const tick = () => {
+      if (!document.body.contains(this.root)) return;
+      this.refresh();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   setVisible(on: boolean): void {
@@ -59,16 +66,23 @@ export class DevHotkeys {
   }
 
   refresh(): void {
-    const cm = (window as any).__CM;
-    const list = (cm?.devWaveHotkeys as HotkeyItem[] | undefined) ?? [];
+    const g: any = window as any;
+    const cm = g.__CM;
 
-    if (!Array.isArray(list) || list.length === 0) {
+    if (!cm || !Array.isArray(cm.devWaveHotkeys)) {
       this.root.textContent = "";
       return;
     }
 
-    const lines = list.map((it) => `${it.key}  ${it.id}`);
-    this.root.textContent = lines.join("\n");
+    const list = cm.devWaveHotkeys as HotkeyItem[];
+    if (list.length === 0) {
+      this.root.textContent = "";
+      return;
+    }
+
+    this.root.textContent = list
+      .map(it => `${it.key.padEnd(3)} ${it.id}`)
+      .join("\n");
   }
 
   destroy(): void {

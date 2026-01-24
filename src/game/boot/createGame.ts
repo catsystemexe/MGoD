@@ -265,28 +265,23 @@ export async function createGame(
 
         // expose mapping for overlay (DEV only)
         let devHotkeys: any = null;
+        const DEV_WAVE_KEYS: string[] = ["1","2","3","4","5","6","7","8","9"];
 
-        if ((globalThis as any).__DEV__) {
-          (window as any).__CM.devWaveHotkeys = DEV_WAVE_KEYS.map((id, i) => ({
-            n: i + 1,
-            waveId: id,
-          }));
+        
+const cm: any = (window as any).__CM ?? ((window as any).__CM = {});
+cm.devWaveHotkeys = DEV_WAVE_KEYS.map((id, i) => ({
+  key: String(i + 1),
+  id: String(id),
+}));
+devHotkeys = new DevHotkeys({ defaultVisible: false, top: "50vh", left: "8px" });
+(globalThis as any).__CM_DEV_HOTKEYS__ = devHotkeys;
+console.log("[DEV_HOTKEYS] created");
 
-          devHotkeys = new DevHotkeys({ defaultVisible: false, top: "50vh", left: "8px" });
-          devHotkeys.refresh();
-        }
 
         // ALWAYS register keydown so it works in popup/build too
         window.addEventListener("keydown", (e) => {
           const key = (e as any).key as string | undefined;
           const code = (e as any).code as string | undefined;
-          
-        
-          // Toggle preset list visibility (DEV UI only)
-          if (devHotkeys && (key === "i" || key === "I")) {
-            devHotkeys.toggle();
-            return;
-          }
 
           let n = -1;
 

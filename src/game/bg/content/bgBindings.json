@@ -1,0 +1,10 @@
+[
+  {
+    "levelId": "level.test",
+    "presetId": "default-flow",
+    "transition": {
+      "type": "fade",
+      "duration": 0.5
+    }
+  }
+]

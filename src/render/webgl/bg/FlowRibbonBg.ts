@@ -192,9 +192,7 @@ export class FlowRibbonBg {
     const pl = pr.parallax.find(x => x.layer === layerId);
     if (!pl) return;
 
-
-    const ov = (globalThis as any).__CM_BG_LAB_getFlowOverrides__ ? (globalThis as any).__CM_BG_LAB_getFlowOverrides__() : null;
-    void pl;
+void pl;
 
     const lanes = Number.isFinite(ov?.ribbonLanes)
     ? (ov.ribbonLanes | 0)
@@ -310,9 +308,7 @@ export class FlowRibbonBg {
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
 
-    gl.enable(gl.BLEND);
-      const ov = (globalThis as any).__CM_BG_LAB_getFlowOverrides__ ? (globalThis as any).__CM_BG_LAB_getFlowOverrides__() : null;
-      const blend = String(ov?.blend ?? "add");
+    gl.enable(gl.BLEND);const blend = String(ov?.blend ?? "add");
       if (blend === "alpha") gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       else gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 

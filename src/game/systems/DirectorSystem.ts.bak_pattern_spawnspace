@@ -311,7 +311,6 @@ export class DirectorSystem {
         const idx = w.spawned;
       
         const ptn: any = (w.def as any).pattern;
-          const spawnSpace: "screen" | "world" = (ptn && (ptn as any).space === "world") ? "world" : "screen";
         let spawn: any = undefined;
 
         if (ptn && ptn.kind === "grid") {
@@ -374,12 +373,12 @@ export class DirectorSystem {
           };
         }
 
-        console.log("[DIR][SPAWN_ENEMY]", w.id, "idx=", idx, "spawn=", spawn, "space=", spawnSpace);
+        console.log("[DIR][SPAWN_ENEMY]", w.id, "idx=", idx, "spawn=", spawn);
           this.bus.emitNext(EventType.SPAWN_ENEMY, {
             typeId: w.def.enemyTypeId,
             waveId: w.id,
             spawn,
-            spawnSpace,
+            spawnSpace: "screen",
             spawnOrdinal: w.spawned,
             behaviorPresetId: (w.def as any).behaviorPresetId,
           } as any);

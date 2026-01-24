@@ -1,9 +1,5 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
-import { DemosceneBg } from "./bg/DemosceneBg";
-import { FlowRibbonBg } from "./bg/FlowRibbonBg";
-import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
-
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
@@ -73,11 +69,6 @@ export class WebGLSceneRenderer {
   private uPos: WebGLUniformLocation;
   private uSize: WebGLUniformLocation;
   private uColor: WebGLUniformLocation;
-
-  private bg: DemosceneBg;
-  private bgFlowRibbon: FlowRibbonBg;
-  private bgFlowSegments: FlowSegmentsBg;
-
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
@@ -150,11 +141,6 @@ export class WebGLSceneRenderer {
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.CULL_FACE);
       gl.disable(gl.BLEND);
-
-
-       this.bg = new DemosceneBg(gl);
-    this.bgFlowRibbon = new FlowRibbonBg(gl);
-    this.bgFlowSegments = new FlowSegmentsBg(gl);
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -198,112 +184,6 @@ export class WebGLSceneRenderer {
     // world scroll currently not needed here
     // sprite anim time
     const tSec = performance.now() * 0.001;
-
-    // BG pass (shader or flow)
-    const g = globalThis as any;
-
-
-      // If BG Lab is NOT enabled, apply BG preset from content (once, cached)
-      {
-        const labEnabled = !!g.__CM_BG_LAB__?.enabled;
-        if (!labEnabled) {
-          const cm = g.__CM;
-          const content =
-            cm?.content ??
-            cm?.CONTENT ??
-            cm?.game?.content ??
-            null;
-
-          const bindings = content?.bgBindings;
-            const presetsDb = content?.bgPresets;
-
-            // Resolve levelId (MVP: best-effort, fallback to "debug")
-            const world = cm?.game?.world ?? (globalThis as any).__CM?.game?.world ?? null;
-            const levelId =
-              String(
-                world?.levelId ??
-                world?.sceneId ??
-                cm?.levelId ??
-                cm?.game?.levelId ??
-                "debug"
-              );
-
-            // binding override (levelId -> presetId) else default
-            const bound =
-              Array.isArray(bindings?.bindings)
-                ? bindings!.bindings!.find((b: any) => b && b.levelId === levelId)
-                : null;
-
-            const presetId = String(bound?.presetId ?? bindings?.defaultPresetId ?? "");
-            const presets = presetsDb?.presets;
-if (presetId && Array.isArray(presets)) {
-            const lastApplied = g.__CM_BG_CONTENT_LAST_PRESET_ID__;
-            if (lastApplied !== presetId) {
-              const p = presets.find((x: any) => x?.id === presetId) ?? null;
-
-              if (p) {
-                // kind -> globals
-                g.__CM_BG_KIND__ = (p.kind === "shader") ? "shader" : "flow";
-
-                // provide a minimal lab-like state for flow renderers
-                g.__CM_BG_LAB__ ??= {};
-                g.__CM_BG_LAB__.enabled = false;
-                g.__CM_BG_LAB__.kind = p.kind;
-                g.__CM_BG_LAB__.flow = p.flow ?? {};                  // keep presetIndex stable (legacy param for bg shaders)
-                  if (p.kind === "shader") {
-                    const ix = Number((p as any).shader?.presetIndex ?? 0);
-                    g.__CM_BG_PRESET__ = Number.isFinite(ix) ? (ix | 0) : 0;
-                  } else {
-                    g.__CM_BG_PRESET__ ??= 0;
-                  }
-                g.__CM_BG_CONTENT_LAST_PRESET_ID__ = presetId;
-              }
-            }
-          }
-        }
-      }
-
-    const bgKind = String(g.__CM_BG_KIND__ ?? "shader");
-    const presetIndex = Number(g.__CM_BG_PRESET__ ?? 0) | 0;
-
-    if (bgKind === "flow") {
-      const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
-
-      if (labKind === "flowSegments") {
-        this.bgFlowSegments.draw({
-          logicW: this.logicW,
-          logicH: this.logicH,
-          timeSec: tSec,
-          scrollX: sx,
-          scrollY: sy,
-          presetIndex,
-        });
-      } else {
-        // default: flowRibbon
-        this.bgFlowRibbon.draw({
-          logicW: this.logicW,
-          logicH: this.logicH,
-          timeSec: tSec,
-          scrollX: sx,
-          scrollY: sy,
-          presetIndex,
-        });
-      }
-    } else {
-      // default: shader background
-      this.bg.draw({
-        logicW: this.logicW,
-        logicH: this.logicH,
-        timeSec: tSec,
-        scrollX: sx,
-        scrollY: sy,
-        presetIndex,
-      });
-    }
-    // clamp once per frame
-    // --- restore main GL state after BG pass
-    this.restoreMainState();
-
     // --- DEBUG: force one visible quad at center (verifies quad pipeline after BG) ---
     {
       const gl = this.gl;

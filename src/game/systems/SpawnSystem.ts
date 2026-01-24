@@ -189,7 +189,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
         case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
-            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
+            if ((globalThis as any).__DEV__) {
               console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
             }
           const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
@@ -232,16 +232,16 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             const x = (spawnSpace === "world") ? Number(spawnPos.x) : (Number(spawnPos.x) + camX);
             const y = (spawnSpace === "world") ? Number(spawnPos.y) : (Number(spawnPos.y) + camY);
 
-            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
-              console.log("[SPAWN_SYS][SPACE]", {
-                typeId: (p as any)?.typeId,
-                waveId: (p as any)?.waveId,
-                spawnSpace,
-                cam: { x: camX, y: camY },
-                spawnScreen: { x: Number(spawnPos.x), y: Number(spawnPos.y) },
-                spawnWorld: { x, y },
-              });
-            }
+          if ((globalThis as any).__DEV__) {
+            console.log("[SPAWN_SYS][SPACE]", {
+              typeId: (p as any)?.typeId,
+              waveId: (p as any)?.waveId,
+              spawnSpace,
+              cam: { x: camX, y: camY },
+              spawnScreen: { x: Number(spawnPos.x), y: Number(spawnPos.y) },
+              spawnWorld: { x, y },
+            });
+          }
           this.store.spawn((ent: any) => {
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;

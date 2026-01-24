@@ -1,3 +1,5 @@
+(globalThis as any).__DEV__ = import.meta.env.DEV;
+
 // src/main.ts
 const bootN = ((window as any).__BOOT_N__ = (((window as any).__BOOT_N__ ?? 0) + 1));
 // --- KILL PREVIOUS RAF LOOP (HMR / reboot safe) ---
@@ -10,8 +12,11 @@ if ((window as any).__CM.__rafId) {
 
 (document.title = `CM boot#${bootN}`);
 
-
+import { BgPipeline } from "./game/bg/runtime/BgPipeline";
+import { BgContentLoader } from "./game/bg/content/BgContentLoader";
+import { BgDevUI } from "./ui/BgDevUI";
 import { VFXSystem } from "./game/vfx/VFXSystem";
+import { BgSystem } from "./game/bg/runtime/BgSystem";
 
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
@@ -185,14 +190,14 @@ async function main() {
 
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
-  // ---- BG Lab UI (F7 toggle) ----
-  try {
-    const mod = await import("./ui/BgLabUI");
-    (globalThis as any).__CM_BG_LAB_UI__ = new mod.BgLabUI();
-  } catch (e) {
-    console.warn("[BG_LAB] init failed", e);
+  // ---- BG Lab UI (DEAD, REMOVED in MVP1) ----
+  //try {
+  //const mod = await import("./ui/BgLabUI");
+//} catch (e) {
+  //console.warn("[BG_LAB] init failed", e);
+//}
+  if (import.meta.env.DEV) {
   }
-
   // (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
 
   // --- HUD mode mirror (so we can gate pointer/touch)
@@ -234,35 +239,17 @@ async function main() {
       hud.setPaused?.(paused);
       console.log("[PAUSE]", paused ? "PAUSED" : "RUN", "tick=", loop.getTick?.());
       return;
-    }
+      }
 
-    // BG preset hotswap ([ / ])
-    if (e.key === "[" || e.code === "BracketLeft") {
-      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) - 1;
-      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
+      // Dev hotkeys toggle (U)
+    if (e.code === "KeyU") {
+      const ui = (globalThis as any).__CM_BG_DEV_UI__;
+      if (ui && typeof ui.toggle === "function") {
+        ui.toggle();
+      } else {
+        console.log("[BG_DEV_UI] not ready");
+      }
       return;
-    }
-    if (e.key === "]" || e.code === "BracketRight") {
-      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) + 1;
-      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
-      return;
-    }
-
-    // BG kind toggle (B): shader <-> flow
-    if (e.code === "KeyB") {
-      const cur = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
-      const next = cur === "flow" ? "shader" : "flow";
-      (globalThis as any).__CM_BG_KIND__ = next;
-      console.log("[BG] kind", next);
-      return;
-    }
-    
-    
-
-    if (e.key === "u" || e.key === "U") {
-      const ui = (globalThis as any).__CM_BG_LAB_UI__;
-      if (ui && typeof ui.toggle === "function") ui.toggle();
-      else console.log("[BG_LAB] UI not ready");
     }
 // Game over keys (Y/N)
     if (!session?.gameOver) return;
@@ -300,7 +287,50 @@ async function main() {
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
-  (globalThis as any).__CM_BG_PRESET__ ??= 0;
+
+
+
+  // --- BG pipeline (new runtime)
+  const bgLoader = new BgContentLoader();
+  const bgPipeline = new BgPipeline();
+  bgPipeline.init(gl, LOGIC_W, LOGIC_H);
+
+  // pick initial preset from bindings (or first)
+  const initial = bgLoader.getPresetForLevel?.("level1") ?? bgLoader.getPreset?.("default-flow");
+  if (initial) bgPipeline.setPreset(initial);
+
+  // expose dev API
+  (window as any).__CM = (window as any).__CM ?? {};
+  (window as any).__CM.bg = {
+    presets: () => bgLoader.getAllPresets(),
+    setPresetById: (id: string) => {
+      const p = bgLoader.getPreset(id);
+      if (p) bgPipeline.setPreset(p);
+    },
+    getActivePresetId: () => {
+      // BgPipeline nemá getter -> držíme si to bokem
+      return (window as any).__CM.bgActivePresetId ?? null;
+    },
+  };
+  (window as any).__CM.bgActivePresetId = initial?.id ?? null;
+
+  // wrap setPreset to keep active id
+  const _setPresetById = (window as any).__CM.bg.setPresetById;
+  (window as any).__CM.bg.setPresetById = (id: string) => {
+    (window as any).__CM.bgActivePresetId = id;
+    _setPresetById(id);
+  };
+
+  // BG Dev UI instance (toggled by U)
+  (globalThis as any).__CM_BG_DEV_UI__ = new BgDevUI((window as any).__CM.bg, { defaultVisible: false });
+
+ 
+  
+
+
+  const bg = new BgSystem();
+  bg.init(gl);
+  (game as any).bg = bg; // debug/DevUI access
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
@@ -437,6 +467,16 @@ async function main() {
 
       // Render everything into scene RT (single pass, known-good)
       gfx.renderScene(() => {
+        // BG pass first (behind everything)
+        const world = (window as any).__CM?.game?.world;
+        const sx = world?.scrollX ?? 0;
+        const sy = world?.scrollY ?? 0;
+
+        bgPipeline.draw({
+          time: performance.now() / 1000,
+          scroll: { x: sx, y: sy },
+        } as any);
+
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
       });
