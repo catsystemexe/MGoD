@@ -52,12 +52,7 @@ export class BgPipeline {
 
   draw(ctx: BgDrawCtx): void {
     if (!this.renderer || !this.snapshot) return;
-    this.renderer.setUniforms(
-      this.snapshot.preset.base,
-      ctx.time,
-      ctx.scroll,
-      null
-    );
+    this.renderer.setUniforms(this.snapshot.preset.base ?? {}, ctx.time, ctx.scroll, null);
     this.renderer.draw();
   }
 

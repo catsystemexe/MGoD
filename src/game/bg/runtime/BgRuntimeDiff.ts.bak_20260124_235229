@@ -10,9 +10,8 @@ export function diffPreset(oldP: BgPreset, newP: BgPreset) {
 
   // naive MVP heuristic – later split params explicitly
   const rebuild =
-    JSON.stringify(oldP.base?.quality) !== JSON.stringify(newP.base?.quality) ||
-    JSON.stringify((oldP.base as any)?.flow) !== JSON.stringify((newP.base as any)?.flow) ||
-    JSON.stringify((oldP.base as any)?.shader?.preset) !== JSON.stringify((newP.base as any)?.shader?.preset);
+    JSON.stringify(oldP.base?.resolution) !==
+    JSON.stringify(newP.base?.resolution);
 
   return { realtime, rebuild, structural: false };
 }

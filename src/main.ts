@@ -1,4 +1,19 @@
-(globalThis as any).__DEV__ = import.meta.env.DEV;
+import { BgPipeline } from "./game/bg/runtime/BgPipeline";
+import { BgLabBus } from "./game/bg/lab/BgLabBus";
+import { BgContentLoader } from "./game/bg/content/BgContentLoader";
+import { BgDevUI } from "./ui/BgDevUI";
+// import { VFXSystem } from "./game/vfx/VFXSystem";
+// import { BgSystem } from "./game/bg/runtime/BgSystem";
+
+import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
+export {};
+
+
+const DEV = import.meta.env.DEV;
+(globalThis as any).__DEV__ = DEV;
+if (DEV) {
+  // debug / dev-only věci
+}
 
 // src/main.ts
 const bootN = ((window as any).__BOOT_N__ = (((window as any).__BOOT_N__ ?? 0) + 1));
@@ -11,15 +26,6 @@ if ((window as any).__CM.__rafId) {
 (window as any).__CM.__running = false;
 
 (document.title = `CM boot#${bootN}`);
-
-import { BgPipeline } from "./game/bg/runtime/BgPipeline";
-import { BgContentLoader } from "./game/bg/content/BgContentLoader";
-import { BgDevUI } from "./ui/BgDevUI";
-import { VFXSystem } from "./game/vfx/VFXSystem";
-import { BgSystem } from "./game/bg/runtime/BgSystem";
-
-import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
-export {};
 
 console.log("[BOOT] main.ts running");
 
@@ -44,7 +50,6 @@ cursorStyle.textContent = `
 document.head.appendChild(cursorStyle);
 
 
-const DEV = Boolean((globalThis as any).__DEV__);
 
 let hudTop: HTMLDivElement | null = null;
 function setHudTop(text: string) {
@@ -196,7 +201,7 @@ async function main() {
 //} catch (e) {
   //console.warn("[BG_LAB] init failed", e);
 //}
-  if (import.meta.env.DEV) {
+    if (DEV) {
   }
   // (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
 
@@ -324,13 +329,64 @@ async function main() {
   // BG Dev UI instance (toggled by U)
   (globalThis as any).__CM_BG_DEV_UI__ = new BgDevUI((window as any).__CM.bg, { defaultVisible: false });
 
+  // --- BG LAB: apply overrides into runtime (UI -> BgPipeline) ---
+  const __bgMergeDeep = (base: any, patch: any): any => {
+    const __isObj = (v: any) => !!v && typeof v === "object" && !Array.isArray(v);
+    if (!__isObj(base) || !__isObj(patch)) return (patch ?? base);
+    const out: any = { ...base };
+    for (const k of Object.keys(patch)) {
+      const bv = (base as any)[k];
+      const pv = (patch as any)[k];
+      out[k] = (__isObj(bv) && __isObj(pv)) ? __bgMergeDeep(bv, pv) : pv;
+    }
+    return out;
+  };
+
+  BgLabBus.on((meta) => {
+    try {
+      const cm: any = (globalThis as any).__CM ?? {};
+      const st: any = cm.bgLabState;
+
+      // authoritative source: lab state (UI keeps it in sync)
+      const activeId: string | null = st?.activePresetId ?? (globalThis as any).__CM?.bgActivePresetId ?? null;
+      if (!activeId) return;
+
+      const basePreset = bgLoader.getPreset(activeId);
+      if (!basePreset) return;
+
+      const overrides = st?.overrides ?? {};
+      const snapshot = __bgMergeDeep(basePreset, overrides);
+
+      // Apply strategy by changeType:
+      // - realtime: just setPreset (diffPreset should keep it cheap)
+      // - rebuild: force rebuild() path when possible
+      // - structural: force recreate renderer
+      //
+      // We can nudge this by calling setPreset with modified "base" marker if needed,
+      // but MVP: just call setPreset; BgPipeline.diffPreset decides structural/rebuild.
+      bgPipeline.setPreset(snapshot);
+
+      if (DEV) {
+      console.log("[BG][LAB]", meta?.changeType, meta?.path);
+    }
+    } catch (e) {
+      console.warn("[BG] apply overrides failed", e);
+    }
+  });
+
+
  
   
 
 
-  const bg = new BgSystem();
-  bg.init(gl);
-  (game as any).bg = bg; // debug/DevUI access
+  // const bg = new BgSystem();
+
+ 
+  
+
+
+  // bg.init(gl);
+  // (game as any).bg = bg;
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;

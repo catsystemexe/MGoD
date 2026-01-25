@@ -11,7 +11,10 @@
     "src/game",
     "src/engine",
     "src/graphics",
-    "src/main.ts"
+    "src/main.ts",
+    "src/**/*.d.ts",
+    "vite-env.d.ts",
+    "src/vite-env.d.ts"
   ],
   "exclude": [
     "**/*.smoke.ts",
