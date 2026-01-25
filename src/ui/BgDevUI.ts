@@ -1,8 +1,10 @@
 import type { BgPreset } from "../game/bg/schema/BgPreset";
 import { BgLabBus, type BgChangeType } from "../game/bg/lab/BgLabBus";
 import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabState";
+
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
+import { mergeDeep } from "../game/bg/lab/mergeDeep";
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
 }
@@ -30,17 +32,7 @@ function isObj(v: any): v is Record<string, any> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-// deep merge: base <- patch
-function mergeDeep<T>(base: T, patch: any): T {
-  if (!isObj(base) || !isObj(patch)) return (patch ?? base) as T;
-  const out: any = Array.isArray(base) ? [...(base as any)] : { ...(base as any) };
-  for (const k of Object.keys(patch)) {
-    const bv = (base as any)[k];
-    const pv = patch[k];
-    out[k] = isObj(bv) && isObj(pv) ? mergeDeep(bv, pv) : pv;
-  }
-  return out as T;
-}
+
 
 function getByPath(root: any, path: string): any {
   const parts = path.split(".").filter(Boolean);

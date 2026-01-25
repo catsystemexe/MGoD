@@ -1,5 +1,7 @@
 import { BgPipeline } from "./game/bg/runtime/BgPipeline";
+
 import { BgLabBus } from "./game/bg/lab/BgLabBus";
+import { mergeDeep } from "./game/bg/lab/mergeDeep";
 import { BgContentLoader } from "./game/bg/content/BgContentLoader";
 import { BgDevUI } from "./ui/BgDevUI";
 // import { VFXSystem } from "./game/vfx/VFXSystem";
@@ -328,21 +330,16 @@ async function main() {
 
   // BG Dev UI instance (toggled by U)
   (globalThis as any).__CM_BG_DEV_UI__ = new BgDevUI((window as any).__CM.bg, { defaultVisible: false });
-
   // --- BG LAB: apply overrides into runtime (UI -> BgPipeline) ---
-  const __bgMergeDeep = (base: any, patch: any): any => {
-    const __isObj = (v: any) => !!v && typeof v === "object" && !Array.isArray(v);
-    if (!__isObj(base) || !__isObj(patch)) return (patch ?? base);
-    const out: any = { ...base };
-    for (const k of Object.keys(patch)) {
-      const bv = (base as any)[k];
-      const pv = (patch as any)[k];
-      out[k] = (__isObj(bv) && __isObj(pv)) ? __bgMergeDeep(bv, pv) : pv;
-    }
-    return out;
-  };
 
-  BgLabBus.on((meta) => {
+  
+  const __cm: any = (window as any).__CM = (window as any).__CM || {};
+
+  try { __cm.__bgLabUnsub?.(); } catch {}
+
+  __cm.__bgLabUnsub = BgLabBus.on((meta) => {
+
+
     try {
       const cm: any = (globalThis as any).__CM ?? {};
       const st: any = cm.bgLabState;
@@ -355,7 +352,7 @@ async function main() {
       if (!basePreset) return;
 
       const overrides = st?.overrides ?? {};
-      const snapshot = __bgMergeDeep(basePreset, overrides);
+      const snapshot = mergeDeep(basePreset, overrides);
 
       // Apply strategy by changeType:
       // - realtime: just setPreset (diffPreset should keep it cheap)
@@ -365,11 +362,11 @@ async function main() {
       // We can nudge this by calling setPreset with modified "base" marker if needed,
       // but MVP: just call setPreset; BgPipeline.diffPreset decides structural/rebuild.
       bgPipeline.setPreset(snapshot);
-
-      if (DEV) {
-      console.log("[BG][LAB]", meta?.changeType, meta?.path);
+        if (DEV) {
+          console.log("[BG][LAB]", meta?.changeType, meta?.path);
     }
-    } catch (e) {
+        
+      } catch (e) {
       console.warn("[BG] apply overrides failed", e);
     }
   });
