@@ -1,3 +1,4 @@
+
 import { BG_PRESETS, BgPreset } from "./bgPresets";
 
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
@@ -34,13 +35,34 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
   return p;
 }
 
+export type DemosceneResolvedPreset = {
+  mode: number;
+  p1: [number, number, number, number];
+  p2: [number, number, number, number];
+  cA: [number, number, number];
+  cB: [number, number, number];
+};
+
 export type DemosceneBgDrawArgs = {
   logicW: number;
   logicH: number;
   timeSec: number;
   scrollX: number;
   scrollY: number;
-  presetIndex: number;
+
+  // legacy path
+  presetIndex?: number;
+
+  // preferred path (lets runtime supply fully-resolved preset)
+  preset?: DemosceneResolvedPreset;
+
+  // post/grading (Base/Common)
+  exposure?: number; // default 1
+  contrast?: number; // default 1
+  gamma?: number; // default 1
+  colorize?: number; // 0..1, default 0
+  vignette?: number; // 0..1, default 0
+  bgFade?: number; // 0..1, default 0
 };
 
 export class DemosceneBg {
@@ -61,6 +83,9 @@ export class DemosceneBg {
   private uP2: WebGLUniformLocation;
   private uCA: WebGLUniformLocation;
   private uCB: WebGLUniformLocation;
+
+  private uPost1: WebGLUniformLocation;
+  private uPost2: WebGLUniformLocation;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -90,19 +115,27 @@ export class DemosceneBg {
       uniform vec3  uCA;       // base color
       uniform vec3  uCB;       // line/glow color
 
-      float line01(float x, float w) {
-        // crisp-ish line with small AA
-        return 1.0 - smoothstep(w, w + 0.002, abs(x));
-      }
+      uniform vec4  uPost1;    // (exposure, contrast, gamma, colorize)
+      uniform vec2  uPost2;    // (vignette, bgFade)
 
-      float hash21(vec2 p) {
-        // cheap hash
-        p = fract(p * vec2(123.34, 345.45));
-        p += dot(p, p + 34.345);
-        return fract(p.x * p.y);
-      }
+   float line01(float x, float w) {
+  float a = abs(x);
+  float aa = max(fwidth(a), 0.0015); // stabilní i když je fwidth maličký
+  return 1.0 - smoothstep(w, w + aa, a);
+}
 
-      void main() {
+    float hash21(vec2 p) {
+  // cheap hash
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + 34.345);
+  return fract(p.x * p.y);
+}
+
+float safePow01(float x, float e) {
+  return pow(max(x, 1e-6), max(e, 1e-6));
+}
+
+void main() {
         vec2 p = vec2(vUv.x * uLogic.x, vUv.y * uLogic.y);
 
         // parallax scroll
@@ -165,7 +198,7 @@ export class DemosceneBg {
           float gy = line01(fract(q.y / step) - 0.5, w);
 
           float lines = max(gx, gy);
-          float glow = pow(lines, uP2.z) * 0.85;
+         float glow = safePow01(lines, uP2.z) * 0.85;
 
           col += uCB * glow;
 
@@ -210,7 +243,7 @@ export class DemosceneBg {
           float l2 = line01(fract(kk.y * 0.02 - t * 0.10) - 0.5, w);
 
           float lines = max(l1, l2);
-          float glow = pow(lines, uP2.z) * 0.9;
+          float glow = safePow01(lines, uP2.z) * 0.9;
 
           col += uCB * glow;
 
@@ -229,7 +262,7 @@ export class DemosceneBg {
           float flick = mix(0.65, 1.0, n);
           flick *= mix(1.0 - nz, 1.0, hash21(vec2(floor(p.x * 0.05), floor(p.y * 0.05))));
 
-          float glow = pow(ln, uP2.z) * 0.9 * flick;
+         float glow = safePow01(ln, uP2.z) * 0.9 * flick;
 
           col += uCB * glow;
 
@@ -256,6 +289,37 @@ export class DemosceneBg {
           col += uCB * glow;
         }
 
+        // --- Post / grading (Base/Common) ---------------------------------
+        float exposure = max(0.0, uPost1.x);
+        float contrast = max(0.0, uPost1.y);
+        float gamma = max(0.0001, uPost1.z);
+        float colorize = clamp(uPost1.w, 0.0, 1.0);
+        float vignette = clamp(uPost2.x, 0.0, 1.0);
+        float bgFade = clamp(uPost2.y, 0.0, 1.0);
+
+        // exposure
+        col *= exposure;
+
+        // contrast around mid-gray
+        col = (col - 0.5) * contrast + 0.5;
+
+        // gamma
+        col = pow(max(col, vec3(0.0)), vec3(1.0 / gamma));
+
+        // colorize: blend toward grayscale tinted by uCB
+        float g = dot(col, vec3(0.299, 0.587, 0.114));
+        vec3 tinted = vec3(g) * (0.35 + 0.65 * uCB);
+        col = mix(col, tinted, colorize);
+
+        // vignette: darken edges
+        vec2 uv = vUv - vec2(0.5);
+        float r01 = length(uv) / 0.70710678; // 0..1 to corners
+        float vig = smoothstep(0.25, 1.0, r01);
+        col *= (1.0 - vignette * 0.75 * vig);
+
+        // bgFade: fade to black
+        col *= (1.0 - bgFade);
+
         outColor = vec4(col, 1.0);
       }
     `;
@@ -274,9 +338,12 @@ export class DemosceneBg {
     const uP2 = gl.getUniformLocation(this.prog, "uP2");
     const uCA = gl.getUniformLocation(this.prog, "uCA");
     const uCB = gl.getUniformLocation(this.prog, "uCB");
-    if (!uLogic || !uTime || !uScroll || !uMode || !uP1 || !uP2 || !uCA || !uCB) {
+    const uPost1 = gl.getUniformLocation(this.prog, "uPost1");
+    const uPost2 = gl.getUniformLocation(this.prog, "uPost2");
+    if (!uLogic || !uTime || !uScroll || !uMode || !uP1 || !uP2 || !uCA || !uCB || !uPost1 || !uPost2) {
       throw new Error("BG: uniform location missing");
     }
+
     this.uLogic = uLogic;
     this.uTime = uTime;
     this.uScroll = uScroll;
@@ -285,6 +352,8 @@ export class DemosceneBg {
     this.uP2 = uP2;
     this.uCA = uCA;
     this.uCB = uCB;
+    this.uPost1 = uPost1;
+    this.uPost2 = uPost2;
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -313,7 +382,7 @@ export class DemosceneBg {
   draw(args: DemosceneBgDrawArgs): void {
     const gl = this.gl;
 
-    const pr = this.preset(args.presetIndex);
+    const pr = (args.preset ?? this.preset(Number(args.presetIndex ?? 0))) as unknown as BgPreset;
 
     gl.disable(gl.BLEND);
     gl.useProgram(this.prog);
@@ -329,10 +398,18 @@ export class DemosceneBg {
     gl.uniform3f(this.uCA, pr.cA[0], pr.cA[1], pr.cA[2]);
     gl.uniform3f(this.uCB, pr.cB[0], pr.cB[1], pr.cB[2]);
 
+    const exposure = Number.isFinite(args.exposure as any) ? Number(args.exposure) : 1;
+    const contrast = Number.isFinite(args.contrast as any) ? Number(args.contrast) : 1;
+    const gamma = Number.isFinite(args.gamma as any) ? Number(args.gamma) : 1;
+    const colorize = Number.isFinite(args.colorize as any) ? Number(args.colorize) : 0;
+    const vignette = Number.isFinite(args.vignette as any) ? Number(args.vignette) : 0;
+    const bgFade = Number.isFinite(args.bgFade as any) ? Number(args.bgFade) : 0;
+
+    gl.uniform4f(this.uPost1, exposure, contrast, gamma, colorize);
+    gl.uniform2f(this.uPost2, vignette, bgFade);
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     gl.bindVertexArray(null);
   }
 }
-
-

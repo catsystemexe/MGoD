@@ -6,6 +6,7 @@ import { BgContentLoader } from "./game/bg/content/BgContentLoader";
 import { BgDevUI } from "./ui/BgDevUI";
 // import { VFXSystem } from "./game/vfx/VFXSystem";
 // import { BgSystem } from "./game/bg/runtime/BgSystem";
+import { CONTENT } from "./game/content/CONTENT";
 
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
@@ -298,24 +299,43 @@ async function main() {
 
 
   // --- BG pipeline (new runtime)
-  const bgLoader = new BgContentLoader();
   const bgPipeline = new BgPipeline();
   bgPipeline.init(gl, LOGIC_W, LOGIC_H);
 
-  // pick initial preset from bindings (or first)
-  const initial = bgLoader.getPresetForLevel?.("level1") ?? bgLoader.getPreset?.("default-flow");
+  // --- BG content from store (single source of truth)
+  const content: any = CONTENT;
+
+  // BG content from validated bundle
+  const bgPresetsFile: any = content.bgPresets;
+  const bgBindings: any = content.bgBindings;
+
+  const bgPresetsArr: any[] = Array.isArray(bgPresetsFile?.presets) ? bgPresetsFile.presets : [];
+
+  (window as any).__CM = (window as any).__CM || {};
+  (window as any).__CM.content = content;
+  
+  const pickPresetIdForLevel = (levelId: string): string | null => {
+    const bindings = Array.isArray(bgBindings?.bindings) ? bgBindings.bindings : [];
+    const hit = bindings.find((b: any) => b?.levelId === levelId);
+    return (hit?.presetId ?? bgBindings?.defaultPresetId ?? null) as any;
+  };
+
+  // IMPORTANT: use your real starting levelId here.
+  // If you start in "level1", bind that in src/game/content/bgBindings.json
+  const startLevelId = "level1";
+  const initialId = pickPresetIdForLevel(startLevelId);
+  const initial = bgPresetsArr.find((p: any) => p?.id === initialId) ?? bgPresetsArr[0] ?? null;
+
   if (initial) bgPipeline.setPreset(initial);
 
   // expose dev API
-  (window as any).__CM = (window as any).__CM ?? {};
   (window as any).__CM.bg = {
-    presets: () => bgLoader.getAllPresets(),
+    presets: () => bgPresetsArr,
     setPresetById: (id: string) => {
-      const p = bgLoader.getPreset(id);
+      const p = bgPresetsArr.find((x: any) => x?.id === id);
       if (p) bgPipeline.setPreset(p);
     },
     getActivePresetId: () => {
-      // BgPipeline nemá getter -> držíme si to bokem
       return (window as any).__CM.bgActivePresetId ?? null;
     },
   };
@@ -337,40 +357,32 @@ async function main() {
 
   try { __cm.__bgLabUnsub?.(); } catch {}
 
-  __cm.__bgLabUnsub = BgLabBus.on((meta) => {
+      __cm.__bgLabUnsub = BgLabBus.on((meta) => {
+        try {
+          const cm: any = (globalThis as any).__CM ?? {};
+          const st: any = cm.bgLabState;
 
+          // authoritative source: lab state (UI keeps it in sync)
+          const activeId: string | null =
+            st?.activePresetId ?? (globalThis as any).__CM?.bgActivePresetId ?? null;
+          if (!activeId) return;
 
-    try {
-      const cm: any = (globalThis as any).__CM ?? {};
-      const st: any = cm.bgLabState;
+          const basePreset = bgPresetsArr.find((p: any) => p?.id === activeId);
+          if (!basePreset) return;
 
-      // authoritative source: lab state (UI keeps it in sync)
-      const activeId: string | null = st?.activePresetId ?? (globalThis as any).__CM?.bgActivePresetId ?? null;
-      if (!activeId) return;
+          const overrides = st?.overrides ?? {};
+          const snapshot = mergeDeep(basePreset, overrides);
 
-      const basePreset = bgLoader.getPreset(activeId);
-      if (!basePreset) return;
+          // MVP: apply by setPreset; BgPipeline decides rebuild/structural
+          bgPipeline.setPreset(snapshot);
 
-      const overrides = st?.overrides ?? {};
-      const snapshot = mergeDeep(basePreset, overrides);
-
-      // Apply strategy by changeType:
-      // - realtime: just setPreset (diffPreset should keep it cheap)
-      // - rebuild: force rebuild() path when possible
-      // - structural: force recreate renderer
-      //
-      // We can nudge this by calling setPreset with modified "base" marker if needed,
-      // but MVP: just call setPreset; BgPipeline.diffPreset decides structural/rebuild.
-      bgPipeline.setPreset(snapshot);
-        if (DEV) {
-          console.log("[BG][LAB]", meta?.changeType, meta?.path);
-    }
-        
-      } catch (e) {
-      console.warn("[BG] apply overrides failed", e);
-    }
-  });
-
+          if (DEV) {
+            console.log("[BG][LAB]", meta?.changeType, meta?.path);
+          }
+        } catch (e) {
+          console.warn("[BG] apply overrides failed", e);
+        }
+      });
 
  
   
@@ -437,7 +449,7 @@ async function main() {
       // advance simulation (THIS WAS MISSING)
       loop.step(dt);
 
-      
+      if (DEV) (globalThis as any).BgLabBus = BgLabBus;
 
         // cosmetic VFX (per-frame, not in fixed tick)
         (game as any).vfx?.update?.(dt);
@@ -546,11 +558,11 @@ async function main() {
       }
     }
   }
-
+      
   
   (window as any).__CM.__running = true;
   (window as any).__CM.__rafId = requestAnimationFrame(frame);
-  }
+}
 main().catch((err) => {
   console.error("[BOOT] main() failed", err);
   setHudTop("BOOT ERROR (main): " + String((err as any)?.stack || err));

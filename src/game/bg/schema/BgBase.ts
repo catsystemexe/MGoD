@@ -1,5 +1,6 @@
 export type BgBaseCommon = {
   timeScale: number;
+  scrollSpeedX?: number; // px/sec
   scrollX: number;
   scrollY: number;
   exposure: number;
@@ -25,6 +26,10 @@ export type BgShaderBase = {
 };
 
 export type BgFlowSegmentsBase = {
+  // NOTE: runtime FlowSegmentsBg uses FLOW_PRESETS via presetIndex
+  presetId?: string;
+  presetIndex?: number;
+
   speed: number;
   curl: number;
   jitter: number;

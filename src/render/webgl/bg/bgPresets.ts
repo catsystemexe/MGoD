@@ -17,9 +17,10 @@ export const BG_PRESETS: BgPreset[] = [
     name: "Tempest Tunnel (rings+spokes)",
     mode: 0,
     // p1: ringW, spokeW, ringSpeed, spokeSpeed
-    p1: [0.020, 0.030, 0.08, 0.00],
+
     // p2: ringScale, spokeFreq, rotAmp, parallax
-    p2: [0.020, 12.0, 0.15, 0.15],
+    p1: [0.025, 0.050, 0.08, 0.00],
+    p2: [0.20, 12.0, 0.15, 0.15],
     cA: [0.02, 0.03, 0.06],
     cB: [0.55, 0.90, 1.00],
   },

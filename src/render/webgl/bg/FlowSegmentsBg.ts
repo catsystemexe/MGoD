@@ -86,7 +86,7 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
 
 export class FlowSegmentsBg {
   private gl: WebGL2RenderingContext;
-  private bgSegments: FlowSegmentsBg;
+  // (removed) was unused self-reference
   private prog: WebGLProgram;
   private vao: WebGLVertexArrayObject;
   private vbo: WebGLBuffer;
@@ -209,7 +209,7 @@ export class FlowSegmentsBg {
 
     const dir = normalize2(pr.direction.x, pr.direction.y);
 
-    const makeLayer = (layerId: FlowLayerId, layerIndex: number, densityMul: number) => {
+      const makeLayer = (_layerId: FlowLayerId, layerIndex: number, densityMul: number) => {
       const count = Math.max(1, Math.floor(base * densityMul));
       const arr: SegParticle[] = new Array(count);
 
@@ -344,7 +344,6 @@ export class FlowSegmentsBg {
     }
 
     // accel limit + damping (stability)
-    const vLen = Math.hypot(p.vx, p.vy) || 1;
     // prefer direction.x/y baseline
     const dir = normalize2(pr.direction.x, pr.direction.y);
     const targetVx = dir[0];
@@ -429,10 +428,11 @@ export class FlowSegmentsBg {
       const pl = pr.parallax.find(x => x.layer === layerId);
       if (!pl) continue;
 
-      const par = pl.factor;
-      // Screen-space flow: ignore world scroll (prevents "drifting" with camera)
-      const scrollX = 0;
-      const scrollY = 0;
+      const par = Number(pl.factor ?? 1);
+
+      // Parallax scroll: layer scroll scales by par (0..1 typicky)
+      const scrollX = Number(args.scrollX ?? 0) * par;
+      const scrollY = Number(args.scrollY ?? 0) * par;
 
       // layer color
       const c = pr.colors?.[layerId] ?? (

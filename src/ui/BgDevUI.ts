@@ -583,24 +583,5 @@ export class BgDevUI {
       r.appendChild(sel);
       box.appendChild(r);
     }
-
-    // MVP realtime knob
-    {
-      const r = this.mkRow();
-      r.appendChild(this.mkLabel("timeScale (rt)"));
-      const cur = Number(this.getOverride("base.common.timeScale") ?? 1.0);
-      const range = this.mkRange(cur, { min: 0, max: 3, step: 0.01 });
-      range.onpointerdown = (e) => stopProp(e);
-      range.oninput = (e) => {
-        stopProp(e);
-        const v = Number(range.value);
-        this.setOverride("realtime", "base.common.timeScale", v);
-      };
-      r.appendChild(range);
-      box.appendChild(r);
-    }
-
-    this.root.appendChild(box);
-  }
-
-}
+     }
+   }

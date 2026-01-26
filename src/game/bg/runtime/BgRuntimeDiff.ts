@@ -5,14 +5,12 @@ export function diffPreset(oldP: BgPreset, newP: BgPreset) {
     return { realtime: false, rebuild: false, structural: true };
   }
 
-  const realtime =
-    JSON.stringify(oldP.base) !== JSON.stringify(newP.base);
+const baseChanged =
+  JSON.stringify(oldP.base) !== JSON.stringify(newP.base);
 
-  // naive MVP heuristic – later split params explicitly
-  const rebuild =
-    JSON.stringify(oldP.base?.quality) !== JSON.stringify(newP.base?.quality) ||
-    JSON.stringify((oldP.base as any)?.flow) !== JSON.stringify((newP.base as any)?.flow) ||
-    JSON.stringify((oldP.base as any)?.shader?.preset) !== JSON.stringify((newP.base as any)?.shader?.preset);
-
-  return { realtime, rebuild, structural: false };
-}
+return {
+  realtime: true,
+  rebuild: baseChanged,
+  structural: false,
+};
+  }

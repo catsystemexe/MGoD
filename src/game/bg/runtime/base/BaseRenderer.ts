@@ -1,7 +1,12 @@
 export interface BaseRenderer {
   init(gl: WebGL2RenderingContext, w: number, h: number): void;
   rebuild(params: any): void;
-  setUniforms(params: any, time: number, scroll: number, audio: any): void;
+  setUniforms(
+    params: any,
+    time: number,
+    scroll: { x: number; y: number },
+    audio: any,
+  ): void;
   draw(): void;
   dispose(): void;
 }

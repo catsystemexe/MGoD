@@ -28,8 +28,16 @@ export const bgBaseUiLayout: UiSection[] = [
     title: "Base / Common",
     controls: [
       { type: "slider", path: "base.common.timeScale", min: 0, max: 3, step: 0.01, change: "realtime" },
-      { type: "slider", path: "base.common.scrollX", min: -2, max: 2, step: 0.01, change: "realtime" },
-      { type: "slider", path: "base.common.scrollY", min: -2, max: 2, step: 0.01, change: "realtime" },
+
+      // px/sec: auto-scroll X (0 = stojí)
+      { type: "slider", path: "base.common.scrollSpeedX", min: -800, max: 800, step: 1, change: "realtime" },
+      
+      { type: "slider", path: "base.common.scrollX", min: -2000, max: 2000, step: 1, change: "realtime" },
+      { type: "slider", path: "base.common.scrollY", min: -2000, max: 2000, step: 1, change: "realtime" },
+      { type: "slider", path: "base.common.scrollMul", min: 0, max: 10, step: 0.01, change: "realtime" },
+
+
+    
 
       { type: "slider", path: "base.common.exposure", min: 0, max: 2, step: 0.01, change: "realtime" },
       { type: "slider", path: "base.common.contrast", min: 0, max: 2, step: 0.01, change: "realtime" },
