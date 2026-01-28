@@ -4,10 +4,9 @@ import { BgSnapshot } from "./BgSnapshot";
 import { BgDrawCtx } from "./BgDrawCtx";
 import { BaseRenderer } from "./base/BaseRenderer";
 import { createRenderer } from "./base/createRenderer";
-import { diffPreset } from "./BgRuntimeDiff";
 
 export class BgPipeline {
-  private renderer: BaseRenderer | null = null;
+  private renderers = new Map<string, { kind: string; r: BaseRenderer }>();
   private snapshot: BgSnapshot | null = null;
 
   private gl: WebGL2RenderingContext | null = null;
@@ -24,22 +23,35 @@ export class BgPipeline {
   }
 
   setPreset(preset: BgPreset): void {
-    const next: BgSnapshot = { preset, resolvedSeed: preset.seed };
+    const next: BgSnapshot = { preset, resolvedSeed: (preset as any).seed ?? 0 };
 
+    // First set: just store snapshot; renderers are lazy-created per layer in draw()
     if (!this.snapshot) {
-      this.createRenderer(next);
       this.snapshot = next;
       return;
     }
 
-    const diff = diffPreset(this.snapshot.preset, preset);
+    // Dispose renderers for removed layers or kind changes
+    const prev = this.snapshot.preset as any;
+    const cur = preset as any;
 
-    if (diff.structural) {
-      this.disposeRenderer();
-      this.createRenderer(next);
-    } else if (diff.rebuild && this.renderer) {
-      // Rebuild with BgBase (contains common/quality + kind-specific block)
-      this.renderer.rebuild(preset.base);
+    const prevLayers: any[] = Array.isArray(prev?.layers) ? prev.layers : [];
+    const curLayers: any[] = Array.isArray(cur?.layers) ? cur.layers : [];
+
+    const curById = new Map(curLayers.map(l => [String(l.id), l]));
+
+    for (const [layerId, ent] of this.renderers) {
+      const l2 = curById.get(layerId);
+      if (!l2) {
+        ent.r.dispose();
+        this.renderers.delete(layerId);
+        continue;
+      }
+      const nextKind = String(l2.kind ?? "");
+      if (nextKind && ent.kind !== nextKind) {
+        ent.r.dispose();
+        this.renderers.delete(layerId);
+      }
     }
 
     this.snapshot = next;
@@ -73,10 +85,12 @@ export class BgPipeline {
   }
 
   draw(ctx: BgDrawCtx): void {
-    if (!this.renderer || !this.snapshot) return;
+    if (!this.snapshot || !this.gl) return;
 
-    const base: any = this.snapshot.preset.base ?? {};
-    const common: any = base.common ?? {};
+    const preset: any = this.snapshot.preset ?? {};
+    const common: any = preset.common ?? {};
+    const quality: any = preset.quality ?? {};
+    const layers: any[] = Array.isArray(preset.layers) ? preset.layers : [];
 
     const rawScroll: any = (ctx as any).scroll;
 
@@ -91,7 +105,7 @@ export class BgPipeline {
         ? Number(rawScroll.y ?? 0)
         : 0;
 
-    // --- auto-scroll X driven by UI (px/sec); 0 => no motion
+    // --- auto-scroll X (px/sec)
     const tSec = Number((ctx as any).timeSec ?? (ctx as any).time ?? 0);
     const dt = this.lastTimeSec > 0 ? Math.max(0, tSec - this.lastTimeSec) : 0;
     this.lastTimeSec = tSec;
@@ -101,19 +115,92 @@ export class BgPipeline {
       this.autoX += scrollSpeedX * dt;
     }
 
-    // Effective scroll:
-    // - X: world scroll (ctxX) + autoX + manual offsets
-    // - Y: world scroll (ctxY) + manual offsets
-    const effScroll = {
+    const baseScroll = {
       x: ctxX + this.autoX + Number(common.scrollX ?? 0),
       y: ctxY + Number(common.scrollY ?? 0),
     };
 
-    this.renderer.setUniforms(base, (ctx as any).time, effScroll, null);
-    this.renderer.draw();
+    // blend setup (we will override per-layer)
+    const gl = this.gl;
+    gl.enable(gl.BLEND);
+
+    for (const layer of layers) {
+      if (!layer || typeof layer !== "object") continue;
+      if (layer.enabled === false) continue;
+
+      const layerId = String(layer.id ?? "");
+      const kind = String(layer.kind ?? "");
+      if (!layerId || !kind) continue;
+
+      // get or create renderer per layerId
+      let ent = this.renderers.get(layerId);
+      if (!ent) {
+        const r = createRenderer(kind);
+        r.init(gl, this.w, this.h);
+
+        // one-time rebuild (best-effort)
+        try {
+          r.rebuild({});
+        } catch {}
+        ent = { kind, r };
+        this.renderers.set(layerId, ent);
+      }
+
+      // per-layer parallax
+      const parMul = Number(layer.parallaxMul ?? 1);
+      const effScroll = {
+        x: baseScroll.x * (Number.isFinite(parMul) ? parMul : 1),
+        y: baseScroll.y * (Number.isFinite(parMul) ? parMul : 1),
+      };
+
+      // opacity via constant alpha blend
+      const opacity = Math.max(0, Math.min(1, Number(layer.opacity ?? 1)));
+      gl.blendColor(0, 0, 0, opacity);
+
+      const blend = String(layer.blend ?? "alpha");
+      if (blend === "add") {
+        // src * constA + dst * 1
+        gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
+        gl.blendEquation(gl.FUNC_ADD);
+      } else {
+        // alpha: src * constA + dst * (1 - constA)
+        gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+        gl.blendEquation(gl.FUNC_ADD);
+      }
+
+      // Build params object expected by renderers (common + kind block)
+      const params = {
+        common,
+        quality,
+        shader: layer?.params?.shader ?? {},
+        flow: layer?.params?.flow ?? {},
+      };
+
+      ent.r.setUniforms(params, (ctx as any).time, effScroll, null);
+      ent.r.draw();
+
+        // NOTE: some BG renderers touch global BLEND state (FlowRibbon/FlowSegments/Demoscene).
+        // Re-apply pipeline-managed blend state so NEXT layer opacity/blend stays correct.
+        gl.enable(gl.BLEND);
+        gl.blendColor(0, 0, 0, opacity);
+        if (blend === "add") {
+          gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
+          gl.blendEquation(gl.FUNC_ADD);
+        } else {
+          gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+          gl.blendEquation(gl.FUNC_ADD);
+        }
+
+}
+
+    // Optional: keep blending enabled for the rest of pipeline or disable:
+    // gl.disable(gl.BLEND);
   }
 
   dispose(): void {
-    this.disposeRenderer();
+    for (const ent of this.renderers.values()) {
+      try { ent.r.dispose(); } catch {}
+    }
+    this.renderers.clear();
   }
 }

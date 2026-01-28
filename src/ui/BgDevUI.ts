@@ -5,6 +5,7 @@ import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabSt
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
 import { mergeDeep } from "../game/bg/lab/mergeDeep";
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
 }
@@ -28,11 +29,34 @@ function setGlobalLabState(next: BgLabState): void {
   cm.bgLabState = next;
 }
 
+function mapUiPathToOverridePath(uiPath: string): string {
+  if (!uiPath || typeof uiPath !== "string") return uiPath;
+
+  // only map base.* paths (bgBaseUiLayout)
+  if (!uiPath.startsWith("base.")) return uiPath;
+
+  const st: any = getGlobalLabState() as any;
+  const activeIx = Number(st?.ui?.activeLayerIx ?? 0);
+
+  const rest = uiPath.slice("base.".length);
+
+  if (rest.startsWith("common.")) return "common." + rest.slice("common.".length);
+  if (rest.startsWith("quality.")) return "quality." + rest.slice("quality.".length);
+
+  if (rest.startsWith("flow."))
+    return `layers.${activeIx}.params.flow.` + rest.slice("flow.".length);
+
+  if (rest.startsWith("shader."))
+    return `layers.${activeIx}.params.shader.` + rest.slice("shader.".length);
+
+  if (rest == "kind") return `layers.${activeIx}.kind`;
+
+  return uiPath;
+}
+
 function isObj(v: any): v is Record<string, any> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
-
-
 
 function getByPath(root: any, path: string): any {
   const parts = path.split(".").filter(Boolean);
@@ -44,20 +68,47 @@ function getByPath(root: any, path: string): any {
   return cur;
 }
 
+function isIndexKey(k: string): boolean {
+  return String(Number(k)) === k;
+}
+
 function setByPath(root: any, path: string, value: any): any {
-  const parts = path.split(".").filter(Boolean);
+  const parts = String(path ?? "").split(".").filter(Boolean);
   if (parts.length === 0) return root;
-  const out = isObj(root) ? { ...root } : {};
+
+  const out = Array.isArray(root) ? [...root] : { ...(root ?? {}) };
   let cur: any = out;
+
   for (let i = 0; i < parts.length - 1; i++) {
-    const k = parts[i]!;
-    const next = cur[k];
-    cur[k] = isObj(next) ? { ...next } : {};
-    cur = cur[k];
+    const key = parts[i];
+    const nextKey = parts[i + 1];
+    const nextIsIndex = isIndexKey(nextKey);
+
+    if (Array.isArray(cur)) {
+      const ix = Number(key);
+      cur[ix] = cur[ix] ?? (nextIsIndex ? [] : {});
+      if (nextIsIndex && !Array.isArray(cur[ix])) cur[ix] = [];
+      if (!nextIsIndex && (cur[ix] == null || typeof cur[ix] !== "object" || Array.isArray(cur[ix]))) cur[ix] = {};
+      cur = cur[ix];
+    } else {
+      cur[key] = cur[key] ?? (nextIsIndex ? [] : {});
+      if (nextIsIndex && !Array.isArray(cur[key])) cur[key] = [];
+      if (!nextIsIndex && (cur[key] == null || typeof cur[key] !== "object" || Array.isArray(cur[key]))) cur[key] = {};
+      cur = cur[key];
+    }
   }
-  cur[parts[parts.length - 1]!] = value;
+
+  const last = parts[parts.length - 1];
+
+  if (Array.isArray(cur) && isIndexKey(last)) {
+    cur[Number(last)] = value;
+  } else {
+    cur[last] = value;
+  }
+
   return out;
 }
+
 
 // IMPORTANT: stop leaking to canvas/game, but DO NOT preventDefault (or sliders & inputs break)
 function stopProp(e: Event) {
@@ -92,9 +143,9 @@ export class BgDevUI {
       "max-width:220px",
       `display:${this.visible ? "block" : "none"}`,
       "user-select:none",
-        "max-height:calc(100vh - 16px)",
-        "overflow:auto",
-        "overflow-x:hidden",
+      "max-height:calc(100vh - 16px)",
+      "overflow:auto",
+      "overflow-x:hidden",
     ].join(";");
 
     // Capture-phase stop so canvas never sees it.
@@ -113,6 +164,10 @@ export class BgDevUI {
     if (this.visible) this.render();
   }
 
+  destroy(): void {
+    this.root.remove();
+  }
+
   private emit(changeType: BgChangeType, path: string) {
     BgLabBus.emit({ changeType, path });
   }
@@ -124,6 +179,9 @@ export class BgDevUI {
     this.root.appendChild(title);
   }
 
+
+
+  
   private renderTopControls() {
     const row = el("div");
     row.style.cssText = "display:flex;gap:5px;justify-content:flex-end;margin:-2px 0 5px 0;";
@@ -164,7 +222,9 @@ export class BgDevUI {
   private renderPresetsList(presets: BgPreset[], active: string | null) {
     for (const p of presets) {
       const b = el("button");
-      b.textContent = `${p.id}  [${p.kind}]`;
+      // BgPreset V2 doesn't have kind at top-level; keep label safe.
+      const kind = (p as any).kind ?? (p as any).base?.kind ?? (p as any).layers?.[0]?.kind ?? "?";
+      b.textContent = `${p.id}  [${String(kind)}]`;
       b.style.cssText = [
         "cursor:pointer",
         "background:rgba(255,255,255,0.08)",
@@ -253,7 +313,7 @@ export class BgDevUI {
       wrap.appendChild(label);
     }
 
-    const changeType = (ctrl.type === "button") ? "realtime" : ctrl.change;
+    const changeType = ctrl.type === "button" ? "realtime" : ctrl.change;
 
     // BUTTON
     if (ctrl.type === "button") {
@@ -307,10 +367,11 @@ export class BgDevUI {
       sel.onchange = (e) => {
         stopProp(e);
         const vRaw = sel.value;
-        const v = (vRaw === "auto") ? "auto" : (isNaN(Number(vRaw)) ? vRaw : Number(vRaw));
+        const v = vRaw === "auto" ? "auto" : isNaN(Number(vRaw)) ? vRaw : Number(vRaw);
 
         const cur = getGlobalLabState();
-        const nextOverrides = setByPath(cur.overrides ?? {}, ctrl.path, v);
+        const opath = mapUiPathToOverridePath(ctrl.path);
+        const nextOverrides = setByPath(cur.overrides ?? {}, opath, v);
         setGlobalLabState({ ...cur, overrides: nextOverrides });
 
         if (changeType === "rebuild") this.rebuildDirty = true;
@@ -356,7 +417,8 @@ export class BgDevUI {
 
       const applyValue = (v: number) => {
         const cur = getGlobalLabState();
-        const nextOverrides = setByPath(cur.overrides ?? {}, ctrl.path, v);
+        const opath = mapUiPathToOverridePath(ctrl.path);
+        const nextOverrides = setByPath(cur.overrides ?? {}, opath, v);
         setGlobalLabState({ ...cur, overrides: nextOverrides });
 
         if (changeType === "rebuild") this.rebuildDirty = true;
@@ -403,44 +465,332 @@ export class BgDevUI {
     }
   }
 
-  private render(): void {
-    const presets = this.api.presets?.() ?? [];
-    const active = this.api.getActivePresetId?.();
+  // --- LAYERS list (Sprint 1 skeleton) -----------------------------------
+  private renderLayerList(presetV2: any): void {
+    const box = el("div");
+    box.className = "cm-bg-layers";
+    box.style.margin = "8px 0";
+    box.style.padding = "8px";
+    box.style.border = "1px solid rgba(255,255,255,0.15)";
+    box.style.borderRadius = "8px";
 
-    // sync active into lab state if missing
-    const st0 = getGlobalLabState();
-    if (active && st0.activePresetId !== active) {
-      setGlobalLabState({ ...st0, activePresetId: active });
+    const title = el("div");
+    title.textContent = "LAYERS";
+    title.style.fontWeight = "700";
+    title.style.marginBottom = "6px";
+    box.appendChild(title);
+
+    const layers: any[] = Array.isArray(presetV2?.layers) ? presetV2.layers : [];
+
+    const st = getGlobalLabState() as any;
+    const activeIx = Math.max(0, Math.min(layers.length - 1, Number(st?.ui?.activeLayerIx ?? 0)));
+
+    // helper: ensure overrides.layers is ARRAY and has slot i
+    const ensureOvLayerSlot = (i: number) => {
+      const cur = getGlobalLabState() as any;
+      const ov = (cur.overrides ?? {}) as any;
+
+      ov.layers = Array.isArray(ov.layers) ? ov.layers : [];
+      ov.layers[i] = ov.layers[i] ?? {};
+      return { cur, ov };
+    };
+
+    const list = el("div");
+    list.style.display = "flex";
+    list.style.flexDirection = "column";
+    list.style.gap = "6px";
+
+    layers.forEach((l: any, i: number) => {
+      const row = el("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "6px";
+      row.style.cursor = "pointer";
+
+      if (i === activeIx) {
+        row.style.outline = "1px solid rgba(255,255,255,0.55)";
+        row.style.borderRadius = "6px";
+        row.style.padding = "3px";
+      }
+
+      row.onclick = () => {
+        const cur = getGlobalLabState() as any;
+        const next = { ...cur, ui: { ...(cur.ui ?? {}), activeLayerIx: i } };
+        setGlobalLabState(next);
+        this.render();
+      };
+
+      const chk = el("input") as HTMLInputElement;
+      chk.type = "checkbox";
+      chk.checked = l?.enabled !== false;
+      chk.onclick = (ev) => stopProp(ev as any);
+      chk.onchange = (ev) => {
+        stopProp(ev as any);
+
+        const { cur, ov } = ensureOvLayerSlot(i);
+        ov.layers[i].enabled = chk.checked;
+
+        setGlobalLabState({ ...cur, overrides: ov });
+        this.emit("rebuild", `layers.${i}.enabled`);
+        this.render();
+      };
+
+      const label = el("div");
+      label.textContent = `${i + 1}. ${String(l?.kind ?? "?")}  (${String(l?.id ?? "")})`;
+      label.style.flex = "1";
+
+      const up = el("button");
+      up.textContent = "↑";
+      up.onclick = (ev) => {
+        stopProp(ev as any);
+        if (i <= 0) return;
+
+        // reorder by writing FULL reordered layers array into overrides.layers
+        const cur = getGlobalLabState() as any;
+        const ov = (cur.overrides ?? {}) as any;
+
+        const newLayers = [...layers];
+        const tmp = newLayers[i - 1];
+        newLayers[i - 1] = newLayers[i];
+        newLayers[i] = tmp;
+
+        ov.layers = newLayers;
+        const nextActive = activeIx === i ? i - 1 : activeIx === i - 1 ? i : activeIx;
+
+        setGlobalLabState({ ...cur, overrides: ov, ui: { ...(cur.ui ?? {}), activeLayerIx: nextActive } });
+        this.emit("rebuild", "layers.reorder");
+        this.render();
+      };
+
+      const down = el("button");
+      down.textContent = "↓";
+      down.onclick = (ev) => {
+        stopProp(ev as any);
+        if (i >= layers.length - 1) return;
+
+        const cur = getGlobalLabState() as any;
+        const ov = (cur.overrides ?? {}) as any;
+
+        const newLayers = [...layers];
+        const tmp = newLayers[i + 1];
+        newLayers[i + 1] = newLayers[i];
+        newLayers[i] = tmp;
+
+        ov.layers = newLayers;
+        const nextActive = activeIx === i ? i + 1 : activeIx === i + 1 ? i : activeIx;
+
+        setGlobalLabState({ ...cur, overrides: ov, ui: { ...(cur.ui ?? {}), activeLayerIx: nextActive } });
+        this.emit("rebuild", "layers.reorder");
+        this.render();
+      };
+
+      row.appendChild(chk);
+      row.appendChild(label);
+      row.appendChild(up);
+      row.appendChild(down);
+      list.appendChild(row);
+    });
+
+    box.appendChild(list);
+
+    // --- ACTIVE LAYER QUICK CONTROLS --------------------------------------
+    if (layers.length > 0) {
+      const layer = layers[activeIx] ?? null;
+
+      const panel = el("div");
+      panel.style.marginTop = "8px";
+      panel.style.paddingTop = "8px";
+      panel.style.borderTop = "1px solid rgba(255,255,255,0.12)";
+
+      const t = el("div");
+      t.textContent = `ACTIVE LAYER: ${activeIx + 1} (${String(layer?.kind ?? "?")})`;
+      t.style.cssText = "font-weight:700;opacity:0.95;margin-bottom:6px;";
+      panel.appendChild(t);
+
+      // row helper
+      const mkRow = (labelTxt: string) => {
+        const r = el("div");
+        r.style.cssText = "display:grid;grid-template-columns: 70px 1fr;gap:6px;align-items:center;margin:4px 0;";
+        const lab = el("div");
+        lab.textContent = labelTxt;
+        lab.style.opacity = "0.9";
+        r.appendChild(lab);
+        return { r };
+      };
+
+      // blend select
+      {
+        const { r } = mkRow("blend");
+        const sel = el("select") as HTMLSelectElement;
+        sel.style.cssText =
+          "width:100%;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15);border-radius:7px;color:white;padding:3px 4px;font:10px monospace;";
+        for (const opt of ["alpha", "add"]) {
+          const o = el("option") as HTMLOptionElement;
+          o.value = opt;
+          o.textContent = opt;
+          sel.appendChild(o);
+        }
+        sel.value = String(layer?.blend ?? "alpha");
+        sel.onpointerdown = (e) => stopProp(e);
+        sel.onchange = (e) => {
+          stopProp(e);
+          const { cur, ov } = ensureOvLayerSlot(activeIx);
+          ov.layers[activeIx].blend = String(sel.value);
+          setGlobalLabState({ ...cur, overrides: ov });
+          this.emit("rebuild", `layers.${activeIx}.blend`);
+          this.render();
+        };
+        r.appendChild(sel);
+        panel.appendChild(r);
+      }
+
+      // opacity slider
+      {
+        const { r } = mkRow("opacity");
+        const range = el("input") as HTMLInputElement;
+        range.type = "range";
+        range.min = "0";
+        range.max = "1";
+        range.step = "0.01";
+        range.value = String(Math.max(0, Math.min(1, Number(layer?.opacity ?? 1))));
+        range.style.width = "100%";
+        range.oninput = (e) => {
+          stopProp(e);
+          const v = Number(range.value);
+          const { cur, ov } = ensureOvLayerSlot(activeIx);
+          ov.layers[activeIx].opacity = v;
+          setGlobalLabState({ ...cur, overrides: ov });
+          this.rebuildDirty = true;
+          this.emit("rebuild", `layers.${activeIx}.opacity`);
+};
+        r.appendChild(range);
+        panel.appendChild(r);
+      }
+
+      // parallaxMul slider
+      {
+        const { r } = mkRow("parallax");
+        const range = el("input") as HTMLInputElement;
+        range.type = "range";
+        range.min = "0";
+        range.max = "4";
+        range.step = "0.01";
+        range.value = String(Number(layer?.parallaxMul ?? 1));
+        range.style.width = "100%";
+        range.oninput = (e) => {
+          stopProp(e);
+          const v = Number(range.value);
+          const { cur, ov } = ensureOvLayerSlot(activeIx);
+          ov.layers[activeIx].parallaxMul = v;
+          setGlobalLabState({ ...cur, overrides: ov });
+          this.rebuildDirty = true;
+          this.emit("rebuild", `layers.${activeIx}.parallaxMul`);
+};
+        r.appendChild(range);
+        panel.appendChild(r);
+      }
+
+      box.appendChild(panel);
     }
 
-    // choose base snapshot = active preset merged with overrides
-    const basePreset = (active ? presets.find(p => p.id === active) : null) ?? presets[0] ?? null;
-    const st = getGlobalLabState();
-    const snapshot = basePreset ? mergeDeep(basePreset, st.overrides ?? {}) : (st.overrides ?? {});
+    // --- ADD LAYER ---------------------------------------------------------
+    const addRow = el("div");
+    addRow.style.display = "flex";
+    addRow.style.gap = "6px";
+    addRow.style.marginTop = "8px";
 
-    this.root.innerHTML = "";
+    const mkAddBtn = (txt: string) => {
+      const b = el("button");
+      b.textContent = txt;
+      b.style.cssText = [
+        "cursor:pointer",
+        "background:rgba(255,255,255,0.08)",
+        "border:1px solid rgba(255,255,255,0.15)",
+        "color:white",
+        "padding:3px 6px",
+        "border-radius:9px",
+        "font:10px monospace",
+        "flex:1",
+      ].join(";");
+      return b;
+    };
 
-    this.renderHeader("BG DEV UI (U toggles)");
-    this.renderTopControls();
-    this.renderActiveLine(active);
+    const addShader = mkAddBtn("+ shader");
+    addShader.onclick = (ev) => {
+      stopProp(ev as any);
 
-    this.renderPresetsList(presets, active);
+      const cur = getGlobalLabState() as any;
+      const ov = (cur.overrides ?? {}) as any;
 
-    // Base Layer (Layer 1)
-    const activePreset = presets.find((p) => p.id === active) ?? null;
-    this.renderBaseLayerControls(activePreset);
+      const baseLayers = [...layers];
+      const id = `layer.shader.${Date.now()}`;
 
-    this.renderLayout(bgBaseUiLayout, snapshot);
+      baseLayers.push({
+        id,
+        kind: "shader",
+        enabled: true,
+        opacity: 1,
+        blend: "alpha",
+        parallaxMul: 1,
+        params: { shader: { preset: "gradient", a: 1, b: 1, warp: 0.5, grain: 0.2 }, flow: {} },
+      });
+
+      ov.layers = baseLayers;
+      setGlobalLabState({ ...cur, overrides: ov, ui: { ...(cur.ui ?? {}), activeLayerIx: baseLayers.length - 1 } });
+      this.emit("rebuild", "layers.add.shader");
+      this.render();
+    };
+
+    const addFlow = mkAddBtn("+ flowSegments");
+    addFlow.onclick = (ev) => {
+      stopProp(ev as any);
+
+      const cur = getGlobalLabState() as any;
+      const ov = (cur.overrides ?? {}) as any;
+
+      const baseLayers = [...layers];
+      const id = `layer.flow.${Date.now()}`;
+
+      baseLayers.push({
+        id,
+        kind: "flowSegments",
+        enabled: true,
+        opacity: 1,
+        blend: "add",
+        parallaxMul: 1,
+        params: {
+          shader: {},
+          flow: {
+            speed: 1,
+            curl: 1,
+            jitter: 0.2,
+            thickness: 1,
+            alpha: 0.12,
+            segmentCount: 650,
+            segmentLen: 16,
+            gridW: 64,
+            gridH: 64,
+          },
+        },
+      });
+
+      ov.layers = baseLayers;
+      setGlobalLabState({ ...cur, overrides: ov, ui: { ...(cur.ui ?? {}), activeLayerIx: baseLayers.length - 1 } });
+      this.emit("rebuild", "layers.add.flowSegments");
+      this.render();
+    };
+
+    addRow.appendChild(addShader);
+    addRow.appendChild(addFlow);
+    box.appendChild(addRow);
+
+    this.root.appendChild(box);
   }
-
-  destroy(): void {
-    this.root.remove();
-  }
+ 
 
 
   // --- Base Layer (MVP) -------------------------------------------------
   // Writes to BgLabState.overrides only. Runtime listens via BgLabBus.
-
   private getOverride(path: string): any {
     const st = getGlobalLabState();
     return getByPath(st.overrides, path);
@@ -448,7 +798,8 @@ export class BgDevUI {
 
   private setOverride(changeType: BgChangeType, path: string, value: any): void {
     const cur = getGlobalLabState();
-    const nextOverrides = setByPath(cur.overrides ?? {}, path, value);
+    const opath = mapUiPathToOverridePath(path);
+    const nextOverrides = setByPath(cur.overrides ?? {}, opath, value);
     setGlobalLabState({ ...cur, overrides: nextOverrides });
 
     if (changeType === "rebuild" || changeType === "structural") {
@@ -479,24 +830,15 @@ export class BgDevUI {
     if (opts.step != null) i.step = String(opts.step);
     if (opts.min != null) i.min = String(opts.min);
     if (opts.max != null) i.max = String(opts.max);
-    i.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:3px;padding:3px 5px;";
-    return i;
-  }
-
-  private mkRange(value: number, opts: { step?: number; min: number; max: number }): HTMLInputElement {
-    const i = el("input");
-    i.type = "range";
-    i.value = String(value);
-    i.min = String(opts.min);
-    i.max = String(opts.max);
-    if (opts.step != null) i.step = String(opts.step);
-    i.style.cssText = "width:100%;";
+    i.style.cssText =
+      "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:3px;padding:3px 5px;";
     return i;
   }
 
   private mkSelect(value: string, options: string[]): HTMLSelectElement {
     const sel = el("select");
-    sel.style.cssText = "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:4px;padding:2px 3px;";
+    sel.style.cssText =
+      "width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:4px;padding:2px 3px;";
     for (const opt of options) {
       const o = el("option");
       o.value = opt;
@@ -504,13 +846,13 @@ export class BgDevUI {
       sel.appendChild(o);
     }
     sel.value = value;
-    return sel;
+    return sel as HTMLSelectElement;
   }
 
-  private renderBaseLayerControls(activePreset: BgPreset | null): void {
-    // Header row (with Apply Rebuild)
+  private renderBaseLayerControls(activePreset: any): void {
     const box = el("div");
-    box.style.cssText = "margin-top:5px;padding:3px;border:1px solid rgba(255,255,255,0.10);border-radius:5px;background:rgba(255,255,255,0.03);";
+    box.style.cssText =
+      "margin-top:5px;padding:3px;border:1px solid rgba(255,255,255,0.10);border-radius:5px;background:rgba(255,255,255,0.03);";
 
     const head = el("div");
     head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:6px;";
@@ -557,7 +899,7 @@ export class BgDevUI {
     {
       const r = this.mkRow();
       r.appendChild(this.mkLabel("seed"));
-      const cur = Number(this.getOverride("seed") ?? (activePreset?.seed ?? 1));
+      const cur = Number(this.getOverride("seed") ?? activePreset?.seed ?? 1);
       const n = this.mkNumber(cur, { step: 1, min: 0, max: 999999 });
       n.onpointerdown = (e) => stopProp(e);
       n.oninput = (e) => stopProp(e);
@@ -569,10 +911,12 @@ export class BgDevUI {
       r.appendChild(n);
       box.appendChild(r);
     }
-    if (activePreset?.kind === "shader") {
+
+    // keep old shader selector only if legacy v1 is present
+    if (activePreset?.base?.kind === "shader") {
       const r = this.mkRow();
       r.appendChild(this.mkLabel("shader.preset"));
-      const cur = String(this.getOverride("base.shader.preset") ?? (activePreset.base as any)?.shader?.preset ?? "gradient");
+      const cur = String(this.getOverride("base.shader.preset") ?? activePreset?.base?.shader?.preset ?? "gradient");
       const sel = this.mkSelect(cur, ["gradient", "plasma", "nebula", "stripes"]);
       sel.onpointerdown = (e) => stopProp(e);
       sel.onchange = (e) => {
@@ -583,5 +927,57 @@ export class BgDevUI {
       r.appendChild(sel);
       box.appendChild(r);
     }
-     }
-   }
+
+    this.root.appendChild(box);
+  }
+
+  private render(): void {
+    this.root.innerHTML = "";
+
+    const presets = this.api.presets?.() ?? [];
+    const active = this.api.getActivePresetId?.();
+
+    this.renderHeader("BG DEV UI");
+    this.renderTopControls();
+    this.renderActiveLine(active ?? null);
+
+    // sync active into lab state if missing
+    const st0 = getGlobalLabState();
+    if (active && st0.activePresetId !== active) {
+      setGlobalLabState({ ...st0, activePresetId: active });
+    }
+
+    // choose base snapshot = active preset merged with overrides
+    const basePreset = (active ? presets.find((p) => p.id === active) : null) ?? presets[0] ?? null;
+    const st = getGlobalLabState();
+    const merged = basePreset ? mergeDeep(basePreset, st.overrides ?? {}) : st.overrides ?? {};
+    const p: any = merged ?? {};
+
+    // Active layer (UI-selected)
+    const layers: any[] = Array.isArray(p.layers) ? p.layers : [];
+    const stUI = getGlobalLabState() as any;
+    const activeIx = Number(stUI?.ui?.activeLayerIx ?? 0);
+    const layerA = layers[activeIx] ?? layers[0] ?? null;
+
+    // Build a V1-like view so existing bgBaseUiLayout paths keep working
+    const snapshot = {
+      base: {
+        kind: String(layerA?.kind ?? (p as any).kind ?? "shader"),
+        common: p.common ?? {},
+        quality: p.quality ?? {},
+        shader: layerA?.params?.shader ?? {},
+        flow: layerA?.params?.flow ?? {},
+      },
+      v2: p,
+    };
+
+    this.renderPresetsList(presets, active ?? null);
+
+    // NEW skeleton list
+    this.renderLayerList(p);
+
+    // existing base panel + layout
+    this.renderBaseLayerControls(basePreset);
+    this.renderLayout(bgBaseUiLayout, snapshot);
+  }
+}

@@ -15,6 +15,7 @@ export type BgLabState = {
   };
   ui: {
     collapsedSections: Record<string, boolean>;
+    activeLayerIx: number;
   };
 };
 
@@ -30,6 +31,7 @@ export function createDefaultBgLabState(): BgLabState {
     },
     ui: {
       collapsedSections: {},
+      activeLayerIx: 0,
     },
   };
 }

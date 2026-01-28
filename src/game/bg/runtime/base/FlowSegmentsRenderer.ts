@@ -40,11 +40,14 @@ export class FlowSegmentsRenderer implements BaseRenderer {
 
   draw(): void {
     if (!this.gl || !this.impl) return;
-      (this as any).__dbgF = ((this as any).__dbgF ?? 0) + 1;
-      if ((((this as any).__dbgF) % 60) === 0) {
-        console.log("[BG][FLOW] draw", { hasGL: !!this.gl, hasImpl: !!this.impl, w: this.w, h: this.h, hasParams: !!this.params, flow: (this.params as any)?.flow });
-      }
+    const dbg = (globalThis as any).__CM_BG_DEBUG;
+    if (dbg) {
+    }
+    const gl = this.gl;
 
+   
+
+    
     const p = this.params ?? {};
     const common = p.common ?? {};
 

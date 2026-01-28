@@ -63,10 +63,68 @@ function validateWaves(list: any[]): WaveDef[] {
   return list as WaveDef[];
 }
 
+function clamp01(x: any): number {
+  const n = Number(x ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+function wrapPresetV1ToV2(p: any): any {
+  // Legacy content preset shape:
+  // { id,name,kind, flow?:{}, shader?:{} }
+  const kind = String(p?.kind ?? "shader");
+
+  // Default common/quality for Sprint 1
+  const common = {
+    timeScale: 1,
+    scrollSpeedX: 0,
+    scrollX: 0,
+    scrollY: 0,
+    exposure: 1,
+    contrast: 1,
+    gamma: 1,
+    colorize: 0,
+    vignette: 0,
+    bgFade: 0,
+  };
+
+  const quality = {
+    logicScale: 1,
+    noiseTexSize: 256,
+    internalResolution: "auto",
+  };
+
+  const layer = {
+    id: "layer1",
+    kind,
+    enabled: true,
+    opacity: 1,
+    blend: (p?.flow?.blend === "add" ? "add" : "alpha"),
+    parallaxMul: 1,
+    params: {
+      // keep legacy blocks as-is
+      shader: (p?.shader ?? {}),
+      flow: (p?.flow ?? {}),
+      // keep possible future blocks
+    },
+  };
+
+  return {
+    id: String(p.id),
+    name: String(p.name),
+    schemaVersion: 2,
+    seed: Number(p.seed ?? 0) || 0,
+    common,
+    quality,
+    layers: [layer],
+  };
+}
+
+
 function validateBgPresetsFile(raw: any): BgPresetsFile {
   assert(raw && typeof raw === "object", "bgPresets must be an object");
   assert(isNum(raw.schemaVersion), "bgPresets.schemaVersion must be number");
-  assert(raw.schemaVersion === 1, "bgPresets.schemaVersion must be 1 (MVP)");
+  assert(raw.schemaVersion === 1 || raw.schemaVersion === 2, "bgPresets.schemaVersion must be 1 or 2");
 
   const presets = raw.presets;
   assert(Array.isArray(presets), "bgPresets.presets must be an array");
@@ -106,7 +164,21 @@ function validateBgPresetsFile(raw: any): BgPresetsFile {
     }
   }
 
-  return raw as BgPresetsFile;
+  // Normalize to V2 for runtime/UI
+  if (raw.schemaVersion === 2) {
+    // minimal sanity: presets are objects with layers[]
+    for (const p of presets as any[]) {
+      assert(Array.isArray(p.layers), `bgPresets(${String(p.id)}).layers must be array (v2)`);
+    }
+    return raw as BgPresetsFile;
+  }
+
+  // schemaVersion === 1 -> wrap all to V2
+  const v2 = {
+    schemaVersion: 2,
+    presets: (presets as any[]).map(wrapPresetV1ToV2),
+  };
+  return v2 as any;
 }
 
 function validateBgBindingsFile(raw: any): BgBindingsFile {

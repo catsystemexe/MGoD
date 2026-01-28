@@ -272,7 +272,7 @@ export class FlowSegmentsBg {
     }
   }
 
-  private stepLayer(p: SegParticle, pr: FlowPreset, dt: number, t: number, layerId: FlowLayerId, logicW: number, logicH: number): void {
+  private stepLayer(p: SegParticle, pr: FlowPreset, dt: number, t: number, layerId: FlowLayerId, logicW: number, logicH: number, scrollX: number, scrollY: number): void {
     const pad = pr.spawn.respawnPaddingPx;
     const accelLim = pr.motion.accelLimitPxPerSec2;
     const damp = pr.motion.dampingPerSec;
@@ -390,13 +390,19 @@ export class FlowSegmentsBg {
     p.x += dx * k;
     p.y += dy * k;
 
-    // respawn when out of bounds (wrap from right) + tiny jitter
-    if (p.x < -pad) {
-      const j = (rand01(p.y * 0.17 + p.laneId * 31.7 + t * 0.13) - 0.5) * pad;
-      p.x = logicW + pad + j;
-    }
-    if (p.y < -pad) p.y = logicH + pad;
-    if (p.y > logicH + pad) p.y = -pad;
+    // respawn when out of bounds (SCREEN-space wrap) + tiny jitter
+// p.x/p.y are in WORLD; draw uses (p - scroll). So wrapping must use screen coords.
+const sx = p.x - scrollX;
+const sy = p.y - scrollY;
+
+if (sx < -pad) {
+  const j = (rand01(p.y * 0.17 + p.laneId * 31.7 + t * 0.13) - 0.5) * pad;
+  // place just off the RIGHT edge in screen-space
+  p.x = scrollX + logicW + pad + j;
+}
+
+if (sy < -pad) p.y = scrollY + logicH + pad;
+if (sy > logicH + pad) p.y = scrollY - pad;
   }
 
   draw(args: FlowBgDrawArgs): void {
@@ -448,7 +454,7 @@ export class FlowSegmentsBg {
         const p = arr[i];
 
         // update
-        this.stepLayer(p, pr, dt, t, layerId, args.logicW, args.logicH);
+        this.stepLayer(p, pr, dt, t, layerId, args.logicW, args.logicH, scrollX, scrollY);
 
         // segment endpoints (world -> screen) using scroll (parallax)
         const x = p.x - scrollX;
