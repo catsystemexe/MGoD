@@ -27,6 +27,7 @@ export type FlowBgDrawArgs = {
   scrollX: number;
   scrollY: number;
   presetIndex: number;
+  flow?: any;
 };
 
 function clamp(x: number, a: number, b: number): number {
@@ -86,6 +87,8 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
 
 export class FlowSegmentsBg {
   private gl: WebGL2RenderingContext;
+
+  
   // (removed) was unused self-reference
   private prog: WebGLProgram;
   private vao: WebGLVertexArrayObject;
@@ -103,6 +106,7 @@ export class FlowSegmentsBg {
 
   private lastTimeSec = NaN;
   private lastPresetId = "";
+  private lastRebuildKey = "";
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -194,10 +198,40 @@ export class FlowSegmentsBg {
     return FLOW_PRESETS[ix] || FLOW_PRESETS[0];
   }
 
-  private rebuildIfNeeded(pr: FlowPreset, logicW: number, logicH: number): void {
-    if (this.lastPresetId === pr.id && this.layers.far.length > 0) return;
+    private rebuildIfNeeded(pr: FlowPreset, logicW: number, logicH: number, baseScrollX: number, baseScrollY: number): void {
+    // Rebuild must react not only to presetId changes but also to rebuild-relevant params
+    // (segmentCount / segmentLen / jitter / lanes / direction / parallax density, etc.)
+    const rebuildKey = [
+      pr.id,
+      logicW | 0,
+      logicH | 0,
+      // spawn
+      pr.spawn?.countBase ?? 0,
+      pr.spawn?.distribution ?? "",
+      pr.spawn?.yJitterPx ?? 0,
+      pr.spawn?.respawnPaddingPx ?? 0,
+      pr.spawn?.lanes?.count ?? 0,
+      pr.spawn?.lanes?.jitterYPx ?? 0,
+      // segments
+      pr.segments?.lengthPx?.min ?? 0,
+      pr.segments?.lengthPx?.max ?? 0,
+      // direction
+      pr.direction?.x ?? 0,
+      pr.direction?.y ?? 0,
+      // parallax density/shape (stringify for stable-ish signature)
+      JSON.stringify(pr.parallax ?? []),
+    ].join("|");
+
+    if (
+      this.lastPresetId === pr.id &&
+      this.lastRebuildKey === rebuildKey &&
+      this.layers.far.length > 0
+    ) {
+      return;
+    }
 
     this.lastPresetId = pr.id;
+    this.lastRebuildKey = rebuildKey;
     this.lastTimeSec = NaN;
 
     this.layers.far = [];
@@ -209,71 +243,137 @@ export class FlowSegmentsBg {
 
     const dir = normalize2(pr.direction.x, pr.direction.y);
 
-      const makeLayer = (_layerId: FlowLayerId, layerIndex: number, densityMul: number) => {
-      const count = Math.max(1, Math.floor(base * densityMul));
-      const arr: SegParticle[] = new Array(count);
+      const makeLayer = (_layerId: FlowLayerId, layerIndex: number, densityMul: number, scrollX: number, scrollY: number) => {
+        const count = Math.max(1, Math.floor(base * densityMul));
+        const arr: SegParticle[] = new Array(count);
 
-      const lanes = pr.spawn.distribution === "lanes" ? (pr.spawn.lanes?.count ?? 8) : 1;
-      const laneH = logicH / lanes;
+        const dist = pr.spawn.distribution;
+        const lanes = dist === "lanes" ? (pr.spawn.lanes?.count ?? 8) : 1;
+        const laneH = logicH / lanes;
 
-      for (let i = 0; i < count; i++) {
-        const seed = (layerIndex + 1) * 10000 + i * 17.23;
+        for (let i = 0; i < count; i++) {
+          const seed = (layerIndex + 1) * 10000 + i * 17.23;
 
-        // lanes
-        const laneId = pr.spawn.distribution === "lanes" ? (i % lanes) : 0;
-        const laneY = (laneId + 0.5) * laneH;
+          // lanes
+          const laneId = dist === "lanes" ? (i % lanes) : 0;
+          const laneY_screen = (laneId + 0.5) * laneH;
 
-        const yJ = pr.spawn.distribution === "lanes"
-          ? (rand01(seed + 1.1) - 0.5) * 2 * (pr.spawn.lanes?.jitterYPx ?? 0)
-          : (rand01(seed + 1.2) - 0.5) * 2 * (pr.spawn.yJitterPx ?? 0);
+          const yJ = dist === "lanes"
+            ? (rand01(seed + 1.1) - 0.5) * 2 * (pr.spawn.lanes?.jitterYPx ?? 0)
+            : (rand01(seed + 1.2) - 0.5) * 2 * (pr.spawn.yJitterPx ?? 0);
 
+          // ✅ init in SCREEN space first...
+          const y0_screen = dist === "uniform_y"
+            ? clamp((rand01(seed + 2.2) * (logicH + pad * 2) - pad) + yJ, -pad, logicH + pad)
+            : clamp(laneY_screen + yJ + (rand01(seed + 2.2) - 0.5) * laneH * 0.20, -pad, logicH + pad);
 
-// start just off the right edge (so flow enters from the right)
-        const x0 = logicW + pad + rand01(seed + 2.1) * (pad * 2);
-        const y0 = clamp(laneY + yJ + (rand01(seed + 2.2) - 0.5) * laneH * 0.20, -pad, logicH + pad);
+          // ✅ ...then convert to WORLD by adding scroll
+          const x0 = scrollX + (rand01(seed + 2.1) * (logicW + pad * 2) - pad);
+          const y0 = scrollY + y0_screen;
 
-        const lenMin = pr.segments.lengthPx.min;
-        const lenMax = pr.segments.lengthPx.max;
-        const len0 = lerp(lenMin, lenMax, rand01(seed + 3.3));
+          const lenMin = pr.segments.lengthPx.min;
+          const lenMax = pr.segments.lengthPx.max;
+          const len0 = lerp(lenMin, lenMax, rand01(seed + 3.3));
 
-        const spMul0 = 1.0;
+          const spMul0 = 1.0;
 
-        const meEnabled = !!pr.motion.yMeander?.enabled;
-        const meAmp = meEnabled ? lerp(pr.motion.yMeander!.ampPx.min, pr.motion.yMeander!.ampPx.max, rand01(seed + 4.4)) : 0;
-        const meHz = meEnabled ? lerp(pr.motion.yMeander!.freqHz.min, pr.motion.yMeander!.freqHz.max, rand01(seed + 5.5)) : 0;
-        const mePh = rand01(seed + 6.6) * Math.PI * 2;
+          const meEnabled = !!pr.motion.yMeander?.enabled;
+          const meAmp = meEnabled ? lerp(pr.motion.yMeander!.ampPx.min, pr.motion.yMeander!.ampPx.max, rand01(seed + 4.4)) : 0;
+          const meHz = meEnabled ? lerp(pr.motion.yMeander!.freqHz.min, pr.motion.yMeander!.freqHz.max, rand01(seed + 5.5)) : 0;
+          const mePh = rand01(seed + 6.6) * Math.PI * 2;
 
-        arr[i] = {
-          x: x0,
-          y: y0,
-          vx: dir[0],
-          vy: dir[1],
-          len: len0,
-          laneId,
-          laneY,
-          meanderAmp: meAmp,
-          meanderHz: meHz,
-          meanderPhase: mePh,
+          arr[i] = {
+            x: x0,
+            y: y0,
+            vx: dir[0],
+            vy: dir[1],
+            len: len0,
 
-          spMul: spMul0,
-          spMulTarget: spMul0,
-          spMulT: 0,
+            laneId,
+            // laneY musí být WORLD, jinak laneCoherence tahá špatně
+            laneY: scrollY + laneY_screen,
 
-          lenTarget: len0,
-          lenT: 0,
-        };
+            meanderAmp: meAmp,
+            meanderHz: meHz,
+            meanderPhase: mePh,
+
+            spMul: spMul0,
+            spMulTarget: spMul0,
+            spMulT: 0,
+
+            lenTarget: len0,
+            lenT: 0,
+          };
+        }
+
+        return arr;
+      };
+
+      for (const pl of pr.parallax) {
+        const par = Number(pl.factor ?? 1);
+        const scrollX = baseScrollX * par;
+        const scrollY = baseScrollY * par;
+        this.layers[pl.layer] = makeLayer(
+          pl.layer,
+          pl.layer === "far" ? 0 : pl.layer === "mid" ? 1 : 2,
+          pl.densityMul,
+          scrollX,
+          scrollY
+        );
       }
+  }
+  private normalizeFlowSegmentsParams(prIn: any): any {
+    const pr = prIn ?? {};
 
-      return arr;
-    };
+    pr.spawn ??= {};
+    pr.segments ??= {};
+    pr.segments.lengthPx ??= {};
+    pr.segments.lengthPx.drift ??= {};
+    pr.segments.lengthPx.speedCoupling ??= {};
+    pr.motion ??= {};
+    pr.motion.speedPxPerSec ??= {};
+    pr.motion.speedPxPerSec.layerMul ??= {};
+    pr.rng ??= {};
+    pr.rng.lowFreq ??= {};
+    pr.direction ??= { x: 1, y: 0 };
+    pr.parallax ??= [
+      { layer: "far", factor: 0.25, densityMul: 0.7 },
+      { layer: "mid", factor: 0.5, densityMul: 1.0 },
+      { layer: "near", factor: 1.0, densityMul: 1.2 },
+    ];
+    pr.colors ??= {};
 
-    for (const pl of pr.parallax) {
-      this.layers[pl.layer] = makeLayer(pl.layer, pl.layer === "far" ? 0 : pl.layer === "mid" ? 1 : 2, pl.densityMul);
-    }
+    pr.spawn.respawnPaddingPx ??= 80;
+    pr.spawn.countBase ??= 512;
+    pr.segments.thicknessPx ??= 1;
+
+    pr.segments.lengthPx.min ??= 12;
+    pr.segments.lengthPx.max ??= pr.segments.lengthPx.min;
+
+    pr.segments.lengthPx.drift.enabled ??= false;
+    pr.segments.lengthPx.drift.targetIntervalSec ??= { min: 0.5, max: 2.0 };
+    pr.segments.lengthPx.drift.lerpRate ??= 1.0;
+
+    pr.motion.accelLimitPxPerSec2 ??= 1200;
+    pr.motion.dampingPerSec ??= 1.0;
+    pr.motion.speedPxPerSec.base ??= 120;
+    pr.motion.speedPxPerSec.layerMul.far ??= 0.6;
+    pr.motion.speedPxPerSec.layerMul.mid ??= 0.85;
+    pr.motion.speedPxPerSec.layerMul.near ??= 1.0;
+
+    pr.rng.lowFreq.enabled ??= false;
+    pr.rng.lowFreq.globalDriftIntervalSec ??= { min: 0.6, max: 1.6 };
+    pr.rng.lowFreq.lerpRate ??= 1.0;
+
+    pr.segments.lengthPx.min = Math.max(1, Number(pr.segments.lengthPx.min) || 1);
+    pr.segments.lengthPx.max = Math.max(pr.segments.lengthPx.min, Number(pr.segments.lengthPx.max) || pr.segments.lengthPx.min);
+
+    return pr;
   }
 
-  private stepLayer(p: SegParticle, pr: FlowPreset, dt: number, t: number, layerId: FlowLayerId, logicW: number, logicH: number, scrollX: number, scrollY: number): void {
-    const pad = pr.spawn.respawnPaddingPx;
+  
+    private stepLayer(p: SegParticle, pr: FlowPreset, dt: number, t: number, layerId: FlowLayerId, logicW: number, logicH: number, scrollX: number, scrollY: number): void {
+      const pad = (pr as any).spawn?.respawnPaddingPx ?? 0;
     const accelLim = pr.motion.accelLimitPxPerSec2;
     const damp = pr.motion.dampingPerSec;
 
@@ -295,7 +395,7 @@ export class FlowSegmentsBg {
     }
 
     // length drift (smoothed)
-    if (pr.segments.lengthPx.drift.enabled) {
+      if (pr.segments?.lengthPx?.drift?.enabled) {
       p.lenT -= dt;
       if (p.lenT <= 0) {
         const mi = pr.segments.lengthPx.drift.targetIntervalSec.min;
@@ -324,17 +424,17 @@ export class FlowSegmentsBg {
       p.vy += (wave * p.meanderAmp) * 0.12 * dt;
     }
 
-    // shear (y speed depends on y position) ✅ scale by dt
-    if (pr.motion.shear?.enabled) {
-      const pl = pr.parallax.find(x => x.layer === layerId);
-      const mul = pl?.shearMul ?? 1.0;
-      const y01 = clamp(p.y / Math.max(1, logicH), 0, 1);
-      const yCurve = pr.motion.shear.curve === "smoothstep" ? smoothstep01(y01) : y01;
-      const sgn = pr.motion.shear.invert ? -1 : 1;
-      const sh = pr.motion.shear.strengthPxPerSec * mul * sgn;
-      // inject vy target via accel-limited approach
-      p.vy += (yCurve - 0.5) * (sh / Math.max(1, baseSpeed)) * 0.9 * dt;
-    }
+      // shear (y speed depends on y position) ✅ scale by dt
+      if (pr.motion.shear?.enabled) {
+        const pl = pr.parallax.find((x: any) => x.layer === layerId);
+        const mul = pl?.shearMul ?? 1.0;
+        const y01 = clamp(p.y / Math.max(1, logicH), 0, 1);
+        const yCurve = pr.motion.shear.curve === "smoothstep" ? smoothstep01(y01) : y01;
+        const sgn = pr.motion.shear.invert ? -1 : 1;
+        const sh = pr.motion.shear.strengthPxPerSec * mul * sgn;
+        // inject vy target via accel-limited approach
+        p.vy += (yCurve - 0.5) * (sh / Math.max(1, baseSpeed)) * 0.9 * dt;
+      }
 
     // microWave ✅ scale by dt
     if (pr.motion.microWave?.enabled) {
@@ -408,8 +508,89 @@ if (sy > logicH + pad) p.y = scrollY - pad;
   draw(args: FlowBgDrawArgs): void {
     const gl = this.gl;
     const pr = this.preset(args.presetIndex);
+    // --- runtime overrides (from BgPipeline params.flow.*) ---
+    const flowOv: any = (args as any)?.flow ?? {};
 
-    this.rebuildIfNeeded(pr, args.logicW, args.logicH);
+    // Legacy compatibility (BgDevUI sliders):
+    // - segmentCount -> spawn.countBase
+    // - segmentLen   -> segments.lengthPx.{min,max}
+    // - jitter       -> spawn.yJitterPx
+    // - speed        -> motion.speedPxPerSec.base (as multiplier vs preset base)
+    const legacySpeedMul = Number((flowOv as any).speed);
+    if (Number.isFinite(legacySpeedMul) && legacySpeedMul >= 0) {
+      const base0 = Number((pr as any)?.motion?.speedPxPerSec?.base ?? 120);
+      const nextBase = base0 * legacySpeedMul;
+      flowOv.motion = {
+        ...(flowOv.motion ?? {}),
+        speedPxPerSec: {
+          ...(((pr as any).motion?.speedPxPerSec) ?? {}),
+          ...((flowOv.motion?.speedPxPerSec) ?? {}),
+          base: nextBase,
+        },
+      };
+    }
+
+    
+    // Legacy compatibility (BgDevUI sliders):
+    // - segmentCount -> spawn.countBase
+    // - segmentLen   -> segments.lengthPx.{min,max}
+    // - jitter       -> spawn.yJitterPx
+    const legacyCount = Number(flowOv.segmentCount);
+    if (Number.isFinite(legacyCount) && legacyCount > 0) {
+      flowOv.spawn = { ...(flowOv.spawn ?? {}), countBase: legacyCount };
+    }
+
+    const legacyLen = Number(flowOv.segmentLen);
+    if (Number.isFinite(legacyLen) && legacyLen > 0) {
+      flowOv.segments = { ...(flowOv.segments ?? {}), lengthPx: { min: legacyLen, max: legacyLen } };
+    }
+
+    const legacyJ = Number(flowOv.jitter);
+    if (Number.isFinite(legacyJ) && legacyJ >= 0) {
+      flowOv.spawn = { ...(flowOv.spawn ?? {}), yJitterPx: legacyJ };
+    }
+    // Legacy compatibility (BgDevUI sliders):
+    // - thickness -> segments.thicknessPx
+    const legacyTh = Number((flowOv as any).thickness);
+    if (Number.isFinite(legacyTh) && legacyTh > 0) {
+      flowOv.segments = { ...(flowOv.segments ?? {}), thicknessPx: legacyTh };
+    }
+
+    // Legacy compatibility (BgDevUI sliders):
+    // - alpha -> render.alphaMul (layer color alpha multiplier)
+    const legacyAlpha = Number((flowOv as any).alpha);
+    if (Number.isFinite(legacyAlpha) && legacyAlpha >= 0) {
+      flowOv.render = { ...(flowOv.render ?? {}), alphaMul: legacyAlpha };
+    }
+
+    
+    // Merge preset + overrides (shallow-deep for top blocks we touch)
+    const merged: any = {
+      ...pr,
+      ...(flowOv ?? {}),
+      spawn: { ...(pr as any).spawn, ...(flowOv.spawn ?? {}) },
+      segments: { ...(pr as any).segments, ...(flowOv.segments ?? {}) },
+      motion: { ...(pr as any).motion, ...(flowOv.motion ?? {}) },
+      render: { ...(pr as any).render, ...(flowOv.render ?? {}) },
+      direction: { ...(pr as any).direction, ...(flowOv.direction ?? {}) },
+    };
+
+
+    const finalPr: any = this.normalizeFlowSegmentsParams(merged);
+
+    console.log(
+      "[FLOW PARAMS]",
+      "lengthPx =", finalPr?.segments?.lengthPx,
+      "thicknessPx =", finalPr?.segments?.thicknessPx,
+      "countBase =", finalPr?.spawn?.countBase
+    );
+
+    this.rebuildIfNeeded(finalPr, args.logicW, args.logicH, Number(args.scrollX ?? 0), Number(args.scrollY ?? 0));
+
+
+
+    
+
 
     const t = args.timeSec;
     const dt = Number.isFinite(this.lastTimeSec) ? clamp(t - this.lastTimeSec, 0, 1 / 15) : 1 / 60;
@@ -429,9 +610,10 @@ if (sy > logicH + pad) p.y = scrollY - pad;
     gl.uniform2f(this.uLogic, args.logicW, args.logicH);
 
     // draw 3 layers back-to-front
+  
     const order: FlowLayerId[] = ["far", "mid", "near"];
     for (const layerId of order) {
-      const pl = pr.parallax.find(x => x.layer === layerId);
+      const pl = finalPr.parallax.find((x: any) => x.layer === layerId);
       if (!pl) continue;
 
       const par = Number(pl.factor ?? 1);
@@ -441,20 +623,21 @@ if (sy > logicH + pad) p.y = scrollY - pad;
       const scrollY = Number(args.scrollY ?? 0) * par;
 
       // layer color
-      const c = pr.colors?.[layerId] ?? (
+      const c = finalPr.colors?.[layerId] ?? (
         layerId === "far" ? [0.55, 0.85, 1.0, 0.14] :
         layerId === "mid" ? [0.75, 0.95, 1.0, 0.20] :
                             [0.90, 1.00, 1.0, 0.26]
       );
-      gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3]);
-      gl.uniform1f(this.uThick, Math.max(1, pr.segments.thicknessPx));
+      const aMul = Number(finalPr.render?.alphaMul ?? 1);
+      gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3] * aMul);
+      gl.uniform1f(this.uThick, Math.max(1, finalPr.segments.thicknessPx));
 
       const arr = this.layers[layerId];
       for (let i = 0; i < arr.length; i++) {
         const p = arr[i];
 
         // update
-        this.stepLayer(p, pr, dt, t, layerId, args.logicW, args.logicH, scrollX, scrollY);
+        this.stepLayer(p, finalPr, dt, t, layerId, args.logicW, args.logicH, scrollX, scrollY);
 
         // segment endpoints (world -> screen) using scroll (parallax)
         const x = p.x - scrollX;
@@ -462,10 +645,10 @@ if (sy > logicH + pad) p.y = scrollY - pad;
 
         // length coupling by speed (optional)
         let L = p.len;
-        if (pr.segments.lengthPx.speedCoupling?.enabled) {
-          const g = pr.segments.lengthPx.speedCoupling.gain;
-          const cl = pr.segments.lengthPx.speedCoupling.clamp;
-          const sp = pr.motion.speedPxPerSec.base * (pr.motion.speedPxPerSec.layerMul[layerId] ?? 1);
+        if (finalPr.segments.lengthPx.speedCoupling?.enabled) {
+          const g = finalPr.segments.lengthPx.speedCoupling.gain;
+          const cl = finalPr.segments.lengthPx.speedCoupling.clamp;
+          const sp = finalPr.motion.speedPxPerSec.base * (finalPr.motion.speedPxPerSec.layerMul[layerId] ?? 1);
           const add = sp * g;
           L = clamp(L + add * 0.02, cl.min, cl.max);
         }

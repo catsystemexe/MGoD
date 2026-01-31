@@ -5,6 +5,100 @@ import { BgDrawCtx } from "./BgDrawCtx";
 import { BaseRenderer } from "./base/BaseRenderer";
 import { createRenderer } from "./base/createRenderer";
 
+function isObj(v: any): v is Record<string, any> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+// Arrays: override wins (layers reorder / replace must work)
+function mergeDeep(a: any, b: any): any {
+  if (b === undefined) return a;
+
+  // --- Arrays ---
+  if (Array.isArray(a) && Array.isArray(b)) {
+    // If override array looks like a partial patch (typical for setByPath layers.0....),
+    // merge by index so we don't destroy base layers.
+    const outLen = Math.max(a.length, b.length);
+    const out: any[] = new Array(outLen);
+
+    // Heuristic: treat as patch if b is shorter than a OR looks sparse/partial
+    let patchMode = b.length < a.length;
+
+    // IMPORTANT: UI overrides often create sparse arrays like:
+    //   [ , , {params:{...}} ]  or  [undefined, undefined, {...}]
+    // If we "full replace", we destroy base layers and BG disappears.
+
+    if (!patchMode) {
+      const lim = Math.min(a.length, b.length);
+      let defined = 0;
+      for (let i = 0; i < lim; i++) {
+        const has = Object.prototype.hasOwnProperty.call(b, i);
+        const bv = (b as any)[i];
+        if (has && bv !== undefined) defined++;
+      }
+      // if override doesn't define most base indices => it's a patch
+      if (defined < lim) patchMode = true;
+    }
+
+    
+
+      // Extra heuristic: if base layers contain full layer objects (kind/id),
+      // but override slots look like partial patches (typically {params:{...}}),
+      // treat as patch even when lengths match (common when base has exactly 1 layer).
+      if (!patchMode) {
+        const lim2 = Math.min(a.length, b.length);
+        for (let i = 0; i < lim2; i++) {
+          const has = Object.prototype.hasOwnProperty.call(b, i);
+          if (!has) continue;
+          const av: any = (a as any)[i];
+          const bv: any = (b as any)[i];
+          if (!av || !bv || typeof av !== "object" || typeof bv !== "object") continue;
+
+          const aHasKindOrId = (av.kind !== undefined) || (av.id !== undefined);
+          const bHasKindOrId = (bv.kind !== undefined) || (bv.id !== undefined);
+
+          // classic UI patch: only params (or missing kind/id)
+          const bKeys = Object.keys(bv);
+          const bLooksLikeParamsOnly = (bKeys.length === 1 && bKeys[0] === "params");
+
+          if (aHasKindOrId && (!bHasKindOrId || bLooksLikeParamsOnly)) {
+            patchMode = true;
+            break;
+          }
+        }
+      }
+if (patchMode) {
+      for (let i = 0; i < outLen; i++) {
+        const av = a[i];
+        // treat holes and explicit undefined as "no override"
+        const has = Object.prototype.hasOwnProperty.call(b, i);
+        const bv = has ? (b as any)[i] : undefined;
+        out[i] = (bv === undefined) ? av : mergeDeep(av, bv);
+      }
+      return out;
+    }
+
+    // Full replace (supports reorder / delete patterns)
+    return b;
+  }
+
+  // One side array => override wins
+  if (Array.isArray(a) || Array.isArray(b)) return b;
+
+  // --- Objects / primitives ---
+  if (!isObj(a) || !isObj(b)) return b;
+
+  const out: any = { ...a };
+  for (const k of Object.keys(b)) out[k] = mergeDeep(a[k], b[k]);
+  return out;
+}
+
+function getGlobalBgOverrides(): any {
+  const g: any = globalThis as any;
+  const cm = g.__CM ?? {};
+  return (cm.bgLabState && cm.bgLabState.overrides) ? cm.bgLabState.overrides : {};
+}
+
+
 export class BgPipeline {
   private renderers = new Map<string, { kind: string; r: BaseRenderer }>();
   private snapshot: BgSnapshot | null = null;
@@ -57,37 +151,13 @@ export class BgPipeline {
     this.snapshot = next;
   }
 
-  private createRenderer(snapshot: BgSnapshot) {
-    if (!this.gl) return;
 
-    this.renderer = createRenderer(snapshot.preset.kind);
-    this.renderer.init(this.gl, this.w, this.h);
-
-    // IMPORTANT: many BG implementations need rebuild() at least once to allocate buffers.
-    const params =
-      (snapshot.preset as any).base ??
-      (snapshot.preset as any).flow ??
-      (snapshot.preset as any).shader ??
-      (snapshot.preset as any);
-
-    try {
-      this.renderer.rebuild(params);
-    } catch (e) {
-      // never fail boot because BG rebuild failed
-      // eslint-disable-next-line no-console
-      console.warn("[BG] initial rebuild failed", e);
-    }
-  }
-
-  private disposeRenderer() {
-    this.renderer?.dispose();
-    this.renderer = null;
-  }
 
   draw(ctx: BgDrawCtx): void {
     if (!this.snapshot || !this.gl) return;
 
-    const preset: any = this.snapshot.preset ?? {};
+    const ov = getGlobalBgOverrides();
+      const preset: any = mergeDeep(this.snapshot.preset ?? {}, ov);
     const common: any = preset.common ?? {};
     const quality: any = preset.quality ?? {};
     const layers: any[] = Array.isArray(preset.layers) ? preset.layers : [];

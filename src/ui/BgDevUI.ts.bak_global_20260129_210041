@@ -5,7 +5,6 @@ import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabSt
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
 import { mergeDeep } from "../game/bg/lab/mergeDeep";
-import { FLOW_PRESETS } from "../render/webgl/bg/flowPresets";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
@@ -33,49 +32,24 @@ function setGlobalLabState(next: BgLabState): void {
 function mapUiPathToOverridePath(uiPath: string): string {
   if (!uiPath || typeof uiPath !== "string") return uiPath;
 
+  // only map base.* paths (bgBaseUiLayout)
+  if (!uiPath.startsWith("base.")) return uiPath;
+
   const st: any = getGlobalLabState() as any;
   const activeIx = Number(st?.ui?.activeLayerIx ?? 0);
 
-  // IMPORTANT:
-  // - v1 presets have NO layers => renderer reads preset.flow / preset.shader / preset.kind
-  // - v2 presets have layers[] => renderer reads layers[ix].params.flow / layers[ix].params.shader / layers[ix].kind
-  const hasLayers = !!st?.ui?.activePresetHasLayers;
+  const rest = uiPath.slice("base.".length);
 
-  // allow "base.*" paths from layouts
-  if (uiPath.startsWith("base.")) {
-    const rest = uiPath.slice("base.".length);
+  if (rest.startsWith("common.")) return "common." + rest.slice("common.".length);
+  if (rest.startsWith("quality.")) return "quality." + rest.slice("quality.".length);
 
-    if (rest.startsWith("common.")) return "common." + rest.slice("common.".length);
-    if (rest.startsWith("quality.")) return "quality." + rest.slice("quality.".length);
+  if (rest.startsWith("flow."))
+    return `layers.${activeIx}.params.flow.` + rest.slice("flow.".length);
 
-    if (rest.startsWith("flow.")) {
-      const tail = rest.slice("flow.".length);
-      return hasLayers ? `layers.${activeIx}.params.flow.${tail}` : `flow.${tail}`;
-    }
+  if (rest.startsWith("shader."))
+    return `layers.${activeIx}.params.shader.` + rest.slice("shader.".length);
 
-    if (rest.startsWith("shader.")) {
-      const tail = rest.slice("shader.".length);
-      return hasLayers ? `layers.${activeIx}.params.shader.${tail}` : `shader.${tail}`;
-    }
-
-    if (rest === "kind") return hasLayers ? `layers.${activeIx}.kind` : "kind";
-    return uiPath;
-  }
-
-  // direct short paths (legacy)
-  if (uiPath.startsWith("flow.")) {
-    const tail = uiPath.slice("flow.".length);
-    return hasLayers ? `layers.${activeIx}.params.flow.${tail}` : uiPath;
-  }
-
-  if (uiPath.startsWith("shader.")) {
-    const tail = uiPath.slice("shader.".length);
-    return hasLayers ? `layers.${activeIx}.params.shader.${tail}` : uiPath;
-  }
-
-  if (uiPath.startsWith("common.")) return uiPath;
-  if (uiPath.startsWith("quality.")) return uiPath;
-  if (uiPath === "kind") return hasLayers ? `layers.${activeIx}.kind` : "kind";
+  if (rest == "kind") return `layers.${activeIx}.kind`;
 
   return uiPath;
 }
@@ -611,107 +585,7 @@ export class BgDevUI {
         (this.root as any).appendChild = oldAppend;
       }
     }
-     }
-  // --- LEGACY: minimal FLOW controls (kind = flowSegments) ------------------
-  private renderLegacyFlowControls(body: HTMLDivElement, activePreset: any): void {
-    // NOTE:
-    // - používáme UI paths "base.flow.*" schválně -> mapUiPathToOverridePath() to přemapuje do layers.{activeIx}.params.flow.*
-    // - changeType volíme podle bgUiLayout: rt = realtime, rebuild = rebuild, preset = structural
-
-    const flow0 = (activePreset?.layers?.[0]?.params?.flow ?? activePreset?.flow ?? activePreset?.base?.flow ?? {}) as any; // fallback (v2.layers | v1.flow | v1.base.flow)
-
-    const getUiOverride = (uiPath: string): any => {
-      const st = getGlobalLabState() as any;
-      const opath = mapUiPathToOverridePath(uiPath);
-      return getByPath(st.overrides, opath);
-    };
-    const mk = (
-      label: string,
-      cur: number,
-      opts: { min: number; max: number; step: number },
-      change: BgChangeType,
-      path: string,
-    ) => {
-      const row = el("div");
-      row.style.cssText = "display:grid;grid-template-columns:90px 1fr 72px;gap:5px;align-items:center;margin:3px 0;";
-
-      row.appendChild(this.mkLabel(label));
-
-      const range = el("input") as HTMLInputElement;
-      range.type = "range";
-      range.min = String(opts.min);
-      range.max = String(opts.max);
-      range.step = String(opts.step ?? 0.01);
-      range.value = String(cur);
-      range.style.width = "100%";
-
-      const num = this.mkNumber(cur, opts);
-
-      const applyValue = (v: number) => {
-        this.setOverride(change, path, v);
-      };
-
-      range.onpointerdown = (e) => stopProp(e);
-      range.oninput = (e) => {
-        stopProp(e);
-        const v = Number(range.value);
-        num.value = String(v);
-        applyValue(v);
-      };
-      range.onchange = (e) => {
-        stopProp(e);
-        this.render();
-      };
-
-      num.onpointerdown = (e) => stopProp(e);
-      num.oninput = (e) => stopProp(e);
-      num.onchange = (e) => {
-        stopProp(e);
-        const v = Number(num.value);
-        range.value = String(v);
-        applyValue(v);
-        this.render();
-      };
-
-      row.appendChild(range);
-      row.appendChild(num);
-      body.appendChild(row);
-    };
-// -------- Motion (rt) ----------
-    {
-      const cur = Number(getUiOverride("base.flow.speed") ?? flow0?.speed ?? 1);
-      mk("speed", cur, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.speed");
-    }
-
-    // -------- Geometry (rt) ----------
-    {
-      const curCurl = Number(this.getOverride("base.flow.curl") ?? flow0?.curl ?? 0.8);
-      mk("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
-
-      const curJit = Number(this.getOverride("base.flow.jitter") ?? flow0?.jitter ?? 0.2);
-      mk("jitter", curJit, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.jitter");
-
-      const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
-      mk("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");
-    }
-
-    // -------- Look (rt) ----------
-    {
-      const curA = Number(this.getOverride("base.flow.alpha") ?? flow0?.alpha ?? 0.7);
-      mk("alpha", curA, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.alpha");
-    }
-
-    // -------- Segments (rebuild) ----------
-    {
-      const curCount = Number(this.getOverride("base.flow.segmentCount") ?? flow0?.segmentCount ?? 512);
-      mk("segmentCount", curCount, { min: 64, max: 4096, step: 1 }, "rebuild", "base.flow.segmentCount");
-
-      const curLen = Number(this.getOverride("base.flow.segmentLen") ?? flow0?.segmentLen ?? 12);
-      mk("segmentLen", curLen, { min: 2, max: 64, step: 1 }, "rebuild", "base.flow.segmentLen");
-    }
   }
-
-    
 
   // --- LAYERS list (Sprint 1 skeleton) -----------------------------------
   private renderLayerList(presetV2: any): void {
@@ -962,27 +836,7 @@ box.style.borderRadius = "8px";
   // Writes to BgLabState.overrides only. Runtime listens via BgLabBus.
   private getOverride(path: string): any {
     const st = getGlobalLabState();
-
-    // Read must mirror write mapping; otherwise legacy sliders always read undefined
-    const opath = mapUiPathToOverridePath(path);
-
-    // Prefer mapped path, fallback to raw for older stored overrides
-    const v = getByPath(st.overrides, opath);
-    return v !== undefined ? v : getByPath(st.overrides, path);
-  }
-
-
-  private setOverrideRaw(changeType: BgChangeType, path: string, value: any): void {
-    const cur = getGlobalLabState();
-    const nextOverrides = setByPath(cur.overrides ?? {}, path, value);
-    setGlobalLabState({ ...cur, overrides: nextOverrides });
-
-    if (changeType === "rebuild" || changeType === "structural") {
-      this.rebuildDirty = true;
-    }
-
-    // emit path exactly as written (legacy base.flow.*)
-    this.emit(changeType, path);
+    return getByPath(st.overrides, path);
   }
 
   private setOverride(changeType: BgChangeType, path: string, value: any): void {
@@ -1038,30 +892,18 @@ box.style.borderRadius = "8px";
     return sel as HTMLSelectElement;
   }
 
-  
-  private renderGlobalControls(activePreset: any): void {
+  private renderBaseLayerControls(activePreset: any): void {
     const box = el("div");
     box.style.cssText =
       "margin-top:5px;padding:3px;border:1px solid rgba(255,255,255,0.10);border-radius:5px;background:rgba(255,255,255,0.03);";
 
-    // ---- HEADER --------------------------------------------------------
     const head = el("div");
-    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;";
-
-    const left = el("div");
-    left.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:6px;";
 
     const t = el("div");
-    t.textContent = "GLOBAL (BG)";
+    t.textContent = "BASE (Layer 1)";
     t.style.cssText = "font-weight:700;opacity:0.95;";
-    left.appendChild(t);
-
-    const sub = el("div");
-    sub.textContent = "postprocess for BG layers only";
-    sub.style.cssText = "opacity:0.65;font:9px monospace;";
-    left.appendChild(sub);
-
-    head.appendChild(left);
+    head.appendChild(t);
 
     const right = el("div");
     right.style.cssText = "display:flex;gap:8px;align-items:center;";
@@ -1071,144 +913,47 @@ box.style.borderRadius = "8px";
     dirty.style.cssText = "opacity:0.8;";
     right.appendChild(dirty);
 
+
     head.appendChild(right);
     box.appendChild(head);
 
-    // ---- helpers: collapsible sections (BG-only) -----------------------
-    const stNow: any = getGlobalLabState() as any;
-
-    const isCollapsed = (id: string, def: boolean) =>
-      !!(stNow?.ui?.collapsedSections && (id in stNow.ui.collapsedSections))
-        ? !!stNow.ui.collapsedSections[id]
-        : def;
-
-    const setCollapsed = (id: string, val: boolean) => {
-      const cur = getGlobalLabState();
-      setGlobalLabState({
-        ...cur,
-        ui: {
-          ...(cur.ui ?? {}),
-          collapsedSections: {
-            ...(cur.ui?.collapsedSections ?? {}),
-            [id]: val,
-          },
-        },
-      });
-    };
-
-    const mkSection = (title: string, id: string, collapsedDefault: boolean, buildBody: (body: HTMLDivElement) => void) => {
-      const wrap = el("div");
-      wrap.style.cssText = "margin-top:6px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;";
-
-      const collapsed = isCollapsed(id, collapsedDefault);
-
-      const h = el("div");
-      h.style.cssText =
-        "display:flex;align-items:center;justify-content:space-between;" +
-        "gap:8px;padding:5px 7px;cursor:pointer;user-select:none;background:rgba(255,255,255,0.02);";
-
-      const ttl = el("div");
-      ttl.textContent = title;
-      ttl.style.cssText = "font-weight:700;opacity:0.92;font:10px monospace;";
-      h.appendChild(ttl);
-
-      const che = el("div");
-      che.textContent = collapsed ? "▸" : "▾";
-      che.style.cssText = "opacity:0.85;font:12px monospace;";
-      h.appendChild(che);
-
-      h.onclick = (e) => {
+    // seed (rebuild)
+    {
+      const r = this.mkRow();
+      r.appendChild(this.mkLabel("seed"));
+      const cur = Number(this.getOverride("seed") ?? activePreset?.seed ?? 1);
+      const n = this.mkNumber(cur, { step: 1, min: 0, max: 999999 });
+      n.onpointerdown = (e) => stopProp(e);
+      n.oninput = (e) => stopProp(e);
+      n.onchange = (e) => {
         stopProp(e);
-        setCollapsed(id, !collapsed);
+        this.setOverride("rebuild", "seed", Number(n.value));
         this.render();
       };
+      r.appendChild(n);
+      box.appendChild(r);
+    }
 
-      wrap.appendChild(h);
-
-      if (!collapsed) {
-        const body = el("div");
-        body.style.cssText = "padding:6px 6px 2px 6px;";
-        wrap.appendChild(body);
-        buildBody(body);
-      }
-
-      box.appendChild(wrap);
-    };
-
-    // ---- COMPOSITE (safe, known keys) ----------------------------------
-    mkSection("COMPOSITE", "bg.global.composite", false, (body) => {
-      // seed (rebuild) - BG-global
-      {
-        const r = this.mkRow();
-        r.appendChild(this.mkLabel("seed"));
-        const cur = Number(this.getOverride("seed") ?? activePreset?.seed ?? 1);
-        const n = this.mkNumber(cur, { step: 1, min: 0, max: 999999 });
-        n.onpointerdown = (e) => stopProp(e);
-        n.oninput = (e) => stopProp(e);
-        n.onchange = (e) => {
-          stopProp(e);
-          this.setOverride("rebuild", "seed", Number(n.value));
-          this.render();
-        };
-        r.appendChild(n);
-        body.appendChild(r);
-      }
-
-      // vignette (realtime) - BG global common
-      {
-        const r = this.mkRow();
-        r.appendChild(this.mkLabel("vignette"));
-        const cur = Number(this.getOverride("common.vignette") ?? activePreset?.common?.vignette ?? 0);
-        const n = this.mkNumber(cur, { step: 0.01, min: 0, max: 1 });
-        n.onpointerdown = (e) => stopProp(e);
-        n.oninput = (e) => stopProp(e);
-        n.onchange = (e) => {
-          stopProp(e);
-          this.setOverride("realtime", "common.vignette", Number(n.value));
-          this.render();
-        };
-        r.appendChild(n);
-        body.appendChild(r);
-      }
-
-      // noiseTexSize (rebuild) - BG global quality
-      {
-        const r = this.mkRow();
-        r.appendChild(this.mkLabel("noiseTexSize"));
-        const cur = String(this.getOverride("quality.noiseTexSize") ?? activePreset?.quality?.noiseTexSize ?? 256);
-        const sel = this.mkSelect(cur, ["64", "128", "256", "512"]);
-        sel.onpointerdown = (e) => stopProp(e);
-        sel.onchange = (e) => {
-          stopProp(e);
-          this.setOverride("rebuild", "quality.noiseTexSize", Number(sel.value));
-          this.render();
-        };
-        r.appendChild(sel);
-        body.appendChild(r);
-      }
-    });
-
-    // ---- STYLE (placeholder only; no overrides yet) ---------------------
-    mkSection("STYLE", "bg.global.style", true, (body) => {
-      const d = el("div");
-      d.textContent = "TODO: color grade / quantize / dither (BG-only)";
-      d.style.cssText = "opacity:0.65;margin:2px 0 6px 0;";
-      body.appendChild(d);
-    });
-
-    // ---- MOTION (placeholder only; no overrides yet) --------------------
-    mkSection("MOTION", "bg.global.motion", true, (body) => {
-      const d = el("div");
-      d.textContent = "TODO: global drift / wobble / time scale (BG-only)";
-      d.style.cssText = "opacity:0.65;margin:2px 0 6px 0;";
-      body.appendChild(d);
-    });
+    // keep old shader selector only if legacy v1 is present
+    if (activePreset?.base?.kind === "shader") {
+      const r = this.mkRow();
+      r.appendChild(this.mkLabel("shader.preset"));
+      const cur = String(this.getOverride("base.shader.preset") ?? activePreset?.base?.shader?.preset ?? "gradient");
+      const sel = this.mkSelect(cur, ["gradient", "plasma", "nebula", "stripes"]);
+      sel.onpointerdown = (e) => stopProp(e);
+      sel.onchange = (e) => {
+        stopProp(e);
+        this.setOverride("structural", "base.shader.preset", String(sel.value));
+        this.render();
+      };
+      r.appendChild(sel);
+      box.appendChild(r);
+    }
 
     this.root.appendChild(box);
   }
 
   private render(): void {
-
     this.root.innerHTML = "";
 
     const presets = this.api.presets?.() ?? [];
@@ -1224,20 +969,6 @@ box.style.borderRadius = "8px";
 
     // choose base snapshot = active preset merged with overrides
     const basePreset = (active ? presets.find((p) => p.id === active) : null) ?? presets[0] ?? null;
-      // Let mapUiPathToOverridePath know whether active preset is v1 or v2 (layers present)
-      {
-        const cur = getGlobalLabState() as any;
-        const hasLayers = Array.isArray((basePreset as any)?.layers);
-        if (cur?.ui?.activePresetHasLayers !== hasLayers) {
-          setGlobalLabState({
-            ...cur,
-            ui: {
-              ...(cur.ui ?? {}),
-              activePresetHasLayers: hasLayers,
-            },
-          } as any);
-        }
-      }
     const st = getGlobalLabState();
     const merged = basePreset ? mergeDeep(basePreset, st.overrides ?? {}) : st.overrides ?? {};
     const p: any = merged ?? {};
@@ -1265,7 +996,7 @@ box.style.borderRadius = "8px";
     this.renderLayerList(p);
 
     // existing base panel + layout
-this.renderGlobalControls(basePreset);
+this.renderBaseLayerControls(basePreset);
 
 // --- LEGACY PANEL (V1 layout) --------------------------------------
   const stNow = getGlobalLabState();
@@ -1312,19 +1043,14 @@ const collapsed = (stNow?.ui?.collapsedSections?.[legacyId] ?? true);
 
   wrap.appendChild(head);
 
-    if (!collapsed) {
-      const body = el("div");
-      body.style.cssText = "padding:6px 6px 2px 6px;";
-      wrap.appendChild(body);
-      this.root.appendChild(wrap);
-
-      if (snapshot?.base?.kind === "flowSegments") {
-        this.renderLegacyFlowControls(body, basePreset);
-      } else {
-        this.renderLayout(bgBaseUiLayout, snapshot);
-      }
-    } else {
-      this.root.appendChild(wrap);
-    }
+  if (!collapsed) {
+    const body = el("div");
+    body.style.cssText = "padding:6px 6px 2px 6px;";
+    wrap.appendChild(body);
+    this.root.appendChild(wrap);
+    this.renderLayout(bgBaseUiLayout, snapshot);
+  } else {
+    this.root.appendChild(wrap);
+  }
     }
   }

@@ -50,7 +50,13 @@ export class FlowSegmentsRenderer implements BaseRenderer {
     
     const p = this.params ?? {};
     const common = p.common ?? {};
+    const flow = p.flow ?? {};
 
+    if ((globalThis as any).__CM_BG_DEBUG_FLOW) {
+      console.log("[FLOW OVERRIDE RAW]", flow);
+    }
+
+    
     const mul = Number(common.scrollMul ?? 1);
     const scrollX = (this.scrollX + Number(common.scrollX ?? 0)) * mul;
     const scrollY = (this.scrollY + Number(common.scrollY ?? 0)) * mul;
@@ -64,6 +70,9 @@ export class FlowSegmentsRenderer implements BaseRenderer {
       scrollX,
       scrollY,
       presetIndex,
+
+      // runtime overrides from BgPipeline params.flow.*
+      flow,
     });
   }
 

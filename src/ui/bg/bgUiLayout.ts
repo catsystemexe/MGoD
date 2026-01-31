@@ -56,7 +56,6 @@ export const bgBaseUiLayout: UiSection[] = [
       { type: "select", path: "base.quality.logicScale", options: [0.5, 1, 1.5, 2], change: "rebuild" },
       { type: "select", path: "base.quality.noiseTexSize", options: [64, 128, 256, 512], change: "rebuild" },
       { type: "select", path: "base.quality.internalResolution", options: ["auto", 0.5, 1, 2], change: "rebuild" },
-      { type: "button", label: "Apply Rebuild", action: "applyRebuild" },
     ],
   },
 
@@ -80,7 +79,6 @@ export const bgBaseUiLayout: UiSection[] = [
       { type: "slider", path: "base.flow.segmentLen", min: 2, max: 64, step: 1, change: "rebuild" },
       { type: "slider", path: "base.flow.gridW", min: 8, max: 256, step: 1, change: "rebuild" },
       { type: "slider", path: "base.flow.gridH", min: 8, max: 256, step: 1, change: "rebuild" },
-      { type: "button", label: "Apply Rebuild", action: "applyRebuild" },
     ],
   },
 

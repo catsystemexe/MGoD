@@ -341,6 +341,64 @@ async function main() {
   };
   (window as any).__CM.bgActivePresetId = initial?.id ?? null;
 
+function normalizeBgPresetToV2(p: any): any {
+  if (!p || typeof p !== "object") return p;
+
+  // already v2
+  if (Array.isArray((p as any).layers)) return p;
+
+  // v1 schema (kind + base)
+  if ((p as any).base && typeof (p as any).base === "object") {
+    const base: any = (p as any).base;
+    return {
+      id: (p as any).id,
+      name: (p as any).name ?? (p as any).id,
+      common: base.common ?? {},
+      quality: base.quality ?? {},
+      layers: [
+        {
+          id: "layer0",
+          kind: String(base.kind ?? (p as any).kind ?? "shader"),
+          enabled: true,
+          opacity: 1,
+          blend: "alpha",
+          parallaxMul: 1,
+          params: {
+            shader: base.shader ?? {},
+            flow: base.flow ?? {},
+          },
+        },
+      ],
+    };
+  }
+
+  // MVP content (kind + flow/shader directly on preset)
+  const kind = String((p as any).kind ?? "shader");
+  const common = (p as any).common ?? {};
+  const quality = (p as any).quality ?? {};
+  const flow = (p as any).flow ?? {};
+  const shader = (p as any).shader ?? {};
+
+  return {
+    id: (p as any).id,
+    name: (p as any).name ?? (p as any).id,
+    common,
+    quality,
+    layers: [
+      {
+        id: "layer0",
+        kind,
+        enabled: true,
+        opacity: 1,
+        blend: "alpha",
+        parallaxMul: 1,
+        params: { shader, flow },
+      },
+    ],
+  };
+}
+
+
   // wrap setPreset to keep active id
   const _setPresetById = (window as any).__CM.bg.setPresetById;
   (window as any).__CM.bg.setPresetById = (id: string) => {
