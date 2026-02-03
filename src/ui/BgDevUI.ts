@@ -681,6 +681,37 @@ export class BgDevUI {
     {
       const cur = Number(getUiOverride("base.flow.speed") ?? flow0?.speed ?? 1);
       mk("speed", cur, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.speed");
+
+      // -------- Parallax (mix of rebuild + realtime) ----------
+      {
+        // Depth/shape affects rebuild (re-derives pr.parallax array in FlowSegmentsBg)
+        const curDepth = Number(getUiOverride("base.flow.parallaxDepth") ?? 1);
+        mk("parallaxDepth", curDepth, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxDepth");
+
+        const curSpread = Number(getUiOverride("base.flow.parallaxSpread") ?? 1);
+        mk("parallaxSpread", curSpread, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxSpread");
+
+        const curBias = Number(getUiOverride("base.flow.parallaxBias") ?? 0);
+        mk("parallaxBias", curBias, { min: -1, max: 1, step: 0.01 }, "rebuild", "base.flow.parallaxBias");
+
+        // Opacity multipliers are realtime
+        const curFarOp = Number(getUiOverride("base.flow.farOpacity") ?? 1);
+        mk("farOpacity", curFarOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.farOpacity");
+
+        const curNearOp = Number(getUiOverride("base.flow.nearOpacity") ?? 1);
+        mk("nearOpacity", curNearOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.nearOpacity");
+
+        // Per-layer speed multipliers are realtime (defaults from preset if present)
+        const curFarSp = Number(getUiOverride("base.flow.farSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.far ?? 0.6);
+        mk("farSpeedMul", curFarSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.farSpeedMul");
+
+        const curMidSp = Number(getUiOverride("base.flow.midSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.mid ?? 0.85);
+        mk("midSpeedMul", curMidSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.midSpeedMul");
+
+        const curNearSp = Number(getUiOverride("base.flow.nearSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.near ?? 1.0);
+        mk("nearSpeedMul", curNearSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.nearSpeedMul");
+      }
+
     }
 
     // -------- Geometry (rt) ----------
@@ -689,7 +720,7 @@ export class BgDevUI {
       mk("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
 
       const curJit = Number(this.getOverride("base.flow.jitter") ?? flow0?.jitter ?? 0.2);
-      mk("jitter", curJit, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.jitter");
+      mk("jitter", curJit, { min: 0, max: 40, step: 0.5 }, "rebuild", "base.flow.jitter");
 
       const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
       mk("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");

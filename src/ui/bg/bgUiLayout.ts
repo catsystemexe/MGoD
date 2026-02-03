@@ -65,10 +65,19 @@ export const bgBaseUiLayout: UiSection[] = [
     title: "Base / FlowSegments (rt)",
     controls: [
       { type: "slider", path: "base.flow.speed", min: 0, max: 3, step: 0.01, change: "realtime" },
-      { type: "slider", path: "base.flow.curl", min: 0, max: 3, step: 0.01, change: "realtime" },
-      { type: "slider", path: "base.flow.jitter", min: 0, max: 2, step: 0.01, change: "realtime" },
-      { type: "slider", path: "base.flow.thickness", min: 0.1, max: 4, step: 0.01, change: "realtime" },
+      { type: "slider", path: "base.flow.thickness", min: 0.1, max: 6, step: 0.01, change: "realtime" },
       { type: "slider", path: "base.flow.alpha", min: 0, max: 1, step: 0.01, change: "realtime" },
+      // --- Parallax (Legacy macro) ---
+      { type: "slider", path: "base.flow.parallaxDepth", min: 0, max: 2, step: 0.01, change: "rebuild" },
+
+      { type: "slider", path: "base.flow.farOpacity", min: 0, max: 1, step: 0.01, change: "realtime" },
+      { type: "slider", path: "base.flow.nearOpacity", min: 0, max: 1, step: 0.01, change: "realtime" },
+
+      // --- Per-layer speed (Legacy macro) ---
+      { type: "slider", path: "base.flow.farSpeedMul", min: 0, max: 2, step: 0.01, change: "realtime" },
+      { type: "slider", path: "base.flow.midSpeedMul", min: 0, max: 2, step: 0.01, change: "realtime" },
+      { type: "slider", path: "base.flow.nearSpeedMul", min: 0, max: 2, step: 0.01, change: "realtime" },
+      
     ],
   },
   {
@@ -76,9 +85,12 @@ export const bgBaseUiLayout: UiSection[] = [
     title: "Base / FlowSegments (rebuild) ⟳",
     controls: [
       { type: "slider", path: "base.flow.segmentCount", min: 64, max: 4096, step: 1, change: "rebuild" },
-      { type: "slider", path: "base.flow.segmentLen", min: 2, max: 64, step: 1, change: "rebuild" },
-      { type: "slider", path: "base.flow.gridW", min: 8, max: 256, step: 1, change: "rebuild" },
-      { type: "slider", path: "base.flow.gridH", min: 8, max: 256, step: 1, change: "rebuild" },
+      { type: "slider", path: "base.flow.segmentLen", min: 2, max: 96, step: 1, change: "rebuild" },
+      { type: "slider", path: "base.flow.jitter", min: 0, max: 40, step: 0.5, change: "rebuild" },
+
+      { type: "slider", path: "base.flow.parallaxDepth", min: 0, max: 2, step: 0.01, change: "rebuild" },
+      { type: "slider", path: "base.flow.parallaxSpread", min: 0, max: 2, step: 0.01, change: "rebuild" },
+      { type: "slider", path: "base.flow.parallaxBias", min: -1, max: 1, step: 0.01, change: "rebuild" },
     ],
   },
 

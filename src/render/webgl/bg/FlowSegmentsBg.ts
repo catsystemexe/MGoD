@@ -510,27 +510,24 @@ if (sy > logicH + pad) p.y = scrollY - pad;
     const pr = this.preset(args.presetIndex);
     // --- runtime overrides (from BgPipeline params.flow.*) ---
     const flowOv: any = (args as any)?.flow ?? {};
-
-    // Legacy compatibility (BgDevUI sliders):
-    // - segmentCount -> spawn.countBase
-    // - segmentLen   -> segments.lengthPx.{min,max}
-    // - jitter       -> spawn.yJitterPx
-    // - speed        -> motion.speedPxPerSec.base (as multiplier vs preset base)
-    const legacySpeedMul = Number((flowOv as any).speed);
-    if (Number.isFinite(legacySpeedMul) && legacySpeedMul >= 0) {
-      const base0 = Number((pr as any)?.motion?.speedPxPerSec?.base ?? 120);
-      const nextBase = base0 * legacySpeedMul;
-      flowOv.motion = {
-        ...(flowOv.motion ?? {}),
-        speedPxPerSec: {
-          ...(((pr as any).motion?.speedPxPerSec) ?? {}),
-          ...((flowOv.motion?.speedPxPerSec) ?? {}),
-          base: nextBase,
-        },
-      };
-    }
-
-    
+      // Legacy compatibility (BgDevUI sliders):
+      // - segmentCount -> spawn.countBase
+      // - segmentLen   -> segments.lengthPx.{min,max}
+      // - jitter       -> spawn.yJitterPx
+      // - speed        -> motion.speedPxPerSec.base (as multiplier vs preset base)
+      const legacySpeedMul = Number((flowOv as any).speed);
+      if (Number.isFinite(legacySpeedMul) && legacySpeedMul >= 0) {
+        const base0 = Number((pr as any)?.motion?.speedPxPerSec?.base ?? 120);
+        const nextBase = base0 * legacySpeedMul;
+        flowOv.motion = {
+          ...(flowOv.motion ?? {}),
+          speedPxPerSec: {
+            ...(((pr as any).motion?.speedPxPerSec) ?? {}),
+            ...((flowOv.motion?.speedPxPerSec) ?? {}),
+            base: nextBase,
+          },
+        };
+      }
     // Legacy compatibility (BgDevUI sliders):
     // - segmentCount -> spawn.countBase
     // - segmentLen   -> segments.lengthPx.{min,max}
@@ -563,11 +560,116 @@ if (sy > logicH + pad) p.y = scrollY - pad;
       flowOv.render = { ...(flowOv.render ?? {}), alphaMul: legacyAlpha };
     }
 
+    // Legacy compatibility (BgDevUI sliders):
+    // - parallaxDepth -> modifies parallax factors (0 = flat, 1 = preset, 2 = deeper)
+    // - farOpacity / nearOpacity -> per-layer alpha multipliers (mid derived)
+    // - far/mid/nearSpeedMul -> per-layer speed multipliers
+    const legacyParDepth = Number((flowOv as any).parallaxDepth);
+    const legacyFarOp = Number((flowOv as any).farOpacity);
+    const legacyNearOp = Number((flowOv as any).nearOpacity);
+
+    const legacyFarSp = Number((flowOv as any).farSpeedMul);
+    const legacyMidSp = Number((flowOv as any).midSpeedMul);
+    const legacyNearSp = Number((flowOv as any).nearSpeedMul);
+
+    // --- Parallax depth (affects rebuild; creates a new parallax array) ---
+    if (Number.isFinite(legacyParDepth)) {
+      const d = clamp(legacyParDepth, 0, 2);
+
+      // base factors from preset (fallbacks if missing)
+      const pFar = Number(pr?.parallax?.find((x: any) => x.layer === "far")?.factor ?? 0.25);
+      const pMid = Number(pr?.parallax?.find((x: any) => x.layer === "mid")?.factor ?? 0.55);
+      const pNear = Number(pr?.parallax?.find((x: any) => x.layer === "near")?.factor ?? 1.0);
+
+      // d in [0..1] : lerp from flat(1) -> preset factors
+      const t01 = Math.min(1, d);
+      let farF = lerp(1.0, pFar, t01);
+      let midF = lerp(1.0, pMid, t01);
+      let nearF = lerp(1.0, pNear, t01);
+
+      // d in (1..2] : exaggerate depth (push far/mid slower, keep near ~1)
+      if (d > 1) {
+        const e = d - 1; // 0..1
+        farF = farF * lerp(1.0, 0.55, e);
+        midF = midF * lerp(1.0, 0.75, e);
+        nearF = lerp(nearF, 1.0, e * 0.35);
+      }
+
+      // keep sane range
+      farF = clamp(farF, 0.02, 1.0);
+      midF = clamp(midF, 0.02, 1.0);
+      nearF = clamp(nearF, 0.02, 1.2);
+
+      // preserve densityMul from preset (fallbacks)
+      const dFar = Number(pr?.parallax?.find((x: any) => x.layer === "far")?.densityMul ?? 0.7);
+      const dMid = Number(pr?.parallax?.find((x: any) => x.layer === "mid")?.densityMul ?? 1.0);
+      const dNear = Number(pr?.parallax?.find((x: any) => x.layer === "near")?.densityMul ?? 1.2);
+
+      flowOv.parallax = [
+        { layer: "far", factor: farF, densityMul: dFar },
+        { layer: "mid", factor: midF, densityMul: dMid },
+        { layer: "near", factor: nearF, densityMul: dNear },
+      ];
+    }
+
+    // --- Per-layer speed multipliers (realtime; does NOT need rebuild) ---
+    const hasAnySp =
+      Number.isFinite(legacyFarSp) || Number.isFinite(legacyMidSp) || Number.isFinite(legacyNearSp);
+
+    if (hasAnySp) {
+      // start from preset values so legacy multiplies, not replaces
+      const baseLayerMul = { ...(((pr as any)?.motion?.speedPxPerSec?.layerMul) ?? {}) };
+
+      const farMul = Number.isFinite(legacyFarSp) ? Math.max(0, legacyFarSp) : (baseLayerMul.far ?? 1);
+      const midMul = Number.isFinite(legacyMidSp) ? Math.max(0, legacyMidSp) : (baseLayerMul.mid ?? 1);
+      const nearMul = Number.isFinite(legacyNearSp) ? Math.max(0, legacyNearSp) : (baseLayerMul.near ?? 1);
+
+      flowOv.motion = {
+        ...(flowOv.motion ?? {}),
+        speedPxPerSec: {
+          ...(((pr as any).motion?.speedPxPerSec) ?? {}),
+          ...((flowOv.motion?.speedPxPerSec) ?? {}),
+          layerMul: {
+            ...baseLayerMul,
+            ...((flowOv.motion?.speedPxPerSec?.layerMul) ?? {}),
+            far: farMul,
+            mid: midMul,
+            near: nearMul,
+          },
+        },
+      };
+    }
+
+    // --- Per-layer opacity multipliers (realtime) ---
+    if (Number.isFinite(legacyFarOp) || Number.isFinite(legacyNearOp)) {
+      // base colors from preset (fallback to the same defaults you use in draw)
+      const baseFar = (pr as any)?.colors?.far ?? [0.55, 0.85, 1.0, 0.14];
+      const baseMid = (pr as any)?.colors?.mid ?? [0.75, 0.95, 1.0, 0.20];
+      const baseNear = (pr as any)?.colors?.near ?? [0.90, 1.00, 1.0, 0.26];
+
+      const farOp = Number.isFinite(legacyFarOp) ? clamp(legacyFarOp, 0, 1) : 1.0;
+      const nearOp = Number.isFinite(legacyNearOp) ? clamp(legacyNearOp, 0, 1) : 1.0;
+
+      // derive mid (simple, robust): average of far & near
+      const midOp = clamp((farOp + nearOp) * 0.5, 0, 1);
+
+      flowOv.colors = {
+        ...((pr as any).colors ?? {}),
+        ...(flowOv.colors ?? {}),
+        far: [baseFar[0], baseFar[1], baseFar[2], baseFar[3] * farOp],
+        mid: [baseMid[0], baseMid[1], baseMid[2], baseMid[3] * midOp],
+        near: [baseNear[0], baseNear[1], baseNear[2], baseNear[3] * nearOp],
+      };
+    }
     
     // Merge preset + overrides (shallow-deep for top blocks we touch)
     const merged: any = {
       ...pr,
       ...(flowOv ?? {}),
+
+      // default: no preset tint; colors only if explicitly provided via overrides
+      colors: { ...(flowOv.colors ?? {}) },
+
       spawn: { ...(pr as any).spawn, ...(flowOv.spawn ?? {}) },
       segments: { ...(pr as any).segments, ...(flowOv.segments ?? {}) },
       motion: { ...(pr as any).motion, ...(flowOv.motion ?? {}) },
@@ -622,11 +724,11 @@ if (sy > logicH + pad) p.y = scrollY - pad;
       const scrollX = Number(args.scrollX ?? 0) * par;
       const scrollY = Number(args.scrollY ?? 0) * par;
 
-      // layer color
+      // layer color (default: pure white, full alpha)
       const c = finalPr.colors?.[layerId] ?? (
-        layerId === "far" ? [0.55, 0.85, 1.0, 0.14] :
-        layerId === "mid" ? [0.75, 0.95, 1.0, 0.20] :
-                            [0.90, 1.00, 1.0, 0.26]
+        layerId === "far" ? [1.0, 1.0, 1.0, 1.0] :
+        layerId === "mid" ? [1.0, 1.0, 1.0, 1.0] :
+                            [1.0, 1.0, 1.0, 1.0]
       );
       const aMul = Number(finalPr.render?.alphaMul ?? 1);
       gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3] * aMul);
