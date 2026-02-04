@@ -5,7 +5,6 @@ import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabSt
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
 import { mergeDeep } from "../game/bg/lab/mergeDeep";
-import { FLOW_PRESETS } from "../render/webgl/bg/flowPresets";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
@@ -78,10 +77,6 @@ function mapUiPathToOverridePath(uiPath: string): string {
   if (uiPath === "kind") return hasLayers ? `layers.${activeIx}.kind` : "kind";
 
   return uiPath;
-}
-
-function isObj(v: any): v is Record<string, any> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
 function getByPath(root: any, path: string): any {
@@ -211,8 +206,7 @@ export class BgDevUI {
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
+      const ok = (document as any).execCommand?.("copy");      document.body.removeChild(ta);
       return !!ok;
     } catch {
       return false;
@@ -281,14 +275,6 @@ export class BgDevUI {
   private emit(changeType: BgChangeType, path: string) {
     BgLabBus.emit({ changeType, path });
   }
-
-  private renderHeader(titleText: string) {
-    const title = el("div");
-    title.textContent = titleText;
-    title.style.cssText = "font-weight:700;margin-bottom:8px;opacity:0.95;";
-    this.root.appendChild(title);
-  }
-
   private renderTopControls() {
     const row = el("div");
     row.style.cssText =
@@ -318,7 +304,7 @@ export class BgDevUI {
       "background:rgba(255,255,255,0.08)",
       "border:1px solid rgba(255,255,255,0.15)",
       "color:white",
-      "padding:3px 6px",
+      "padding:2px 4px",
       "border-radius:9px",
       "font:10px monospace",
       "line-height:10px",
@@ -342,7 +328,7 @@ export class BgDevUI {
         "background:rgba(255,255,255,0.08)",
         "border:1px solid rgba(255,255,255,0.15)",
         "color:white",
-        "padding:3px 6px",
+        "padding:2px 4px",
         "border-radius:9px",
         "font:10px monospace",
         "line-height:10px",
@@ -358,49 +344,7 @@ export class BgDevUI {
     mkBtn("SAVE COMP", () => void this.copyComposition());
     mkBtn("LOAD COMP", () => void this.pasteComposition());
   }
-
-
-  private renderActiveLine(active: string | null) {
-    const act = el("div");
-    act.textContent = `active: ${active ?? "(none)"}`;
-    act.style.cssText = "opacity:0.9;margin-bottom:8px;";
-    this.root.appendChild(act);
-  }
-
-  private renderPresetsList(presets: BgPreset[], active: string | null) {
-    for (const p of presets) {
-      const b = el("button");
-      // BgPreset V2 doesn't have kind at top-level; keep label safe.
-      const kind = (p as any).kind ?? (p as any).base?.kind ?? (p as any).layers?.[0]?.kind ?? "?";
-      b.textContent = `${p.id}  [${String(kind)}]`;
-      b.style.cssText = [
-        "cursor:pointer",
-        "background:rgba(255,255,255,0.08)",
-        "border:1px solid rgba(255,255,255,0.15)",
-        "color:white",
-        "padding:5px 5px",
-        "border-radius:9px",
-        "font:10px monospace",
-        "text-align:left",
-        "width:100%",
-        "margin:0 0 4px 0",
-      ].join(";");
-
-      if (active && p.id === active) {
-        b.style.border = "1px solid rgba(120,255,180,0.55)";
-        b.style.background = "rgba(120,255,180,0.10)";
-      }
-
-      b.onclick = (e) => {
-        stopProp(e);
-        this.api.setPresetById(p.id);
-        const st = getGlobalLabState();
-        setGlobalLabState({ ...st, activePresetId: p.id });
-        this.render();
-      };
-      this.root.appendChild(b);
-    }
-  }
+     
 
   private renderSectionHeader(sec: UiSection, st: BgLabState): boolean {
     const collapsed = !!st.ui.collapsedSections[sec.id];
@@ -615,27 +559,76 @@ export class BgDevUI {
   // --- LEGACY: minimal FLOW controls (kind = flowSegments) ------------------
   private renderLegacyFlowControls(body: HTMLDivElement, activePreset: any): void {
     // NOTE:
-    // - používáme UI paths "base.flow.*" schválně -> mapUiPathToOverridePath() to přemapuje do layers.{activeIx}.params.flow.*
-    // - changeType volíme podle bgUiLayout: rt = realtime, rebuild = rebuild, preset = structural
+    // - UI paths "base.flow.*" jsou schvalne: mapUiPathToOverridePath() je premapuje do layers.{activeIx}.params.flow.*
+    // - changeType: realtime vs rebuild
 
-    const flow0 = (activePreset?.layers?.[0]?.params?.flow ?? activePreset?.flow ?? activePreset?.base?.flow ?? {}) as any; // fallback (v2.layers | v1.flow | v1.base.flow)
+    const flow0 = (activePreset?.layers?.[0]?.params?.flow ?? activePreset?.flow ?? activePreset?.base?.flow ?? {}) as any;
 
     const getUiOverride = (uiPath: string): any => {
       const st = getGlobalLabState() as any;
       const opath = mapUiPathToOverridePath(uiPath);
       return getByPath(st.overrides, opath);
     };
-    const mk = (
+
+    // --- minimalisticky "tile" slider (label + value v hlavičce; slider pod tím) ---
+    const mkTile = (
       label: string,
       cur: number,
       opts: { min: number; max: number; step: number },
       change: BgChangeType,
       path: string,
     ) => {
-      const row = el("div");
-      row.style.cssText = "display:grid;grid-template-columns:90px 1fr 72px;gap:5px;align-items:center;margin:3px 0;";
+      const tile = el("div");
+      // bez "karet" – jen spacing
+      tile.style.cssText = [
+        "display:flex",
+        "flex-direction:column",
+        "gap:2px",
+        "padding:0",
+        "margin:0",
+      ].join(";");
 
-      row.appendChild(this.mkLabel(label));
+      // header: "Depth 1" (value nahoře vedle labelu)
+      const head = el("div");
+      head.style.cssText = [
+        "display:flex",
+        "align-items:baseline",
+        "justify-content:space-between",
+        "gap:6px",
+        "padding:0 1px 1px 1px",
+      ].join(";");
+
+      const lab = el("div");
+      lab.textContent = label;
+      lab.style.cssText = "font:10px monospace;opacity:0.85;letter-spacing:0.2px;";
+
+      const num = el("input") as HTMLInputElement;
+      num.type = "number";
+      num.min = String(opts.min);
+      num.max = String(opts.max);
+      num.step = String(opts.step ?? 0.01);
+      num.value = String(cur);
+      // malé, bez rámečku, zarovnané doprava (žádné okýnko)
+      num.style.cssText = [
+        "width:40px",
+        "background:transparent",
+        "border:none",
+        "outline:none",
+        "color:rgba(255,255,255,0.92)",
+        "padding:0",
+        "margin:0",
+        "font:10px monospace",
+        "text-align:right",
+        "appearance:textfield",
+      ].join(";");
+
+      head.appendChild(lab);
+      head.appendChild(num);
+      tile.appendChild(head);
+
+      const row = el("div");
+      // slider přes celou šířku
+      row.style.cssText = "display:block;padding:0 1px 1px 1px;";
 
       const range = el("input") as HTMLInputElement;
       range.type = "range";
@@ -644,12 +637,9 @@ export class BgDevUI {
       range.step = String(opts.step ?? 0.01);
       range.value = String(cur);
       range.style.width = "100%";
+      (range.style as any).height = "14px";
 
-      const num = this.mkNumber(cur, opts);
-
-      const applyValue = (v: number) => {
-        this.setOverride(change, path, v);
-      };
+      const applyValue = (v: number) => this.setOverride(change, path, v);
 
       range.onpointerdown = (e) => stopProp(e);
       range.oninput = (e) => {
@@ -674,76 +664,122 @@ export class BgDevUI {
       };
 
       row.appendChild(range);
-      row.appendChild(num);
-      body.appendChild(row);
+      tile.appendChild(row);
+      body.appendChild(tile);
     };
-// -------- Motion (rt) ----------
-    {
-      const cur = Number(getUiOverride("base.flow.speed") ?? flow0?.speed ?? 1);
-      mk("speed", cur, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.speed");
 
-      // -------- Parallax (mix of rebuild + realtime) ----------
-      {
-        // Depth/shape affects rebuild (re-derives pr.parallax array in FlowSegmentsBg)
+    const mkGroup = (title: string) => {
+      const wrap = el("div");
+      wrap.style.cssText = "margin:6px 0 8px 0;";
+
+      const h = el("div");
+      h.textContent = title;
+      h.style.cssText = "font:10px monospace;opacity:0.55;margin:0 0 4px 2px;letter-spacing:0.6px;";
+      wrap.appendChild(h);
+
+      const grid = el("div");
+      grid.style.cssText = [
+        "display:grid",
+        "grid-template-columns:repeat(3, minmax(0, 1fr))",
+        "gap:6px",
+      ].join(";");
+      wrap.appendChild(grid);
+
+      body.appendChild(wrap);
+      return grid;
+    };
+
+    const addTo = (grid: HTMLDivElement, fn: () => void) => {
+      const oldAppend = body.appendChild.bind(body);
+      (body as any).appendChild = grid.appendChild.bind(grid);
+      try {
+        fn();
+      } finally {
+        (body as any).appendChild = oldAppend;
+      }
+    };
+
+    // --- GROUPS (3-up) ---
+
+    // 1) Speed + alpha + curl
+    {
+      const g = mkGroup("FLOW");
+      addTo(g, () => {
+        const curSpeed = Number(getUiOverride("base.flow.speed") ?? flow0?.speed ?? 1);
+        mkTile("speed", curSpeed, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.speed");
+
+        const curAlpha = Number(this.getOverride("base.flow.alpha") ?? flow0?.alpha ?? 0.7);
+        mkTile("alpha", curAlpha, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.alpha");
+
+        const curCurl = Number(this.getOverride("base.flow.curl") ?? flow0?.curl ?? 0.8);
+        mkTile("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
+      });
+    }
+
+    // 2) Depth + spread + bias
+    {
+      const g = mkGroup("PARALLAX (rebuild)");
+      addTo(g, () => {
         const curDepth = Number(getUiOverride("base.flow.parallaxDepth") ?? 1);
-        mk("parallaxDepth", curDepth, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxDepth");
+        mkTile("depth", curDepth, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxDepth");
 
         const curSpread = Number(getUiOverride("base.flow.parallaxSpread") ?? 1);
-        mk("parallaxSpread", curSpread, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxSpread");
+        mkTile("spread", curSpread, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxSpread");
 
         const curBias = Number(getUiOverride("base.flow.parallaxBias") ?? 0);
-        mk("parallaxBias", curBias, { min: -1, max: 1, step: 0.01 }, "rebuild", "base.flow.parallaxBias");
+        mkTile("bias", curBias, { min: -1, max: 1, step: 0.01 }, "rebuild", "base.flow.parallaxBias");
+      });
+    }
 
-        // Opacity multipliers are realtime
+    // 3) FarAlpha + MidAlpha + NearAlpha (paths zustavaji farOpacity... kvuli kompatibilite)
+    {
+      const g = mkGroup("LAYER ALPHA");
+      addTo(g, () => {
         const curFarOp = Number(getUiOverride("base.flow.farOpacity") ?? 1);
-        mk("farOpacity", curFarOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.farOpacity");
+        mkTile("farAlpha", curFarOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.farOpacity");
 
         const curMidOp = Number(getUiOverride("base.flow.midOpacity") ?? 1);
-        mk("midOpacity", curMidOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.midOpacity");
-        
-        const curNearOp = Number(getUiOverride("base.flow.nearOpacity") ?? 1);
-        mk("nearOpacity", curNearOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.nearOpacity");
+        mkTile("midAlpha", curMidOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.midOpacity");
 
-        // Per-layer speed multipliers are realtime (defaults from preset if present)
+        const curNearOp = Number(getUiOverride("base.flow.nearOpacity") ?? 1);
+        mkTile("nearAlpha", curNearOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.nearOpacity");
+      });
+    }
+
+    // 4) FarSpeed + MidSpeed + NearSpeed
+    {
+      const g = mkGroup("LAYER SPEED");
+      addTo(g, () => {
         const curFarSp = Number(getUiOverride("base.flow.farSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.far ?? 0.6);
-        mk("farSpeedMul", curFarSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.farSpeedMul");
+        mkTile("farSpeed", curFarSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.farSpeedMul");
 
         const curMidSp = Number(getUiOverride("base.flow.midSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.mid ?? 0.85);
-        mk("midSpeedMul", curMidSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.midSpeedMul");
+        mkTile("midSpeed", curMidSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.midSpeedMul");
 
         const curNearSp = Number(getUiOverride("base.flow.nearSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.near ?? 1.0);
-        mk("nearSpeedMul", curNearSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.nearSpeedMul");
-      }
-
+        mkTile("nearSpeed", curNearSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.nearSpeedMul");
+      });
     }
 
-    // -------- Geometry (rt) ----------
+    // 5) Count + Length + Thickness
     {
-      const curCurl = Number(this.getOverride("base.flow.curl") ?? flow0?.curl ?? 0.8);
-      mk("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
-      const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
-      mk("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");
+      const g = mkGroup("SEGMENTS");
+      addTo(g, () => {
+        const curCount = Number(this.getOverride("base.flow.segmentCount") ?? flow0?.segmentCount ?? 512);
+        mkTile("count", curCount, { min: 64, max: 4096, step: 1 }, "rebuild", "base.flow.segmentCount");
+
+        const curLen = Number(this.getOverride("base.flow.segmentLen") ?? flow0?.segmentLen ?? 12);
+        mkTile("length", curLen, { min: 2, max: 64, step: 1 }, "rebuild", "base.flow.segmentLen");
+
+        const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
+        mkTile("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");
+      });
     }
 
-    // -------- Look (rt) ----------
-    {
-      const curA = Number(this.getOverride("base.flow.alpha") ?? flow0?.alpha ?? 0.7);
-      mk("alpha", curA, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.alpha");
-    }
-
-    // -------- Segments (rebuild) ----------
-    {
-      const curCount = Number(this.getOverride("base.flow.segmentCount") ?? flow0?.segmentCount ?? 512);
-      mk("segmentCount", curCount, { min: 64, max: 4096, step: 1 }, "rebuild", "base.flow.segmentCount");
-
-      const curLen = Number(this.getOverride("base.flow.segmentLen") ?? flow0?.segmentLen ?? 12);
-      mk("segmentLen", curLen, { min: 2, max: 64, step: 1 }, "rebuild", "base.flow.segmentLen");
-    }
   }
 
-    
 
-  // --- LAYERS list (Sprint 1 skeleton) -----------------------------------
+    // --- LAYERS list (Sprint 1 skeleton) -----------------------------------
   private renderLayerList(presetV2: any): void {
 
 
@@ -1000,20 +1036,7 @@ box.style.borderRadius = "8px";
     const v = getByPath(st.overrides, opath);
     return v !== undefined ? v : getByPath(st.overrides, path);
   }
-
-
-  private setOverrideRaw(changeType: BgChangeType, path: string, value: any): void {
-    const cur = getGlobalLabState();
-    const nextOverrides = setByPath(cur.overrides ?? {}, path, value);
-    setGlobalLabState({ ...cur, overrides: nextOverrides });
-
-    if (changeType === "rebuild" || changeType === "structural") {
-      this.rebuildDirty = true;
-    }
-
-    // emit path exactly as written (legacy base.flow.*)
-    this.emit(changeType, path);
-  }
+   
 
   private setOverride(changeType: BgChangeType, path: string, value: any): void {
     const cur = getGlobalLabState();
