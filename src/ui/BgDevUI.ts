@@ -1249,15 +1249,136 @@ box.style.borderRadius = "8px";
       body.appendChild(d);
     });
 
-    // ---- MOTION (placeholder only; no overrides yet) --------------------
+    // ---- MOTION (BG-only) ----------------------------------------------
     mkSection("MOTION", "bg.global.motion", true, (body) => {
-      const d = el("div");
-      d.textContent = "TODO: global drift / wobble / time scale (BG-only)";
-      d.style.cssText = "opacity:0.65;margin:2px 0 6px 0;";
-      body.appendChild(d);
-    });
+      // world speed X (aka global drift) in px/sec
+      {
+        const r = this.mkRow();
+        r.appendChild(this.mkLabel("worldSpeedX"));
 
-    this.root.appendChild(box);
+        const wrap = el("div");
+        wrap.style.cssText = "display:grid;grid-template-columns:1fr 74px;gap:6px;align-items:center;";
+
+        const cur = Number(this.getOverride("common.scrollSpeedX") ?? activePreset?.common?.scrollSpeedX ?? 0);
+
+        const range = el("input") as HTMLInputElement;
+        range.type = "range";
+        range.min = String(-800);
+        range.max = String(800);
+        range.step = String(1);
+        range.value = String(cur);
+        range.style.cssText = "width:100%;accent-color:rgba(120,255,180,0.95);";
+
+        const num = this.mkNumber(cur, { step: 1, min: -800, max: 800 });
+
+        const applyDrag = (v: number) => {
+          this.setOverride("realtime", "common.scrollSpeedX", v);
+          // no render here
+        };
+
+        const applyCommit = (v: number) => {
+          this.setOverride("realtime", "common.scrollSpeedX", v);
+          this.render();
+        };
+
+        // neblokuj pointerdown na range – ať funguje thumb drag
+        range.oninput = (e) => {
+          stopProp(e);
+          const v = Number(range.value);
+          num.value = String(v);
+          applyDrag(v);
+        };
+
+        range.onchange = (e) => {
+          stopProp(e);
+          applyCommit(Number(range.value));
+        };
+
+        num.onpointerdown = (e) => stopProp(e);
+        num.oninput = (e) => stopProp(e);
+        num.onchange = (e) => {
+          stopProp(e);
+          const v = Number(num.value);
+          range.value = String(v);
+          applyCommit(v);
+        };
+
+        wrap.appendChild(range);
+        wrap.appendChild(num);
+
+        r.appendChild(wrap);
+        body.appendChild(r);
+
+        const h = el("div");
+        h.textContent = "px/sec global drift of BG space (0 = stop)";
+        h.style.cssText = "opacity:0.6;font:9px monospace;margin:-1px 0 6px 95px;";
+        body.appendChild(h);
+      }
+
+      // global time scale (applies to BG layers)
+      {
+        const r = this.mkRow();
+        r.appendChild(this.mkLabel("timeScale"));
+
+        const wrap = el("div");
+        wrap.style.cssText = "display:grid;grid-template-columns:1fr 74px;gap:6px;align-items:center;";
+
+        const cur = Number(this.getOverride("common.timeScale") ?? activePreset?.common?.timeScale ?? 1);
+
+        const range = el("input") as HTMLInputElement;
+        range.type = "range";
+        range.min = String(0);
+        range.max = String(3);
+        range.step = String(0.01);
+        range.value = String(cur);
+        range.style.cssText =
+          "width:100%;" +
+          "accent-color:rgba(120,255,180,0.95);" +
+          "pointer-events:auto;" +
+          "touch-action:pan-x;";
+
+        const num = this.mkNumber(cur, { step: 0.01, min: 0, max: 3 });
+
+        const applyDrag = (v: number) => {
+          this.setOverride("realtime", "common.timeScale", v);
+          // NO this.render() here – would kill dragging
+        };
+
+        const applyCommit = (v: number) => {
+          this.setOverride("realtime", "common.timeScale", v);
+          this.render(); // ok on release
+        };
+
+        // range.onpointerdown = (e) => stopProp(e);  // ❌ pryč
+        range.oninput = (e) => {
+          stopProp(e);
+          const v = Number(range.value);
+          num.value = String(v);
+          applyDrag(v);
+        };
+
+        range.onchange = (e) => {
+          stopProp(e);
+          applyCommit(Number(range.value));
+        };
+
+        num.onpointerdown = (e) => stopProp(e);
+        num.oninput = (e) => stopProp(e);
+        num.onchange = (e) => {
+          stopProp(e);
+          const v = Number(num.value);
+          range.value = String(v);
+          applyCommit(v);
+        };
+
+        wrap.appendChild(range);
+        wrap.appendChild(num);
+
+        r.appendChild(wrap);
+        body.appendChild(r);
+      }
+    });
+this.root.appendChild(box);
   }
 
   private render(): void {
