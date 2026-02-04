@@ -49,6 +49,16 @@ function smoothstep01(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
+function parallaxKey(par: any[]): string {
+  if (!Array.isArray(par) || par.length === 0) return "";
+  // stable-ish, only fields relevant for rebuild
+  return par.map((p) => [
+    String(p?.layer ?? ""),
+    Number(p?.factor ?? 0),
+    Number(p?.densityMul ?? 0),
+  ].join(",")).join("|");
+}
+
 function normalize2(x: number, y: number): [number, number] {
   const l = Math.hypot(x, y) || 1;
   return [x / l, y / l];
@@ -198,6 +208,11 @@ export class FlowSegmentsBg {
     return FLOW_PRESETS[ix] || FLOW_PRESETS[0];
   }
 
+
+
+
+
+  
     private rebuildIfNeeded(pr: FlowPreset, logicW: number, logicH: number, baseScrollX: number, baseScrollY: number): void {
     // Rebuild must react not only to presetId changes but also to rebuild-relevant params
     // (segmentCount / segmentLen / jitter / lanes / direction / parallax density, etc.)
@@ -219,7 +234,7 @@ export class FlowSegmentsBg {
       pr.direction?.x ?? 0,
       pr.direction?.y ?? 0,
       // parallax density/shape (stringify for stable-ish signature)
-      JSON.stringify(pr.parallax ?? []),
+      parallaxKey(pr.parallax as any),
     ].join("|");
 
     if (
@@ -356,6 +371,8 @@ export class FlowSegmentsBg {
 
     pr.motion.accelLimitPxPerSec2 ??= 1200;
     pr.motion.dampingPerSec ??= 1.0;
+
+      (pr.motion as any).curlStrength ??= 0;
     pr.motion.speedPxPerSec.base ??= 120;
     pr.motion.speedPxPerSec.layerMul.far ??= 0.6;
     pr.motion.speedPxPerSec.layerMul.mid ??= 0.85;
@@ -443,6 +460,22 @@ export class FlowSegmentsBg {
       p.vy += (wave * mw.ampPx) * 0.10 * dt;
     }
 
+
+      // curl: gentle swirl in direction field (legacy "flow.curl" -> motion.curlStrength)
+      const curl = Number(((pr as any)?.motion?.curlStrength) ?? 0);
+      if (curl > 0) {
+        const s = (layerId === "far" ? 11.0 : layerId === "mid" ? 23.0 : 37.0);
+        // smooth-ish pseudo-field; keeps determinism, no allocations
+        const n = Math.sin(p.x * 0.004 + p.y * 0.003 + t * 0.7 + s);
+        const ang = n * curl * 0.35 * dt; // radians this step
+        const ca = Math.cos(ang);
+        const sa = Math.sin(ang);
+        const vx = p.vx * ca - p.vy * sa;
+        const vy = p.vx * sa + p.vy * ca;
+        p.vx = vx;
+        p.vy = vy;
+      }
+
     // accel limit + damping (stability)
     // prefer direction.x/y baseline
     const dir = normalize2(pr.direction.x, pr.direction.y);
@@ -513,7 +546,6 @@ if (sy > logicH + pad) p.y = scrollY - pad;
       // Legacy compatibility (BgDevUI sliders):
       // - segmentCount -> spawn.countBase
       // - segmentLen   -> segments.lengthPx.{min,max}
-      // - jitter       -> spawn.yJitterPx
       // - speed        -> motion.speedPxPerSec.base (as multiplier vs preset base)
       const legacySpeedMul = Number((flowOv as any).speed);
       if (Number.isFinite(legacySpeedMul) && legacySpeedMul >= 0) {
@@ -531,7 +563,6 @@ if (sy > logicH + pad) p.y = scrollY - pad;
     // Legacy compatibility (BgDevUI sliders):
     // - segmentCount -> spawn.countBase
     // - segmentLen   -> segments.lengthPx.{min,max}
-    // - jitter       -> spawn.yJitterPx
     const legacyCount = Number(flowOv.segmentCount);
     if (Number.isFinite(legacyCount) && legacyCount > 0) {
       flowOv.spawn = { ...(flowOv.spawn ?? {}), countBase: legacyCount };
@@ -540,11 +571,6 @@ if (sy > logicH + pad) p.y = scrollY - pad;
     const legacyLen = Number(flowOv.segmentLen);
     if (Number.isFinite(legacyLen) && legacyLen > 0) {
       flowOv.segments = { ...(flowOv.segments ?? {}), lengthPx: { min: legacyLen, max: legacyLen } };
-    }
-
-    const legacyJ = Number(flowOv.jitter);
-    if (Number.isFinite(legacyJ) && legacyJ >= 0) {
-      flowOv.spawn = { ...(flowOv.spawn ?? {}), yJitterPx: legacyJ };
     }
     // Legacy compatibility (BgDevUI sliders):
     // - thickness -> segments.thicknessPx
@@ -560,12 +586,21 @@ if (sy > logicH + pad) p.y = scrollY - pad;
       flowOv.render = { ...(flowOv.render ?? {}), alphaMul: legacyAlpha };
     }
 
+
+  // Legacy compatibility (BgDevUI sliders):
+  // - curl -> motion.curlStrength (adds gentle swirl to direction field)
+  const legacyCurl = Number((flowOv as any).curl);
+  if (Number.isFinite(legacyCurl) && legacyCurl >= 0) {
+    flowOv.motion = { ...(flowOv.motion ?? {}), curlStrength: legacyCurl };
+  }
+
     // Legacy compatibility (BgDevUI sliders):
     // - parallaxDepth -> modifies parallax factors (0 = flat, 1 = preset, 2 = deeper)
     // - farOpacity / nearOpacity -> per-layer alpha multipliers (mid derived)
     // - far/mid/nearSpeedMul -> per-layer speed multipliers
     const legacyParDepth = Number((flowOv as any).parallaxDepth);
     const legacyFarOp = Number((flowOv as any).farOpacity);
+    const legacyMidOp = Number((flowOv as any).midOpacity);
     const legacyNearOp = Number((flowOv as any).nearOpacity);
 
     const legacyFarSp = Number((flowOv as any).farSpeedMul);
@@ -641,24 +676,25 @@ if (sy > logicH + pad) p.y = scrollY - pad;
     }
 
     // --- Per-layer opacity multipliers (realtime) ---
-    if (Number.isFinite(legacyFarOp) || Number.isFinite(legacyNearOp)) {
-      // base colors from preset (fallback to the same defaults you use in draw)
-      const baseFar = (pr as any)?.colors?.far ?? [0.55, 0.85, 1.0, 0.14];
-      const baseMid = (pr as any)?.colors?.mid ?? [0.75, 0.95, 1.0, 0.20];
-      const baseNear = (pr as any)?.colors?.near ?? [0.90, 1.00, 1.0, 0.26];
-
+    // IMPORTANT: legacy farOpacity/nearOpacity must NOT re-introduce preset tint.
+    // Store only alpha multipliers and apply them at draw-time to whatever RGB is active (default white).
+    if (Number.isFinite(legacyFarOp) || Number.isFinite(legacyMidOp) || Number.isFinite(legacyNearOp)) {
       const farOp = Number.isFinite(legacyFarOp) ? clamp(legacyFarOp, 0, 1) : 1.0;
       const nearOp = Number.isFinite(legacyNearOp) ? clamp(legacyNearOp, 0, 1) : 1.0;
 
-      // derive mid (simple, robust): average of far & near
-      const midOp = clamp((farOp + nearOp) * 0.5, 0, 1);
+      // mid: explicit wins, otherwise derive from far/near
+      const midOp = Number.isFinite(legacyMidOp)
+        ? clamp(legacyMidOp, 0, 1)
+        : clamp((farOp + nearOp) * 0.5, 0, 1);
 
-      flowOv.colors = {
-        ...((pr as any).colors ?? {}),
-        ...(flowOv.colors ?? {}),
-        far: [baseFar[0], baseFar[1], baseFar[2], baseFar[3] * farOp],
-        mid: [baseMid[0], baseMid[1], baseMid[2], baseMid[3] * midOp],
-        near: [baseNear[0], baseNear[1], baseNear[2], baseNear[3] * nearOp],
+      flowOv.render = {
+        ...(flowOv.render ?? {}),
+        layerAlphaMul: {
+          ...((flowOv.render as any)?.layerAlphaMul ?? {}),
+          far: farOp,
+          mid: midOp,
+          near: nearOp,
+        },
       };
     }
     
@@ -680,12 +716,16 @@ if (sy > logicH + pad) p.y = scrollY - pad;
 
     const finalPr: any = this.normalizeFlowSegmentsParams(merged);
 
-    console.log(
-      "[FLOW PARAMS]",
-      "lengthPx =", finalPr?.segments?.lengthPx,
-      "thicknessPx =", finalPr?.segments?.thicknessPx,
-      "countBase =", finalPr?.spawn?.countBase
-    );
+    if ((globalThis as any).__CM_BG_DEBUG_FLOW_PARAMS) {
+      if ((globalThis as any).__CM_BG_DEBUG_FLOW_PARAMS) {
+      console.log(
+        "[FLOW PARAMS]",
+        "lengthPx =", finalPr?.segments?.lengthPx,
+        "thicknessPx =", finalPr?.segments?.thicknessPx,
+        "countBase =", finalPr?.spawn?.countBase
+      );
+    }
+    }
 
     this.rebuildIfNeeded(finalPr, args.logicW, args.logicH, Number(args.scrollX ?? 0), Number(args.scrollY ?? 0));
 
@@ -730,8 +770,11 @@ if (sy > logicH + pad) p.y = scrollY - pad;
         layerId === "mid" ? [1.0, 1.0, 1.0, 1.0] :
                             [1.0, 1.0, 1.0, 1.0]
       );
+
       const aMul = Number(finalPr.render?.alphaMul ?? 1);
-      gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3] * aMul);
+      const layerMul = Number((finalPr.render as any)?.layerAlphaMul?.[layerId] ?? 1);
+
+      gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3] * aMul * layerMul);
       gl.uniform1f(this.uThick, Math.max(1, finalPr.segments.thicknessPx));
 
       const arr = this.layers[layerId];

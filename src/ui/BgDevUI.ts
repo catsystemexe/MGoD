@@ -698,6 +698,9 @@ export class BgDevUI {
         const curFarOp = Number(getUiOverride("base.flow.farOpacity") ?? 1);
         mk("farOpacity", curFarOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.farOpacity");
 
+        const curMidOp = Number(getUiOverride("base.flow.midOpacity") ?? 1);
+        mk("midOpacity", curMidOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.midOpacity");
+        
         const curNearOp = Number(getUiOverride("base.flow.nearOpacity") ?? 1);
         mk("nearOpacity", curNearOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.nearOpacity");
 
@@ -718,10 +721,6 @@ export class BgDevUI {
     {
       const curCurl = Number(this.getOverride("base.flow.curl") ?? flow0?.curl ?? 0.8);
       mk("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
-
-      const curJit = Number(this.getOverride("base.flow.jitter") ?? flow0?.jitter ?? 0.2);
-      mk("jitter", curJit, { min: 0, max: 40, step: 0.5 }, "rebuild", "base.flow.jitter");
-
       const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
       mk("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");
     }
