@@ -166,6 +166,23 @@ export class WebGLSceneRenderer {
   render(alpha: number = 1): void {
     const gl = this.gl;
 
+    // --- baseline 2D state (robust against leaked BG state) ---
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.colorMask(true, true, true, true);
+    gl.depthMask(true);
+
+    // keep blend ON (sprites + VFX)
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFuncSeparate(
+      gl.SRC_ALPHA,
+      gl.ONE_MINUS_SRC_ALPHA,
+      gl.ONE,
+      gl.ONE_MINUS_SRC_ALPHA
+    );
+
 
     const world = (window as any).__CM?.game?.world;
     const sx = Number(world?.scrollX ?? 0);

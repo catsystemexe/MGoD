@@ -589,7 +589,7 @@ function normalizeBgPresetToV2(p: any): any {
       const a = loop.getAlpha?.() ?? 1;
 
       // Render everything into scene RT (single pass, known-good)
-      gfx.renderScene(() => {
+      gfx.renderScene((gl) => {
         // BG pass first (behind everything)
         const world = (window as any).__CM?.game?.world;
         const sx = world?.scrollX ?? 0;
@@ -599,6 +599,24 @@ function normalizeBgPresetToV2(p: any): any {
           time: performance.now() / 1000,
           scroll: { x: sx, y: sy },
         } as any);
+
+          // --- HARD reset GL state after BG (prevents scissor/blend/masks leaking) ---
+          gl.disable(gl.SCISSOR_TEST);
+          gl.disable(gl.DEPTH_TEST);
+          gl.disable(gl.CULL_FACE);
+          gl.colorMask(true, true, true, true);
+          gl.depthMask(true);
+
+          // sprites / alpha-friendly
+          gl.enable(gl.BLEND);
+          gl.blendEquation(gl.FUNC_ADD);
+          gl.blendFuncSeparate(
+            gl.SRC_ALPHA,
+            gl.ONE_MINUS_SRC_ALPHA,
+            gl.ONE,
+            gl.ONE_MINUS_SRC_ALPHA
+          );
+
 
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
