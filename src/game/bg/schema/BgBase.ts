@@ -49,7 +49,7 @@ export type BgBase =
       shader: BgShaderBase;
     }
   | {
-      kind: "flowSegments";
+      kind: "flowSegments" | "flowRibbon";
       common: BgBaseCommon;
       quality: BgBaseQuality;
       flow: BgFlowSegmentsBase;

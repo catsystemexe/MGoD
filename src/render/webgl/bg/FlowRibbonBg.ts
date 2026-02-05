@@ -51,6 +51,7 @@ export type FlowBgDrawArgs = {
   scrollX: number;
   scrollY: number;
   presetIndex: number;
+  flow?: any;
 };
 
 type LayerState = {
@@ -180,6 +181,7 @@ export class FlowRibbonBg {
   // produces smooth “water ribbons” (many thin triangle strips)
   private drawLayerLanes(
     pr: FlowPreset,
+    ov: any,
     layerId: FlowLayerId,
     dt: number,
     t: number,
@@ -189,38 +191,37 @@ export class FlowRibbonBg {
     const gl = this.gl;
 
     // keep the “layer exists in parallax” contract (even if we ignore factor here)
-    const pl = pr.parallax.find(x => x.layer === layerId);
+    const pl = Array.isArray((pr as any).parallax) ? (pr as any).parallax.find((x: any) => x?.layer === layerId) : null;
     if (!pl) return;
 
-void pl;
-
     const lanes = Number.isFinite(ov?.ribbonLanes)
-    ? (ov.ribbonLanes | 0)
-    : (pr.ribbon?.lanes ?? (pr.spawn.distribution === "lanes" ? (pr.spawn.lanes?.count ?? 10) : 10));
-    const layerMul = pr.motion.speedPxPerSec.layerMul[layerId] ?? 1.0;
-    const baseSpeed = pr.motion.speedPxPerSec.base * layerMul;
+      ? (ov.ribbonLanes | 0)
+      : ((pr as any).ribbon?.lanes ??
+          ((pr as any).spawn?.distribution === "lanes" ? (((pr as any).spawn?.lanes?.count ?? 10) | 0) : 10));
+
+    const layerMul = (pr as any).motion?.speedPxPerSec?.layerMul?.[layerId] ?? 1.0;
+    const baseSpeed = ((pr as any).motion?.speedPxPerSec?.base ?? 0) * layerMul;
 
     // ribbon sampling along X
-    const stepPx = Number.isFinite(ov?.ribbonStepPx)
-    ? (ov.ribbonStepPx | 0)
-    : (pr.ribbon?.stepPx ?? 7);
+    const stepPx = Number.isFinite(ov?.ribbonStepPx) ? (ov.ribbonStepPx | 0) : (((pr as any).ribbon?.stepPx ?? 7) | 0);
     const xPad = 96;
-    const nodes = Math.max(8, Math.ceil((logicW + xPad * 2) / stepPx) + 2);
+    const nodes = Math.max(8, Math.ceil((logicW + xPad * 2) / Math.max(1, stepPx)) + 2);
     const x0 = -xPad;
 
     // thickness per layer
-    const thickBase = Math.max(1, pr.segments.thicknessPx);
-    let tm = (pr.ribbon?.thicknessMul?.[layerId] ?? 1.0);
-      if (layerId === "far" && Number.isFinite(ov?.thicknessMulFar)) tm = ov.thicknessMulFar;
-      if (layerId === "mid" && Number.isFinite(ov?.thicknessMulMid)) tm = ov.thicknessMulMid;
-      if (layerId === "near" && Number.isFinite(ov?.thicknessMulNear)) tm = ov.thicknessMulNear;
-      const thick = thickBase * tm;
+    const thickBase = Math.max(1, (pr as any).segments?.thicknessPx ?? 1);
+    let tm = (pr as any).ribbon?.thicknessMul?.[layerId] ?? 1.0;
+    if (layerId === "far" && Number.isFinite(ov?.thicknessMulFar)) tm = ov.thicknessMulFar;
+    if (layerId === "mid" && Number.isFinite(ov?.thicknessMulMid)) tm = ov.thicknessMulMid;
+    if (layerId === "near" && Number.isFinite(ov?.thicknessMulNear)) tm = ov.thicknessMulNear;
+    const thick = thickBase * tm;
 
     // meander amplitude/freq
-    const ampMin = pr.motion.yMeander?.enabled ? pr.motion.yMeander.ampPx.min : 0.0;
-    const ampMax = pr.motion.yMeander?.enabled ? pr.motion.yMeander.ampPx.max : 0.0;
-    const hzMin = pr.motion.yMeander?.enabled ? pr.motion.yMeander.freqHz.min : 0.0;
-    const hzMax = pr.motion.yMeander?.enabled ? pr.motion.yMeander.freqHz.max : 0.0;
+    const yMe = (pr as any).motion?.yMeander;
+    const ampMin = yMe?.enabled ? (yMe.ampPx?.min ?? 0) : 0.0;
+    const ampMax = yMe?.enabled ? (yMe.ampPx?.max ?? 0) : 0.0;
+    const hzMin = yMe?.enabled ? (yMe.freqHz?.min ?? 0) : 0.0;
+    const hzMax = yMe?.enabled ? (yMe.freqHz?.max ?? 0) : 0.0;
 
     // phase (move left); wrap by full width to avoid periodic snapping shimmer
     const st = this.layerState[layerId];
@@ -231,18 +232,19 @@ void pl;
     // buffer sizing
     const floatsPerVert = 3;
     const vertsPerLane = nodes * 2;
-    const totalVerts = lanes * vertsPerLane;
+    const totalVerts = Math.max(0, lanes) * vertsPerLane;
     const need = totalVerts * floatsPerVert;
     if (this.buf.length < need) this.buf = new Float32Array(need);
 
     let w = 0;
-    const laneStarts = new Int32Array(lanes);
+    const laneStarts = new Int32Array(Math.max(0, lanes));
 
     // optional: vertical spread from preset
+    const spawn = (pr as any).spawn ?? {};
     const yJ =
-      pr.spawn.distribution === "uniform_y"
-        ? (pr.spawn.yJitterPx ?? 0)
-        : (pr.spawn.lanes?.jitterYPx ?? 0);
+      spawn.distribution === "uniform_y"
+        ? (spawn.yJitterPx ?? 0)
+        : (spawn.lanes?.jitterYPx ?? 0);
 
     for (let laneId = 0; laneId < lanes; laneId++) {
       const seed = st.seed + laneId * 97.13;
@@ -264,8 +266,8 @@ void pl;
         const x = x0 + (i * stepPx) - (st.phaseX % wrapW);
 
         let y = baseY + laneJ;
-        if (pr.motion.yMeander?.enabled) {
-          const coup = pr.motion.yMeander.xPhaseCoupling;
+        if (yMe?.enabled) {
+          const coup = yMe.xPhaseCoupling ?? 0;
           const wHz = Math.PI * 2 * hz;
           y += Math.sin((t * wHz) + ph + x * coup) * amp;
         }
@@ -297,7 +299,9 @@ void pl;
 
   draw(args: FlowBgDrawArgs): void {
     const gl = this.gl;
+
     const pr = this.preset(args.presetIndex);
+    const ov = (args?.flow ?? {}) as any;
 
     this.rebuildIfNeeded(pr);
 
@@ -308,9 +312,10 @@ void pl;
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
 
-    gl.enable(gl.BLEND);const blend = String(ov?.blend ?? "add");
-      if (blend === "alpha") gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      else gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    gl.enable(gl.BLEND);
+    const blend = String(ov?.blend ?? "add");
+    if (blend === "alpha") gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    else gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
     gl.useProgram(this.prog);
     gl.bindVertexArray(this.vao);
@@ -320,7 +325,7 @@ void pl;
     const order: FlowLayerId[] = ["far", "mid", "near"];
     for (const layerId of order) {
       const c =
-        pr.colors?.[layerId] ??
+        (pr as any).colors?.[layerId] ??
         (layerId === "far"
           ? [0.55, 0.85, 1.0, 0.14]
           : layerId === "mid"
@@ -329,11 +334,9 @@ void pl;
 
       gl.uniform4f(this.uColor, c[0], c[1], c[2], c[3]);
 
-      this.drawLayerLanes(pr, layerId, dt, t, args.logicW, args.logicH);
+      this.drawLayerLanes(pr, ov, layerId, dt, t, args.logicW, args.logicH);
     }
 
     gl.bindVertexArray(null);
   }
 }
-
-export { FLOW_PRESETS };

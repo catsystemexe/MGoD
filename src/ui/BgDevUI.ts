@@ -5,7 +5,7 @@ import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabSt
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
 import { mergeDeep } from "../game/bg/lab/mergeDeep";
-
+import { FLOW_PRESETS } from "../render/webgl/bg/flowPresets";
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
 }
@@ -858,12 +858,21 @@ box.style.borderRadius = "8px";
         row.style.padding = "3px";
       }
 
-      row.onclick = () => {
-        const cur = getGlobalLabState() as any;
-        const next = { ...cur, ui: { ...(cur.ui ?? {}), activeLayerIx: i } };
-        setGlobalLabState(next);
-        this.render();
-      };
+      row.onclick = (ev) => {
+          const t = ev.target as HTMLElement | null;
+          const tag = (t?.tagName ?? "").toUpperCase();
+
+          // If click originated from control inside the row, don't treat it as "select layer"
+          if (tag === "SELECT" || tag === "OPTION" || tag === "INPUT" || tag === "BUTTON" || tag === "TEXTAREA") {
+            stopProp(ev as any);
+            return;
+          }
+
+          const cur = getGlobalLabState() as any;
+          const next = { ...cur, ui: { ...(cur.ui ?? {}), activeLayerIx: i } };
+          setGlobalLabState(next);
+          this.render();
+        };
 
       const chk = el("input") as HTMLInputElement;
       chk.type = "checkbox";
@@ -1011,6 +1020,68 @@ box.style.borderRadius = "8px";
       row.appendChild(dnLd);
 
       row.appendChild(label);
+      
+// --- kind + preset (MVP) -------------------------------------------
+// NOTE: write into overrides.layers[i].kind + overrides.layers[i].params.flow.presetId
+      {
+
+        // kind select
+        const kindCur = String((l as any)?.kind ?? "shader");
+        const kindSel = this.mkSelect(kindCur, ["shader", "flowSegments", "flowRibbon"]);
+        kindSel.style.cssText += ";width:120px;";
+        kindSel.onpointerdown = (e) => stopProp(e as any);
+        kindSel.onchange = (ev) => {
+          stopProp(ev as any);
+          const nextKind = String(kindSel.value || "shader");
+
+          // ensure override slot exists
+          const { cur, ov } = ensureOvLayerSlot(i);
+
+          ov.layers[i].kind = nextKind;
+
+          // ensure params object exists for flow kinds
+          ov.layers[i].params = ov.layers[i].params ?? {};
+
+          if (nextKind === "flowSegments" || nextKind === "flowRibbon") {
+            ov.layers[i].params.flow = ov.layers[i].params.flow ?? {};
+            // set default presetId if missing
+            if (!ov.layers[i].params.flow.presetId) {
+              ov.layers[i].params.flow.presetId = "0"; // TEMP: id will be remapped later
+            }
+          }
+
+          setGlobalLabState({ ...cur, overrides: ov });
+          this.rebuildDirty = true;
+          this.emit("structural", `layers.${i}.kind`);
+          this.render();
+        };
+        row.appendChild(kindSel);
+
+        // preset select (only for flow kinds) – uses numeric string for now ("0","1",...) to avoid import coupling
+        const kindNow = String((l as any)?.kind ?? "shader");
+        if (kindNow === "flowSegments" || kindNow === "flowRibbon") {
+          const { cur, ov } = ensureOvLayerSlot(i);
+          ov.layers[i].params = ov.layers[i].params ?? {};
+          ov.layers[i].params.flow = ov.layers[i].params.flow ?? {};
+
+          const curPreset = String(ov.layers[i].params.flow.presetId ?? "0");
+          const presetSel = this.mkSelect(curPreset, ["0","1","2","3","4","5","6","7"]);
+          presetSel.style.cssText += ";width:110px;";
+          presetSel.onpointerdown = (e) => stopProp(e as any);
+          presetSel.onchange = (ev) => {
+            stopProp(ev as any);
+            const { cur, ov } = ensureOvLayerSlot(i);
+            ov.layers[i].params = ov.layers[i].params ?? {};
+            ov.layers[i].params.flow = ov.layers[i].params.flow ?? {};
+            ov.layers[i].params.flow.presetId = String(presetSel.value ?? "0");
+            setGlobalLabState({ ...cur, overrides: ov });
+            this.rebuildDirty = true;
+            this.emit("rebuild", `layers.${i}.params.flow.presetId`);
+            this.render();
+          };
+          row.appendChild(presetSel);
+        }
+      }
 
   row.appendChild(up);
   row.appendChild(down);

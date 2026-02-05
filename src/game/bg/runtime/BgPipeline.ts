@@ -249,14 +249,23 @@ export class BgPipeline {
       // pipeline-managed blend (overridden per-layer)
       gl.enable(gl.BLEND);
 
-      for (const layer of layers) {
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
         if (!layer || typeof layer !== "object") continue;
         if (layer.enabled === false) continue;
 
-        const layerId = String(layer.id ?? "");
-        const kind = String(layer.kind ?? "");
-        if (!layerId || !kind) continue;
+        const layerId = String(layer.id ?? `layer_${i}`);
+          const kind = String(layer.kind ?? "");
+          if (!kind) continue;
 
+        // If kind changed for the same layerId, recreate renderer (cache invalidation)
+        const existing = this.renderers.get(layerId);
+        if (existing && existing.kind !== kind) {
+          try { existing.r?.dispose?.(); } catch {}
+          this.renderers.delete(layerId);
+        }
+
+        
         // get or create renderer per layerId
         let ent = this.renderers.get(layerId);
         if (!ent) {
