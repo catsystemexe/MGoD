@@ -1,6 +1,7 @@
-import { BgPipeline } from "./game/bg/runtime/BgPipeline";
 // import { VFXSystem } from "./game/vfx/VFXSystem";
 // import { BgSystem } from "./game/bg/runtime/BgSystem";
+import { CONTENT } from "./game/content/CONTENT";
+
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
@@ -241,6 +242,17 @@ async function main() {
       console.log("[PAUSE]", paused ? "PAUSED" : "RUN", "tick=", loop.getTick?.());
       return;
       }
+
+      // Dev hotkeys toggle (U)
+    if (e.code === "KeyU") {
+      const ui = (globalThis as any).__CM_BG_DEV_UI__;
+      if (ui && typeof ui.toggle === "function") {
+        ui.toggle();
+      } else {
+        console.log("[BG_DEV_UI] not ready");
+      }
+      return;
+    }
 // Game over keys (Y/N)
     if (!session?.gameOver) return;
 
@@ -278,43 +290,164 @@ async function main() {
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
-    // --- BG (Krok 1): single hardcoded default preset, no dev UI, no presets file ---
-    const bgPipeline = new BgPipeline();
-    bgPipeline.init(gl, LOGIC_W, LOGIC_H);
-    bgPipeline.setPreset({
-      id: "default",
-      name: "Default",
-      schemaVersion: 2,
-      seed: 0,
-      common: { scrollSpeedX: -60 },
-      quality: {},
+
+
+  // --- BG pipeline (new runtime)
+  const bgPipeline = new BgPipeline();
+  bgPipeline.init(gl, LOGIC_W, LOGIC_H);
+
+  // --- BG content from store (single source of truth)
+  const content: any = CONTENT;
+
+  // BG content from validated bundle
+  const bgPresetsFile: any = content.bgPresets;
+  const bgBindings: any = content.bgBindings;
+
+  const bgPresetsArr: any[] = Array.isArray(bgPresetsFile?.presets) ? bgPresetsFile.presets : [];
+
+  (window as any).__CM = (window as any).__CM || {};
+  (window as any).__CM.content = content;
+  
+  const pickPresetIdForLevel = (levelId: string): string | null => {
+    const bindings = Array.isArray(bgBindings?.bindings) ? bgBindings.bindings : [];
+    const hit = bindings.find((b: any) => b?.levelId === levelId);
+    return (hit?.presetId ?? bgBindings?.defaultPresetId ?? null) as any;
+  };
+
+  // IMPORTANT: use your real starting levelId here.
+  // If you start in "level1", bind that in src/game/content/bgBindings.json
+  const startLevelId = "level1";
+  const initialId = pickPresetIdForLevel(startLevelId);
+  const initial = bgPresetsArr.find((p: any) => p?.id === initialId) ?? bgPresetsArr[0] ?? null;
+
+  if (initial) bgPipeline.setPreset(initial);
+
+  // expose dev API
+  (window as any).__CM.bg = {
+    presets: () => bgPresetsArr,
+    setPresetById: (id: string) => {
+      const p = bgPresetsArr.find((x: any) => x?.id === id);
+      if (p) bgPipeline.setPreset(p);
+    },
+    getActivePresetId: () => {
+      return (window as any).__CM.bgActivePresetId ?? null;
+    },
+  };
+  (window as any).__CM.bgActivePresetId = initial?.id ?? null;
+
+function normalizeBgPresetToV2(p: any): any {
+  if (!p || typeof p !== "object") return p;
+
+  // already v2
+  if (Array.isArray((p as any).layers)) return p;
+
+  // v1 schema (kind + base)
+  if ((p as any).base && typeof (p as any).base === "object") {
+    const base: any = (p as any).base;
+    return {
+      id: (p as any).id,
+      name: (p as any).name ?? (p as any).id,
+      common: base.common ?? {},
+      quality: base.quality ?? {},
       layers: [
         {
           id: "layer0",
-          kind: "meshTerrain",
+          kind: String(base.kind ?? (p as any).kind ?? "shader"),
           enabled: true,
           opacity: 1,
           blend: "alpha",
           parallaxMul: 1,
           params: {
-            mesh: {
-              amp: 0.22,
-              freq: 8.0,
-              speed: 0.25,
-              tilt: 0.9,
-              persp: 1.15,
-              xSpan: 2.8,
-              lineAlpha: 0.22,
-              gridX: 120,
-              gridZ: 80
-            }
+            shader: base.shader ?? {},
+            flow: base.flow ?? {},
+          },
+        },
+      ],
+    };
+  }
+
+  // MVP content (kind + flow/shader directly on preset)
+  const kind = String((p as any).kind ?? "shader");
+  const common = (p as any).common ?? {};
+  const quality = (p as any).quality ?? {};
+  const flow = (p as any).flow ?? {};
+  const shader = (p as any).shader ?? {};
+
+  return {
+    id: (p as any).id,
+    name: (p as any).name ?? (p as any).id,
+    common,
+    quality,
+    layers: [
+      {
+        id: "layer0",
+        kind,
+        enabled: true,
+        opacity: 1,
+        blend: "alpha",
+        parallaxMul: 1,
+        params: { shader, flow },
+      },
+    ],
+  };
+}
+
+
+  // wrap setPreset to keep active id
+  const _setPresetById = (window as any).__CM.bg.setPresetById;
+  (window as any).__CM.bg.setPresetById = (id: string) => {
+    (window as any).__CM.bgActivePresetId = id;
+    _setPresetById(id);
+  };
+
+  // BG Dev UI instance (toggled by U)
+  (globalThis as any).__CM_BG_DEV_UI__ = new BgDevUI((window as any).__CM.bg, { defaultVisible: false });
+  // --- BG LAB: apply overrides into runtime (UI -> BgPipeline) ---
+
+  
+  const __cm: any = (window as any).__CM = (window as any).__CM || {};
+
+  try { __cm.__bgLabUnsub?.(); } catch {}
+
+      __cm.__bgLabUnsub = BgLabBus.on((meta) => {
+        try {
+          const cm: any = (globalThis as any).__CM ?? {};
+          const st: any = cm.bgLabState;
+
+          // authoritative source: lab state (UI keeps it in sync)
+          const activeId: string | null =
+            st?.activePresetId ?? (globalThis as any).__CM?.bgActivePresetId ?? null;
+          if (!activeId) return;
+
+          const basePreset = bgPresetsArr.find((p: any) => p?.id === activeId);
+          if (!basePreset) return;
+
+          const overrides = st?.overrides ?? {};
+          const snapshot = mergeDeep(basePreset, overrides);
+
+          // MVP: apply by setPreset; BgPipeline decides rebuild/structural
+          bgPipeline.setPreset(snapshot);
+
+          if (DEV) {
+            console.log("[BG][LAB]", meta?.changeType, meta?.path);
           }
+        } catch (e) {
+          console.warn("[BG] apply overrides failed", e);
         }
-      ]
-    } as any);
+      });
+
+ 
+  
 
 
+  // const bg = new BgSystem();
 
+ 
+  
+
+
+  // bg.init(gl);
+  // (game as any).bg = bg;
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
@@ -451,14 +584,6 @@ async function main() {
         const world = (window as any).__CM?.game?.world;
         const sx = world?.scrollX ?? 0;
         const sy = world?.scrollY ?? 0;
-
-        const t = performance.now() / 1000;
-        bgPipeline.draw({
-          timeSec: t,
-          time: t, // legacy/compat
-          scroll: { x: Number(sx) || 0, y: Number(sy) || 0 },
-        } as any);
-
 // --- HARD reset GL state after BG (prevents scissor/blend/masks leaking) ---
           gl.disable(gl.SCISSOR_TEST);
           gl.disable(gl.DEPTH_TEST);

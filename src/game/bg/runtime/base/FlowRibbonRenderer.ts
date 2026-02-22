@@ -39,9 +39,26 @@ export class FlowRibbonRenderer implements BaseRenderer {
     if (!this.gl || !this.impl) return;
 
     const p = this.params ?? {};
-    const common = p.common ?? {};
-    const flow = p.flow ?? {};
+    const common = p.common ?? p.params?.common ?? {};
+    const flow =
+      (p.flow ??
+        p.params?.flow ??
+        (Array.isArray(p.layers) ? p.layers?.[0]?.params?.flow : undefined) ??
+        {}) as any;
+    
 
+    const dbg = (globalThis as any).__DBG_FLOW_RIBBON__;
+    if (dbg) {
+      // vypiš jen 1× za ~0.5s, ať to neletí
+      const now = performance.now();
+      const last = (globalThis as any).__DBG_FLOW_RIBBON_LAST__ ?? 0;
+      if (now - last > 500) {
+        (globalThis as any).__DBG_FLOW_RIBBON_LAST__ = now;
+        console.log("[DBG_FLOW_RIBBON] flow keys:", Object.keys(flow));
+        console.log("[DBG_FLOW_RIBBON] ribbonStepPx=", (flow as any).ribbonStepPx, "ribbon?.stepPx=", (flow as any).ribbon?.stepPx);
+      }
+    }
+    
     const mul = Number(common.scrollMul ?? 1);
     const scrollX = (this.scrollX + Number(common.scrollX ?? 0)) * mul;
     const scrollY = (this.scrollY + Number(common.scrollY ?? 0)) * mul;
@@ -60,7 +77,11 @@ export class FlowRibbonRenderer implements BaseRenderer {
   }
 
   private resolvePresetIndex(params: any): number {
-    const flow = params?.flow ?? {};
+    const flow =
+      (params?.flow ??
+        params?.params?.flow ??
+        (Array.isArray(params?.layers) ? params?.layers?.[0]?.params?.flow : undefined) ??
+        {}) as any;
     const presetId = typeof flow.presetId === "string" ? flow.presetId : "";
     if (presetId) {
       const ix = (FLOW_PRESETS as any[]).findIndex((p: any) => p?.id === presetId);

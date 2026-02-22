@@ -5,7 +5,6 @@ import { createDefaultBgLabState, type BgLabState } from "../game/bg/lab/BgLabSt
 import { bgBaseUiLayout, type UiControl, type UiSection } from "./bg/bgUiLayout";
 
 import { mergeDeep } from "../game/bg/lab/mergeDeep";
-import { FLOW_PRESETS } from "../render/webgl/bg/flowPresets";
 function el<K extends keyof HTMLElementTagNameMap>(tag: K) {
   return document.createElement(tag);
 }
@@ -38,7 +37,16 @@ function mapUiPathToOverridePath(uiPath: string): string {
   // IMPORTANT:
   // - v1 presets have NO layers => renderer reads preset.flow / preset.shader / preset.kind
   // - v2 presets have layers[] => renderer reads layers[ix].params.flow / layers[ix].params.shader / layers[ix].kind
-  const hasLayers = !!st?.ui?.activePresetHasLayers;
+    // Runtime is normalized to V2 => presets effectively always have layers[].
+    // If UI flag is missing (e.g. "LEGACY (v1)" view), default to TRUE so overrides hit layers[].params.*
+    const hasLayers = (st?.ui?.activePresetHasLayers === undefined || st?.ui?.activePresetHasLayers === null)
+      ? true
+      : !!st?.ui?.activePresetHasLayers;
+    // Special-case: blend is pipeline-level per-layer field (layers[i].blend),
+    // NOT a renderer flow param. Storing it under params.flow makes it a no-op.
+    if (uiPath === "base.flow.blend") {
+      return hasLayers ? `layers.${activeIx}.blend` : "blend";
+    }
 
   // allow "base.*" paths from layouts
   if (uiPath.startsWith("base.")) {
@@ -135,6 +143,89 @@ function setByPath(root: any, path: string, value: any): any {
 function stopProp(e: Event) {
   e.stopPropagation();
 }
+
+
+type LegacyTileDef = {
+  label: string;
+  uiPath: string;       // UI path (e.g. "base.flow.speed") -> mapped by mapUiPathToOverridePath()
+  change: BgChangeType; // "realtime" | "rebuild" | "structural"
+  min: number;
+  max: number;
+  step: number;
+  // default value fallback when neither override nor preset has it
+  def: (ctx: { flow0: any }) => number;
+};
+
+type LegacyGroupDef = {
+  title: string;
+  tiles: LegacyTileDef[];
+};
+
+// NOTE: this is intentionally "legacy-like" minimal 3-up grid (matches old flowSegments block)
+const LEGACY_FLOW_DEF: LegacyGroupDef[] = [
+  {
+    title: "FLOW",
+    tiles: [
+      { label: "speed", uiPath: "base.flow.speed", change: "realtime", min: 0, max: 3, step: 0.01, def: ({ flow0 }) => fnum(flow0?.speed, 1) },
+      { label: "alpha", uiPath: "base.flow.alpha", change: "realtime", min: 0, max: 1, step: 0.01, def: ({ flow0 }) => fnum(flow0?.alpha, 0.7) },
+      { label: "curl",  uiPath: "base.flow.curl",  change: "realtime", min: 0, max: 3, step: 0.01, def: ({ flow0 }) => fnum(flow0?.curl, 0.8) },
+    ],
+  },
+  {
+    title: "PARALLAX (rebuild)",
+    tiles: [
+      { label: "depth",  uiPath: "base.flow.parallaxDepth",  change: "rebuild", min: 0, max: 2, step: 0.01, def: (_) => 1 },
+      { label: "spread", uiPath: "base.flow.parallaxSpread", change: "rebuild", min: 0, max: 2, step: 0.01, def: (_) => 1 },
+      { label: "bias",   uiPath: "base.flow.parallaxBias",   change: "rebuild", min: -1, max: 1, step: 0.01, def: (_) => 0 },
+    ],
+  },
+  {
+    title: "LAYER ALPHA",
+    tiles: [
+      { label: "farAlpha",  uiPath: "base.flow.farOpacity",  change: "realtime", min: 0, max: 1, step: 0.01, def: (_) => 1 },
+      { label: "midAlpha",  uiPath: "base.flow.midOpacity",  change: "realtime", min: 0, max: 1, step: 0.01, def: (_) => 1 },
+      { label: "nearAlpha", uiPath: "base.flow.nearOpacity", change: "realtime", min: 0, max: 1, step: 0.01, def: (_) => 1 },
+    ],
+  },
+  {
+    title: "LAYER SPEED",
+    tiles: [
+      { label: "farSpeed",  uiPath: "base.flow.farSpeedMul",  change: "realtime", min: 0, max: 2, step: 0.01, def: ({ flow0 }) => fnum(flow0?.motion?.speedPxPerSec?.layerMul?.far, 0.6) },
+      { label: "midSpeed",  uiPath: "base.flow.midSpeedMul",  change: "realtime", min: 0, max: 2, step: 0.01, def: ({ flow0 }) => fnum(flow0?.motion?.speedPxPerSec?.layerMul?.mid, 0.85) },
+      { label: "nearSpeed", uiPath: "base.flow.nearSpeedMul", change: "realtime", min: 0, max: 2, step: 0.01, def: ({ flow0 }) => fnum(flow0?.motion?.speedPxPerSec?.layerMul?.near, 1.0) },
+    ],
+  },
+  {
+    title: "SEGMENTS",
+    tiles: [
+      { label: "count",     uiPath: "base.flow.segmentCount", change: "rebuild",  min: 64, max: 4096, step: 1,    def: ({ flow0 }) => fnum(flow0?.segmentCount, 512) },
+      { label: "length",    uiPath: "base.flow.segmentLen",   change: "rebuild",  min: 2,  max: 64,   step: 1,    def: ({ flow0 }) => fnum(flow0?.segmentLen, 12) },
+      { label: "thickness", uiPath: "base.flow.thickness",    change: "realtime", min: 0.1,max: 4,    step: 0.01, def: ({ flow0 }) => fnum(flow0?.thickness, 1) },
+    ],
+  },
+];
+
+// For now: flowRibbon uses the same legacy template (same param surface).
+// Later we can specialize (different groups / different defaults) without touching UI code.
+// --- LEGACY: minimal FLOW controls (per-kind defs) ----------------------
+
+// flowSegments legacy def už existuje jako LEGACY_FLOW_DEF
+
+// flowRibbon: jen parametry, které ribbon implementace reálně čte
+
+
+
+const LEGACY_DEFS: Record<string, LegacyGroupDef[] | undefined> = {
+  flowSegments: LEGACY_FLOW_DEF,
+  // flowRibbon: LEGACY_RIBBON_DEF,
+  flowRibbon: undefined, // v této fázi jen preset switch
+};
+
+function fnum(v: any, d: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
 
 export class BgDevUI {
   private root: HTMLDivElement;
@@ -557,29 +648,28 @@ export class BgDevUI {
     }
      }
   // --- LEGACY: minimal FLOW controls (kind = flowSegments) ------------------
-  private renderLegacyFlowControls(body: HTMLDivElement, activePreset: any): void {
+
+  private renderLegacyTemplate(body: HTMLDivElement, activePreset: any, def: LegacyGroupDef[]): void {
     // NOTE:
     // - UI paths "base.flow.*" jsou schvalne: mapUiPathToOverridePath() je premapuje do layers.{activeIx}.params.flow.*
     // - changeType: realtime vs rebuild
 
     const flow0 = (activePreset?.layers?.[0]?.params?.flow ?? activePreset?.flow ?? activePreset?.base?.flow ?? {}) as any;
 
-    const getUiOverride = (uiPath: string): any => {
-      const st = getGlobalLabState() as any;
-      const opath = mapUiPathToOverridePath(uiPath);
-      return getByPath(st.overrides, opath);
-    };
-
     // --- minimalisticky "tile" slider (label + value v hlavičce; slider pod tím) ---
-    const mkTile = (
-      label: string,
-      cur: number,
-      opts: { min: number; max: number; step: number },
-      change: BgChangeType,
-      path: string,
-    ) => {
+    const mkTile = (t: LegacyTileDef) => {
+      const raw = this.getOverride(t.uiPath);
+      const cur =
+        t.uiPath === "base.flow.blend"
+          ? (String(raw ?? "") === "alpha" ? 1 : 0)
+          : Number(raw);
+      const hasCur =
+        t.uiPath === "base.flow.blend"
+          ? (raw !== undefined && raw !== null && String(raw) !== "")
+          : (cur !== undefined && cur === cur); // not NaN
+      const v0 = hasCur ? cur : t.def({ flow0 });""
+
       const tile = el("div");
-      // bez "karet" – jen spacing
       tile.style.cssText = [
         "display:flex",
         "flex-direction:column",
@@ -588,7 +678,6 @@ export class BgDevUI {
         "margin:0",
       ].join(";");
 
-      // header: "Depth 1" (value nahoře vedle labelu)
       const head = el("div");
       head.style.cssText = [
         "display:flex",
@@ -599,16 +688,15 @@ export class BgDevUI {
       ].join(";");
 
       const lab = el("div");
-      lab.textContent = label;
+      lab.textContent = t.label;
       lab.style.cssText = "font:10px monospace;opacity:0.85;letter-spacing:0.2px;";
 
       const num = el("input") as HTMLInputElement;
       num.type = "number";
-      num.min = String(opts.min);
-      num.max = String(opts.max);
-      num.step = String(opts.step ?? 0.01);
-      num.value = String(cur);
-      // malé, bez rámečku, zarovnané doprava (žádné okýnko)
+      num.min = String(t.min);
+      num.max = String(t.max);
+      num.step = String(t.step ?? 0.01);
+      num.value = String(v0);
       num.style.cssText = [
         "width:40px",
         "background:transparent",
@@ -627,19 +715,37 @@ export class BgDevUI {
       tile.appendChild(head);
 
       const row = el("div");
-      // slider přes celou šířku
       row.style.cssText = "display:block;padding:0 1px 1px 1px;";
 
       const range = el("input") as HTMLInputElement;
       range.type = "range";
-      range.min = String(opts.min);
-      range.max = String(opts.max);
-      range.step = String(opts.step ?? 0.01);
-      range.value = String(cur);
+      range.min = String(t.min);
+      range.max = String(t.max);
+      range.step = String(t.step ?? 0.01);
+      range.value = String(v0);
       range.style.width = "100%";
       (range.style as any).height = "14px";
 
-      const applyValue = (v: number) => this.setOverride(change, path, v);
+      const applyValue = (v: number) => {
+          // Special-case: blend must write to pipeline layer blend (layers[i].blend), not params.flow.blend.
+          if (t.uiPath === "base.flow.blend") {
+            const vv = (v >= 0.5) ? "alpha" : "add";
+
+            const stAny: any = getGlobalLabState() as any;
+            const activeIx = Number(stAny?.ui?.activeLayerIx ?? 0);
+            const hasLayers = !!stAny?.ui?.activePresetHasLayers;
+
+            const opath = hasLayers ? `layers.${activeIx}.blend` : mapUiPathToOverridePath(t.uiPath);
+
+            const curState = getGlobalLabState();
+            const nextOverrides = setByPath((curState as any).overrides ?? {}, opath, vv);
+            setGlobalLabState({ ...(curState as any), overrides: nextOverrides } as any);
+
+            if (t.change === "rebuild") this.rebuildDirty = true;
+            this.emit(t.change as BgChangeType, t.uiPath);
+            return;
+          }this.setOverride(t.change, t.uiPath, v);
+        };
 
       range.onpointerdown = (e) => stopProp(e);
       range.oninput = (e) => {
@@ -700,86 +806,16 @@ export class BgDevUI {
     };
 
     // --- GROUPS (3-up) ---
-
-    // 1) Speed + alpha + curl
-    {
-      const g = mkGroup("FLOW");
+    for (const gdef of def) {
+      const g = mkGroup(gdef.title);
       addTo(g, () => {
-        const curSpeed = Number(getUiOverride("base.flow.speed") ?? flow0?.speed ?? 1);
-        mkTile("speed", curSpeed, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.speed");
-
-        const curAlpha = Number(this.getOverride("base.flow.alpha") ?? flow0?.alpha ?? 0.7);
-        mkTile("alpha", curAlpha, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.alpha");
-
-        const curCurl = Number(this.getOverride("base.flow.curl") ?? flow0?.curl ?? 0.8);
-        mkTile("curl", curCurl, { min: 0, max: 3, step: 0.01 }, "realtime", "base.flow.curl");
+        for (const t of gdef.tiles) mkTile(t);
       });
     }
-
-    // 2) Depth + spread + bias
-    {
-      const g = mkGroup("PARALLAX (rebuild)");
-      addTo(g, () => {
-        const curDepth = Number(getUiOverride("base.flow.parallaxDepth") ?? 1);
-        mkTile("depth", curDepth, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxDepth");
-
-        const curSpread = Number(getUiOverride("base.flow.parallaxSpread") ?? 1);
-        mkTile("spread", curSpread, { min: 0, max: 2, step: 0.01 }, "rebuild", "base.flow.parallaxSpread");
-
-        const curBias = Number(getUiOverride("base.flow.parallaxBias") ?? 0);
-        mkTile("bias", curBias, { min: -1, max: 1, step: 0.01 }, "rebuild", "base.flow.parallaxBias");
-      });
-    }
-
-    // 3) FarAlpha + MidAlpha + NearAlpha (paths zustavaji farOpacity... kvuli kompatibilite)
-    {
-      const g = mkGroup("LAYER ALPHA");
-      addTo(g, () => {
-        const curFarOp = Number(getUiOverride("base.flow.farOpacity") ?? 1);
-        mkTile("farAlpha", curFarOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.farOpacity");
-
-        const curMidOp = Number(getUiOverride("base.flow.midOpacity") ?? 1);
-        mkTile("midAlpha", curMidOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.midOpacity");
-
-        const curNearOp = Number(getUiOverride("base.flow.nearOpacity") ?? 1);
-        mkTile("nearAlpha", curNearOp, { min: 0, max: 1, step: 0.01 }, "realtime", "base.flow.nearOpacity");
-      });
-    }
-
-    // 4) FarSpeed + MidSpeed + NearSpeed
-    {
-      const g = mkGroup("LAYER SPEED");
-      addTo(g, () => {
-        const curFarSp = Number(getUiOverride("base.flow.farSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.far ?? 0.6);
-        mkTile("farSpeed", curFarSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.farSpeedMul");
-
-        const curMidSp = Number(getUiOverride("base.flow.midSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.mid ?? 0.85);
-        mkTile("midSpeed", curMidSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.midSpeedMul");
-
-        const curNearSp = Number(getUiOverride("base.flow.nearSpeedMul") ?? flow0?.motion?.speedPxPerSec?.layerMul?.near ?? 1.0);
-        mkTile("nearSpeed", curNearSp, { min: 0, max: 2, step: 0.01 }, "realtime", "base.flow.nearSpeedMul");
-      });
-    }
-
-    // 5) Count + Length + Thickness
-    {
-      const g = mkGroup("SEGMENTS");
-      addTo(g, () => {
-        const curCount = Number(this.getOverride("base.flow.segmentCount") ?? flow0?.segmentCount ?? 512);
-        mkTile("count", curCount, { min: 64, max: 4096, step: 1 }, "rebuild", "base.flow.segmentCount");
-
-        const curLen = Number(this.getOverride("base.flow.segmentLen") ?? flow0?.segmentLen ?? 12);
-        mkTile("length", curLen, { min: 2, max: 64, step: 1 }, "rebuild", "base.flow.segmentLen");
-
-        const curTh = Number(this.getOverride("base.flow.thickness") ?? flow0?.thickness ?? 1);
-        mkTile("thickness", curTh, { min: 0.1, max: 4, step: 0.01 }, "realtime", "base.flow.thickness");
-      });
-    }
-
   }
 
 
-    // --- LAYERS list (Sprint 1 skeleton) -----------------------------------
+
   private renderLayerList(presetV2: any): void {
 
 
@@ -1563,8 +1599,10 @@ const collapsed = (stNow?.ui?.collapsedSections?.[legacyId] ?? true);
       wrap.appendChild(body);
       this.root.appendChild(wrap);
 
-      if (snapshot?.base?.kind === "flowSegments") {
-        this.renderLegacyFlowControls(body, basePreset);
+      const k = String(snapshot?.base?.kind ?? "");
+      const def = LEGACY_DEFS[k];
+      if (def) {
+        this.renderLegacyTemplate(body, basePreset, def);
       } else {
         this.renderLayout(bgBaseUiLayout, snapshot);
       }

@@ -1,6 +1,7 @@
-import { BgPipeline } from "./game/bg/runtime/BgPipeline";
 // import { VFXSystem } from "./game/vfx/VFXSystem";
 // import { BgSystem } from "./game/bg/runtime/BgSystem";
+import { CONTENT } from "./game/content/CONTENT";
+
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
@@ -278,43 +279,6 @@ async function main() {
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
-    // --- BG (Krok 1): single hardcoded default preset, no dev UI, no presets file ---
-    const bgPipeline = new BgPipeline();
-    bgPipeline.init(gl, LOGIC_W, LOGIC_H);
-    bgPipeline.setPreset({
-      id: "default",
-      name: "Default",
-      schemaVersion: 2,
-      seed: 0,
-      common: { scrollSpeedX: -60 },
-      quality: {},
-      layers: [
-        {
-          id: "layer0",
-          kind: "meshTerrain",
-          enabled: true,
-          opacity: 1,
-          blend: "alpha",
-          parallaxMul: 1,
-          params: {
-            mesh: {
-              amp: 0.22,
-              freq: 8.0,
-              speed: 0.25,
-              tilt: 0.9,
-              persp: 1.15,
-              xSpan: 2.8,
-              lineAlpha: 0.22,
-              gridX: 120,
-              gridZ: 80
-            }
-          }
-        }
-      ]
-    } as any);
-
-
-
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
@@ -451,14 +415,6 @@ async function main() {
         const world = (window as any).__CM?.game?.world;
         const sx = world?.scrollX ?? 0;
         const sy = world?.scrollY ?? 0;
-
-        const t = performance.now() / 1000;
-        bgPipeline.draw({
-          timeSec: t,
-          time: t, // legacy/compat
-          scroll: { x: Number(sx) || 0, y: Number(sy) || 0 },
-        } as any);
-
 // --- HARD reset GL state after BG (prevents scissor/blend/masks leaking) ---
           gl.disable(gl.SCISSOR_TEST);
           gl.disable(gl.DEPTH_TEST);

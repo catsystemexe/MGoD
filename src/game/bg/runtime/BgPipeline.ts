@@ -292,7 +292,15 @@ export class BgPipeline {
         const opacity = Math.max(0, Math.min(1, Number(layer.opacity ?? 1)));
         gl.blendColor(0, 0, 0, opacity);
 
-        const blend = String(layer.blend ?? "alpha");
+        // blend: accept only "alpha" | "add"
+        // legacy: 0/1 (old UI) => 0 = add, 1 = alpha
+        let blendRaw: any = (layer as any).blend;
+
+        if (blendRaw === 0 || blendRaw === "0") blendRaw = "add";
+        if (blendRaw === 1 || blendRaw === "1") blendRaw = "alpha";
+
+        const blend = (blendRaw === "add" || blendRaw === "alpha") ? blendRaw : "alpha";
+
         if (blend === "add") {
           // src * constA + dst * 1
           gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
@@ -309,9 +317,10 @@ export class BgPipeline {
           quality,
           shader: layer?.params?.shader ?? {},
           flow: layer?.params?.flow ?? {},
+          mesh: layer?.params?.mesh ?? {},
         };
 
-        ent.r.setUniforms(params, (ctx as any).time, effScroll, null);
+        ent.r.setUniforms(params, tSec, effScroll, null);
         ent.r.draw();
 
         // Some BG renderers may touch BLEND state internally -> re-assert layer blend for next layer

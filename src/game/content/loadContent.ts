@@ -205,8 +205,6 @@ export function loadContent(): ContentBundle {
   const waves = validateWaves((directorWavesJson as any).waves);
 
 
-  const bgPresets = validateBgPresetsFile(bgPresetsJson as any);
-  const bgBindings = validateBgBindingsFile(bgBindingsJson as any);
 
   // cross-ref checks
   const presetIds = new Set(behaviorPresets.map(b => b.id));
@@ -229,11 +227,5 @@ export function loadContent(): ContentBundle {
       );
     }
   }
-  // BG cross-ref checks
-  const bgPresetIds = new Set(bgPresets.presets.map(p => p.id));
-  assert(bgPresetIds.has(bgBindings.defaultPresetId), `bgBindings.defaultPresetId missing presetId=${bgBindings.defaultPresetId}`);
-  for (const b of (bgBindings.bindings ?? [])) {
-    assert(bgPresetIds.has(b.presetId), `bgBindings(levelId=${b.levelId}) references missing presetId=${b.presetId}`);
-  }
-  return { enemyTypes, behaviorPresets, waves, bgPresets, bgBindings };
+  return { enemyTypes, behaviorPresets, waves };
 }

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "defaultPresetId": "bg.flowSegments.default",
+  "defaultPresetId": "bg.flowRibbon.default",
   "bindings": [
     {
       "levelId": "debug",
-      "presetId": "bg.flowSegments.default"
+      "presetId": "bg.flowRibbon.default"
     }
   ]
 }

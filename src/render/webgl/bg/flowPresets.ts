@@ -271,4 +271,67 @@ export const FLOW_PRESETS: FlowPreset[] = [
       near: [0.90, 1.00, 0.95, 0.28],
     },
   },
+
+  {
+    id: "flow.wireframe.landscape.v1",
+    name: "Wireframe Landscape (Mesh)",
+    type: "particles_segments",
+    space: "world",
+    direction: { x: -1, y: 0 },
+
+    parallax: [
+      { layer: "far",  factor: 0.22, densityMul: 1.00 },
+      { layer: "mid",  factor: 0.55, densityMul: 1.00 },
+      { layer: "near", factor: 1.00, densityMul: 1.00 },
+    ],
+
+    // unused by FlowRibbonBg, but keep schema sane
+    spawn: {
+      countBase: 1,
+      respawnPaddingPx: 0,
+      distribution: "uniform_y",
+      yJitterPx: 0,
+    },
+
+    motion: {
+      speedPxPerSec: {
+        base: 0,
+        layerMul: { far: 0, mid: 0, near: 0 },
+      },
+      accelLimitPxPerSec2: 0,
+      dampingPerSec: 0,
+    },
+
+    segments: {
+      thicknessPx: 1,
+      lengthPx: {
+        min: 1,
+        max: 1,
+        drift: { enabled: false, targetIntervalSec: { min: 10, max: 10 }, lerpRate: 0 },
+      },
+      alignToVelocity: false,
+    },
+
+    ribbon: {
+      lanes: 1,
+      stepPx: 8,
+      thicknessMul: { far: 1.0, mid: 1.0, near: 1.0 },
+    },
+
+    rng: {
+      seedMode: "perLevel",
+      lowFreq: {
+        enabled: false,
+        globalDriftIntervalSec: { min: 10, max: 10 },
+        lerpRate: 0,
+      },
+    },
+
+    // defaults; real color comes from bgPresets flow.colors*
+    colors: {
+      far:  [1.00, 1.00, 1.00, 0.16],
+      mid:  [1.00, 1.00, 1.00, 0.22],
+      near: [1.00, 1.00, 1.00, 0.28],
+    },
+  },
 ];

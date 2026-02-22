@@ -62,7 +62,6 @@ export class WebGLSceneRenderer {
   private vbo: WebGLBuffer;
 
   private aPos: number;
-
   // ✅ BG demoscene pass
 
   private uLogic: WebGLUniformLocation;
@@ -162,9 +161,17 @@ export class WebGLSceneRenderer {
     void this.enemySprites
       .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
       .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
+
+    // BG: FlowRibbon (fullscreen shader)
     }
-  render(alpha: number = 1): void {
+    render(alpha: number = 1): void {
     const gl = this.gl;
+    const tSec = performance.now() * 0.001;
+
+      // world scroll (used by sprite offsets; BG is handled in main.ts by BgPipeline)
+      const world = (window as any).__CM?.game?.world;
+      const sx = Number(world?.scrollX ?? 0);
+      const sy = Number(world?.scrollY ?? 0);
 
     // --- baseline 2D state (robust against leaked BG state) ---
     gl.disable(gl.SCISSOR_TEST);
@@ -172,6 +179,13 @@ export class WebGLSceneRenderer {
     gl.disable(gl.CULL_FACE);
     gl.colorMask(true, true, true, true);
     gl.depthMask(true);
+
+    // --- BG ---
+
+    // BG is handled by BgPipeline in src/main.ts (bgPipeline.draw before renderer.render).
+
+    // IMPORTANT: do not clear color buffer here, otherwise BG gets wiped.
+
 
     // keep blend ON (sprites + VFX)
     gl.enable(gl.BLEND);
@@ -182,11 +196,6 @@ export class WebGLSceneRenderer {
       gl.ONE,
       gl.ONE_MINUS_SRC_ALPHA
     );
-
-
-    const world = (window as any).__CM?.game?.world;
-    const sx = Number(world?.scrollX ?? 0);
-    const sy = Number(world?.scrollY ?? 0);
     gl.useProgram(this.prog);
     gl.bindVertexArray(this.vao);
 
@@ -200,19 +209,8 @@ export class WebGLSceneRenderer {
     // --- DEBUG BACKGROUND (world scroll aware)
     // world scroll currently not needed here
     // sprite anim time
-    const tSec = performance.now() * 0.001;
-    // --- DEBUG: force one visible quad at center (verifies quad pipeline after BG) ---
-    {
-      const gl = this.gl;
-      gl.useProgram(this.prog);
-      gl.bindVertexArray(this.vao);
-      gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-
-      gl.uniform4f(this.uColor, 1, 0.5, 0, 1); // orange
-      gl.uniform2f(this.uPos, Math.round(this.logicW * 0.5), Math.round(this.logicH * 0.5));
-      gl.uniform2f(this.uSize, 40, 40);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
+    // (tSec already declared above for BG pass)
+   
     
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
 
