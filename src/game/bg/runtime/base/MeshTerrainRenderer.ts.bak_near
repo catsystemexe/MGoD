@@ -39,9 +39,6 @@ type MeshParams = {
   persp?: number;      // perspective strength
   xSpan?: number;      // horizontal span multiplier for x
 
-  nearDrop?: number;   // extra drop for NEAR edge (bigger => more visible near)
-  yShift?: number;     // global Y shift in clip space
-
   lineAlpha?: number;  // line alpha
   gridX?: number;      // number of vertical lines
   gridZ?: number;      // number of horizontal lines
@@ -129,8 +126,6 @@ export class MeshTerrainRenderer implements BaseRenderer {
   private uPersp: WebGLUniformLocation | null = null;
 
   private uAlpha: WebGLUniformLocation | null = null;
-  private uNearDrop: WebGLUniformLocation | null = null;
-  private uYShift: WebGLUniformLocation | null = null;
 
   private time = 0;
   private scrollX = 0;
@@ -183,9 +178,6 @@ export class MeshTerrainRenderer implements BaseRenderer {
     xSpan: 2.8,
 
     // render
-    nearDrop: -1.0,
-    yShift: -0.1,
-
     lineAlpha: 0.22,
     gridX: 120,
     gridZ: 80,
@@ -244,8 +236,6 @@ uniform float uBumpSharp;
 uniform float uTilt;
 uniform float uPersp;
 uniform float uXSpan;
-uniform float uNearDrop;
-uniform float uYShift;
 
 float waveLayer(float x, float z, float t, float amp, float freq) {
   float a = sin((x*1.30 + t*0.70) * freq);
@@ -404,10 +394,11 @@ void main() {
   py += farW * FAR_LIFT;
 
   // 3) NEAR drop: affects NEAR only (apply AFTER projection -> intuitive)
-  py -= nearW * uNearDrop;
+  const float NEAR_DROP = 0.20;  // + = front edge DOWN
+  py -= nearW * NEAR_DROP;
 
   // Global composition shift
-  vec2 clip = vec2(px, py + uYShift);
+  vec2 clip = vec2(px, py + 0.12);
   gl_Position = vec4(clip, 0.0, 1.0);
 }
 `;
@@ -470,8 +461,6 @@ void main() {
     this.uXSpan = gl.getUniformLocation(prog, "uXSpan");
     this.uPersp = gl.getUniformLocation(prog, "uPersp");
     this.uAlpha = gl.getUniformLocation(prog, "uAlpha");
-    this.uNearDrop = gl.getUniformLocation(prog, "uNearDrop");
-    this.uYShift = gl.getUniformLocation(prog, "uYShift");
 
     // geometry buffer (lines grid)
     this.vao = gl.createVertexArray();
@@ -631,8 +620,6 @@ void main() {
       if (mp.tilt !== undefined) this.mesh.tilt = Number(mp.tilt) || this.mesh.tilt;
       if (mp.persp !== undefined) this.mesh.persp = Number(mp.persp) || this.mesh.persp;
       if (mp.xSpan !== undefined) this.mesh.xSpan = Number(mp.xSpan) || this.mesh.xSpan;
-      if ((mp as any).nearDrop !== undefined) this.mesh.nearDrop = Number((mp as any).nearDrop) || this.mesh.nearDrop;
-      if ((mp as any).yShift !== undefined) this.mesh.yShift = Number((mp as any).yShift) || this.mesh.yShift;
 
       if (mp.lineAlpha !== undefined) this.mesh.lineAlpha = Number(mp.lineAlpha) || this.mesh.lineAlpha;
 
@@ -696,8 +683,6 @@ void main() {
     gl.uniform1f(this.uTilt, this.mesh.tilt);
     gl.uniform1f(this.uPersp, this.mesh.persp);
     gl.uniform1f(this.uXSpan, this.mesh.xSpan);
-    gl.uniform1f(this.uNearDrop, this.mesh.nearDrop);
-    gl.uniform1f(this.uYShift, this.mesh.yShift);
 
     // render
     gl.uniform1f(this.uAlpha, this.mesh.lineAlpha);

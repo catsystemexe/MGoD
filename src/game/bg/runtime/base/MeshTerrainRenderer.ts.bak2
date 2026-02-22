@@ -39,9 +39,6 @@ type MeshParams = {
   persp?: number;      // perspective strength
   xSpan?: number;      // horizontal span multiplier for x
 
-  nearDrop?: number;   // extra drop for NEAR edge (bigger => more visible near)
-  yShift?: number;     // global Y shift in clip space
-
   lineAlpha?: number;  // line alpha
   gridX?: number;      // number of vertical lines
   gridZ?: number;      // number of horizontal lines
@@ -129,8 +126,6 @@ export class MeshTerrainRenderer implements BaseRenderer {
   private uPersp: WebGLUniformLocation | null = null;
 
   private uAlpha: WebGLUniformLocation | null = null;
-  private uNearDrop: WebGLUniformLocation | null = null;
-  private uYShift: WebGLUniformLocation | null = null;
 
   private time = 0;
   private scrollX = 0;
@@ -183,9 +178,6 @@ export class MeshTerrainRenderer implements BaseRenderer {
     xSpan: 2.8,
 
     // render
-    nearDrop: -1.0,
-    yShift: -0.1,
-
     lineAlpha: 0.22,
     gridX: 120,
     gridZ: 80,
@@ -244,8 +236,6 @@ uniform float uBumpSharp;
 uniform float uTilt;
 uniform float uPersp;
 uniform float uXSpan;
-uniform float uNearDrop;
-uniform float uYShift;
 
 float waveLayer(float x, float z, float t, float amp, float freq) {
   float a = sin((x*1.30 + t*0.70) * freq);
@@ -347,18 +337,6 @@ void main() {
   int oct = int(floor(uBumpOctaves + 0.5));
   float phase = (fbm2(vec2(xw, zw) * (uBumpFreq * 0.08) + vec2(12.7, 3.1), oct, uBumpRot) - 0.5) * 2.0;
 
-  // Spatial domain warp (coords, not time) to break long sinus bands
-  // Uses FBM so it stays coherent but not axis-aligned.
-  vec2 xz = vec2(xw, zw);
-  mat2 rr = rot2(uBumpRot * 0.5 + 0.7);
-  xz = rr * xz;
-
-  float dw1 = (fbm2(xz * (uBumpFreq * 0.045) + vec2(5.1, 8.3), oct, uBumpRot + 1.3) - 0.5) * 2.0;
-  float dw2 = (fbm2(xz * (uBumpFreq * 0.030) + vec2(11.7, 2.9), oct, uBumpRot + 2.1) - 0.5) * 2.0;
-
-  float xwf = xz.x + dw1 * 0.22;
-  float zwf = xz.y + dw2 * 0.14;
-
 
   // Two-layer height
   float y1 = waveLayer(xw, zw, t1 + phase * 0.35, uAmp,  uFreq);
@@ -369,7 +347,7 @@ void main() {
   // Local bumps: break "stripy bands" into smaller peaks.
   // Use warped coords so bumps flow with the big deformation.
   float tb = t * uBumpSpeed;
-  vec2 bp = vec2(xwf, zwf) * uBumpFreq + vec2(tb * 0.35, -tb * 0.22);
+  vec2 bp = vec2(xw, zw) * uBumpFreq + vec2(tb * 0.35, -tb * 0.22);
 
   // base noise 0..1 -> -1..1
   float bn = fbm2(bp, oct, uBumpRot) * 2.0 - 1.0;
@@ -404,10 +382,11 @@ void main() {
   py += farW * FAR_LIFT;
 
   // 3) NEAR drop: affects NEAR only (apply AFTER projection -> intuitive)
-  py -= nearW * uNearDrop;
+  const float NEAR_DROP = 0.20;  // + = front edge DOWN
+  py -= nearW * NEAR_DROP;
 
   // Global composition shift
-  vec2 clip = vec2(px, py + uYShift);
+  vec2 clip = vec2(px, py + 0.12);
   gl_Position = vec4(clip, 0.0, 1.0);
 }
 `;
@@ -470,8 +449,6 @@ void main() {
     this.uXSpan = gl.getUniformLocation(prog, "uXSpan");
     this.uPersp = gl.getUniformLocation(prog, "uPersp");
     this.uAlpha = gl.getUniformLocation(prog, "uAlpha");
-    this.uNearDrop = gl.getUniformLocation(prog, "uNearDrop");
-    this.uYShift = gl.getUniformLocation(prog, "uYShift");
 
     // geometry buffer (lines grid)
     this.vao = gl.createVertexArray();
@@ -631,8 +608,6 @@ void main() {
       if (mp.tilt !== undefined) this.mesh.tilt = Number(mp.tilt) || this.mesh.tilt;
       if (mp.persp !== undefined) this.mesh.persp = Number(mp.persp) || this.mesh.persp;
       if (mp.xSpan !== undefined) this.mesh.xSpan = Number(mp.xSpan) || this.mesh.xSpan;
-      if ((mp as any).nearDrop !== undefined) this.mesh.nearDrop = Number((mp as any).nearDrop) || this.mesh.nearDrop;
-      if ((mp as any).yShift !== undefined) this.mesh.yShift = Number((mp as any).yShift) || this.mesh.yShift;
 
       if (mp.lineAlpha !== undefined) this.mesh.lineAlpha = Number(mp.lineAlpha) || this.mesh.lineAlpha;
 
@@ -696,8 +671,6 @@ void main() {
     gl.uniform1f(this.uTilt, this.mesh.tilt);
     gl.uniform1f(this.uPersp, this.mesh.persp);
     gl.uniform1f(this.uXSpan, this.mesh.xSpan);
-    gl.uniform1f(this.uNearDrop, this.mesh.nearDrop);
-    gl.uniform1f(this.uYShift, this.mesh.yShift);
 
     // render
     gl.uniform1f(this.uAlpha, this.mesh.lineAlpha);
