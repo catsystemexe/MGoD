@@ -348,18 +348,22 @@ float x = worldX;
 float localZ = aXZ.y;
 float worldZ = localZ + uChunkOffsetZ;
 
-// Y scroll: posun obrazu v clip-space (NE depth / perspektivu)
-const float SCROLL_Y_TO_CLIP = 0.0050;   // dolaď podle LOGIC_H (typicky ~2/LOGIC_H)
-float camShiftY = uScroll.y * SCROLL_Y_TO_CLIP;
+// !!! uScroll.y je v px, Z je 0..1 => musí být škálováno
+// TODO: později uděláme uniform (uScrollYMul). Teď hardcode stabilní default:
+const float SCROLL_Y_TO_Z = 0.002;      // dolaď; typicky 0.001..0.004
+float cameraZ = uScroll.y * SCROLL_Y_TO_Z;
 
-// Depth pro projekci i váhy: stabilní z gridu
+// view-space depth (jen pro projekci)
+float viewZ = worldZ - cameraZ;
+
+// weights pro near/far mají být z lokálního gridu (stabilní)
 float zBase = localZ;
-float zProj = localZ;
 
-// Sampling: kamera odkrývá jiné části “světa”
-const float SCROLL_Y_TO_Z = 0.0004;       // jen pro sampling / warp
-float cameraZ = -uScroll.y * SCROLL_Y_TO_Z;
-float zSample = worldZ - cameraZ;
+// projekční depth má být stabilní a nezáporný (jinak denom “překlápí” svět)
+float zProj   = clamp(viewZ, 0.0, 1.2);  // perspektiva
+
+// sampling depth má běžet ve WORLD prostoru (kamera nemá měnit vlny)
+float zSample = worldZ;
 
 
   // ✅ z=0 NEAR, z=1 FAR
@@ -428,10 +432,10 @@ float px = viewX / denom;
   // 1) TILT: pushes NEAR down (apply in world space before projection)
   float yTilt = -(nearW * uTilt);
 
-  float py = (y + yTilt) / denom + camShiftY;
+  float py = (y + yTilt) / denom;
 
   // 2) FAR lift: affects FAR only (apply AFTER projection -> intuitive)
-  const float FAR_LIFT = 0.75;   // + = horizon UP
+  const float FAR_LIFT = 0.55;   // + = horizon UP
   py += farW * FAR_LIFT;
 
   // 3) NEAR drop: affects NEAR only (apply AFTER projection -> intuitive)
