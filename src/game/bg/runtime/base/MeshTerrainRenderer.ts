@@ -348,18 +348,19 @@ float x = worldX;
 float localZ = aXZ.y;
 float worldZ = localZ + uChunkOffsetZ;
 
-// Y scroll: posun obrazu v clip-space (NE depth / perspektivu)
-const float SCROLL_Y_TO_CLIP = 0.0050;   // dolaď podle LOGIC_H (typicky ~2/LOGIC_H)
-float camShiftY = uScroll.y * SCROLL_Y_TO_CLIP;
+// scrollY -> jen Y posun kamery ve view
+const float SCROLL_Y_TO_VIEW = 0.0140;
+const float SCROLL_Y_CENTER_PX = -100.0;
+float camMoveY = (-uScroll.y - SCROLL_Y_CENTER_PX) * SCROLL_Y_TO_VIEW;
 
 // Depth pro projekci i váhy: stabilní z gridu
 float zBase = localZ;
-float zProj = localZ;
+float zProj = localZ;     // perspektiva stabilní
+float zSample = worldZ;   // sampling stabilní
 
-// Sampling: kamera odkrývá jiné části “světa”
-const float SCROLL_Y_TO_Z = 0.0004;       // jen pro sampling / warp
-float cameraZ = -uScroll.y * SCROLL_Y_TO_Z;
-float zSample = worldZ - cameraZ;
+// pokud viewZ nikde dál nepotřebuješ, smaž ho úplně
+
+// float zSample = worldZ - cameraZ;
 
 
   // ✅ z=0 NEAR, z=1 FAR
@@ -428,7 +429,7 @@ float px = viewX / denom;
   // 1) TILT: pushes NEAR down (apply in world space before projection)
   float yTilt = -(nearW * uTilt);
 
-  float py = (y + yTilt) / denom + camShiftY;
+  float py = (y + yTilt - camMoveY) / denom;
 
   // 2) FAR lift: affects FAR only (apply AFTER projection -> intuitive)
   const float FAR_LIFT = 0.75;   // + = horizon UP
@@ -438,6 +439,7 @@ float px = viewX / denom;
   py -= nearW * uNearDrop;
 
   // Global composition shift
+  
   vec2 clip = vec2(px, py + uYShift);
   gl_Position = vec4(clip, 0.0, 1.0);
 }
@@ -750,15 +752,6 @@ void main() {
       const CHUNK_HEIGHT = 1.0; // z in [0..1] per grid page
 
       // px -> zUnits (temporary constant; later make it a uniform/preset param)
-      const SCROLL_Y_TO_Z = 0.002; // tune 0.001..0.004
-      const cameraZ = this.scrollY * SCROLL_Y_TO_Z;
-
-      const chunkIndexZ = Math.floor(cameraZ / CHUNK_HEIGHT);
-      const offsetZ = chunkIndexZ * CHUNK_HEIGHT;
-
-      // ✅ render ONLY 1 Z chunk (no overlap)
-      gl.uniform1f(this.uChunkOffsetZ!, offsetZ);
-
       // render 3 X chunks
       for (let i = -1; i <= 1; i++) {
         const idxX = chunkIndexX + i;

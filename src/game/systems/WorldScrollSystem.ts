@@ -12,6 +12,8 @@ function smoothTo(cur: number, target: number, easeSec: number, dt: number): num
 }
 
 export class WorldScrollSystem {
+  private initialized = false;
+
   constructor(
     private readonly world: WorldState,
     private readonly player: PlayerData,
@@ -23,12 +25,34 @@ export class WorldScrollSystem {
       // autoscroll světa je nyní řízen pouze BG pipeline (common.scrollSpeedX)
       // world.speedX ignorujeme, aby nevznikal dvojitý drift
 
-    const H = this.logicH;
+        const H = this.logicH;
 
     // camera range in world-space
     const worldH = Number.isFinite((this.world as any).worldH) ? Number((this.world as any).worldH) : H;
-    const camMinY = 0;
-    const camMaxY = Math.max(0, worldH - H);
+    const worldMinY = 0;
+    const worldMaxY = Math.max(0, worldH - H);
+
+    // --- start-centered camera window (user UX) ---
+    // Start je "střed" a kamera může jen trochu nahoru/dolů kolem startu.
+    const startY = Number.isFinite((this.world as any).cameraStartY) ? Number((this.world as any).cameraStartY) : 50;
+    const rangeDown = Number.isFinite((this.world as any).cameraRangeDown) ? Number((this.world as any).cameraRangeDown) : 50;
+    const rangeUp   = Number.isFinite((this.world as any).cameraRangeUp)   ? Number((this.world as any).cameraRangeUp)   : 50;
+
+    const camMinY = Math.max(worldMinY, startY - rangeDown);
+    const camMaxY = Math.min(worldMaxY, startY + rangeUp);
+
+    if (!this.initialized) {
+      (this.world as any).scrollY = clamp(startY, camMinY, camMaxY);
+      this.initialized = true;
+    }
+
+    // --- init: defaultně drž kameru co nejníž (min Y-scroll efekt / max scrollY)
+    // takže start není "nahoře", ale "dole". Pak už běží standardní follow logika.
+    if (!this.initialized) {
+      (this.world as any).scrollY = camMaxY;
+      this.initialized = true;
+    }
+
 
     // dead-band padding (top/bottom)
     const padTop = Number.isFinite((this.world as any).cameraPadTop) ? Number((this.world as any).cameraPadTop) : 140;
