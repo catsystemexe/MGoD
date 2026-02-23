@@ -19,9 +19,9 @@ export class WorldScrollSystem {
     private readonly logicH: number
   ) {}
 
-  update(dt: number): void {
-    // --- konstantní autoscroll doprava
-    this.world.scrollX += this.world.speedX * dt;
+    update(dt: number): void {
+      // autoscroll světa je nyní řízen pouze BG pipeline (common.scrollSpeedX)
+      // world.speedX ignorujeme, aby nevznikal dvojitý drift
 
     const H = this.logicH;
 

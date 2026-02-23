@@ -7,7 +7,7 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
   seed: 0,
   common: {
     timeScale: 1,
-    scrollSpeedX: -60,
+    scrollSpeedX: 0,
     scrollX: 0,
     scrollY: 0,
     exposure: 1,

@@ -176,6 +176,10 @@ export class BgPipeline {
     // First set: just store snapshot; renderers are lazy-created per layer in draw()
     if (!this.snapshot) {
       this.snapshot = next;
+
+      // reset drift state
+      this.autoX = 0;
+      this.lastTimeSec = 0;
       return;
     }
 
@@ -203,6 +207,10 @@ export class BgPipeline {
     }
 
     this.snapshot = next;
+
+    // reset drift state
+    this.autoX = 0;
+    this.lastTimeSec = 0;
   }
 
   draw(ctx: BgDrawCtx): void {
@@ -234,12 +242,13 @@ export class BgPipeline {
 
       // --- auto-scroll X (px/sec)
       const tSec = Number((ctx as any).timeSec ?? (ctx as any).time ?? 0);
-      const dt = this.lastTimeSec > 0 ? Math.max(0, tSec - this.lastTimeSec) : 0;
+      const rawDt = this.lastTimeSec > 0 ? tSec - this.lastTimeSec : 0;
+      const dt = Math.max(0, Math.min(rawDt, 0.1)); // clamp 100ms
       this.lastTimeSec = tSec;
 
       const scrollSpeedX = Number(common.scrollSpeedX ?? 0);
       if (Number.isFinite(scrollSpeedX)) {
-        this.autoX += scrollSpeedX * dt;
+       this.autoX += scrollSpeedX * dt;
       }
 
       const baseScroll = {
@@ -352,6 +361,9 @@ export class BgPipeline {
   getCurrentPreset(): BgPreset | null {
     return this.snapshot?.preset ?? null;
   }
-
+  resetScroll(): void {
+    this.autoX = 0;
+    this.lastTimeSec = 0;
+  }
   
 }

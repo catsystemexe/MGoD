@@ -106,8 +106,15 @@ export function createMeshDevUI(bgPipeline: any) {
   }
 
   function reset() {
-    workingPreset = deepClone(initialSnapshot);
-    apply();
+    const original = deepClone(initialSnapshot);
+
+    // pošli kompletní preset do pipeline
+    bgPipeline.setPreset(original);
+    bgPipeline.resetScroll?.();
+
+    // aktualizuj workingPreset až po setPreset
+    workingPreset = deepClone(original);
+
     render();
   }
 

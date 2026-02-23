@@ -114,7 +114,7 @@ export class MeshTerrainRenderer implements BaseRenderer {
   private uBumpDepthFar: WebGLUniformLocation | null = null;
   private uBumpDepthBias: WebGLUniformLocation | null = null;
   private uBumpDepthPow: WebGLUniformLocation | null = null;
-
+  private uChunkOffset: WebGLUniformLocation | null = null;
 
   // bump detail
   private uBumpAmp: WebGLUniformLocation | null = null;
@@ -246,6 +246,7 @@ uniform float uPersp;
 uniform float uXSpan;
 uniform float uNearDrop;
 uniform float uYShift;
+uniform float uChunkOffset;
 
 float waveLayer(float x, float z, float t, float amp, float freq) {
   float a = sin((x*1.30 + t*0.70) * freq);
@@ -325,14 +326,26 @@ void main() {
   float t1 = t * uSpeed;
   float t2 = t * uSpeed2;
 
-  // World scroll
-  float x = (aXZ.x * uXSpan) + uScroll.x * 0.0008;
+// Lokální X z gridu (-1..1 přepočtené přes xSpan)
+float localX = (aXZ.x * uXSpan);
+
+// chunk world pos
+float worldX = localX + uChunkOffset;
+
+// Kamera
+float cameraX = uScroll.x;
+
+// View-space pro projekci
+float viewX = worldX - cameraX;
+
+// Sampling běží ve WORLD prostoru
+float x = worldX;
 
   // Base mesh depth in 0..1 (this defines FAR vs NEAR)
   float zBase = clamp(aXZ.y, 0.0, 1.0);
 
   // Projection depth can go slightly beyond 1 (tail stability)
-  float zProj = aXZ.y + uScroll.y * 0.00025;
+ float zProj = aXZ.y;
   zProj = clamp(zProj, 0.0, 1.2);
 
   // ✅ z=0 NEAR, z=1 FAR
@@ -391,8 +404,11 @@ void main() {
   y *= ampRemap * legacy;
 
   // Perspective projection uses zProj
-  float denom = 0.80 + zProj * uPersp;
-  float px = x / denom;
+float denom = 0.80 + zProj * uPersp;
+
+// Kamera: projekce používá pouze lokální grid,
+// sampling používá worldX (oddělení prostoru)
+float px = viewX / denom;
 
   // 1) TILT: pushes NEAR down (apply in world space before projection)
   float yTilt = -(nearW * uTilt);
@@ -472,7 +488,8 @@ void main() {
     this.uAlpha = gl.getUniformLocation(prog, "uAlpha");
     this.uNearDrop = gl.getUniformLocation(prog, "uNearDrop");
     this.uYShift = gl.getUniformLocation(prog, "uYShift");
-
+    this.uChunkOffset = gl.getUniformLocation(prog, "uChunkOffset");
+    
     // geometry buffer (lines grid)
     this.vao = gl.createVertexArray();
     this.vbo = gl.createBuffer();
@@ -706,7 +723,25 @@ void main() {
 
     
     const n = this.vertCount | 0;
-    if (n > 0) gl.drawArrays(gl.LINES, 0, n);
+    if (n <= 0) return;
+
+    // chunk width = 2 * xSpan (protože grid běží -1..1)
+    const CHUNK_WIDTH = this.mesh.xSpan * 2;
+
+    // kamera
+    const cameraX = this.scrollX;
+
+    // index chunku pod kamerou
+    const chunkIndex = Math.floor(cameraX / CHUNK_WIDTH);
+
+    // vykresli 3 chunky
+    for (let i = -1; i <= 1; i++) {
+      const idx = chunkIndex + i;
+      const offsetX = idx * CHUNK_WIDTH;
+
+      gl.uniform1f(this.uChunkOffset, offsetX);
+      gl.drawArrays(gl.LINES, 0, n);
+    }
 
     gl.bindVertexArray(null);
   }

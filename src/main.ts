@@ -65,6 +65,69 @@ function setHudTop(text: string) {
 };
 
 
+// --- WORLD SCROLL DEV SLIDER (left bottom) ---
+{
+  const panel = document.createElement("div");
+  panel.style.cssText = `
+    position:fixed;
+    left:10px;
+    bottom:10px;
+    background:rgba(0,0,0,0.7);
+    color:white;
+    padding:8px;
+    font:12px monospace;
+    z-index:10001;
+  `;
+
+  const label = document.createElement("div");
+  label.textContent = "world.scrollX";
+  panel.appendChild(label);
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "-5";
+  slider.max = "5";
+  slider.step = "0.01";
+  slider.value = "0";
+
+  const valueBox = document.createElement("input");
+  valueBox.type = "number";
+  valueBox.value = "0";
+  valueBox.style.width = "70px";
+
+  slider.oninput = () => {
+    valueBox.value = slider.value;
+    const world = (window as any).__CM?.game?.world;
+    (window as any).__CM.bgLabState = (window as any).__CM.bgLabState || {};
+    (window as any).__CM.bgLabState.overrides = (window as any).__CM.bgLabState.overrides || {};
+    (window as any).__CM.bgLabState.overrides.common = 
+      (window as any).__CM.bgLabState.overrides.common || {};
+
+    (window as any).__CM.bgLabState.overrides.common.scrollSpeedX = Number(slider.value);
+  };
+
+  valueBox.onchange = () => {
+    slider.value = valueBox.value;
+
+    (window as any).__CM.bgLabState =
+      (window as any).__CM.bgLabState || {};
+    (window as any).__CM.bgLabState.overrides =
+      (window as any).__CM.bgLabState.overrides || {};
+    (window as any).__CM.bgLabState.overrides.common =
+      (window as any).__CM.bgLabState.overrides.common || {};
+
+    (window as any).__CM.bgLabState.overrides.common.scrollSpeedX =
+      Number(valueBox.value);
+  };
+
+  panel.appendChild(slider);
+  panel.appendChild(valueBox);
+
+  document.body.appendChild(panel);
+}
+
+
+
 // DEBUG TOP BAR: vytvoř vždy (dokud nevyřešíme wiring)
 // v prod to pak můžeš zase zavřít za DEV flag.
 hudTop = document.createElement("div");

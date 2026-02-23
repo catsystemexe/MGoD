@@ -1376,7 +1376,7 @@ box.style.borderRadius = "8px";
         range.value = String(cur);
         range.style.cssText = "width:100%;accent-color:rgba(120,255,180,0.95);";
 
-        const num = this.mkNumber(cur, { step: 1, min: -800, max: 800 });
+        const num = this.mkNumber(cur, { step: 0.01, min: -10, max: 10 });
 
         const applyDrag = (v: number) => {
           this.setOverride("realtime", "common.scrollSpeedX", v);
