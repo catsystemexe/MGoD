@@ -167,6 +167,7 @@ export class BgPipeline {
     this.gl = gl;
     this.w = w;
     this.h = h;
+    
   }
 
   setPreset(preset: BgPreset): void {
@@ -348,4 +349,9 @@ export class BgPipeline {
     }
     this.renderers.clear();
   }
+  getCurrentPreset(): BgPreset | null {
+    return this.snapshot?.preset ?? null;
+  }
+
+  
 }

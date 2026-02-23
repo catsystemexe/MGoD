@@ -4,7 +4,7 @@ import { BgPipeline } from "./game/bg/runtime/BgPipeline";
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 export {};
 
-
+import { DEFAULT_MESH_TERRAIN_PRESET } from "./game/bg/presets/defaultMeshTerrainPreset";
 const DEV = import.meta.env.DEV;
 (globalThis as any).__DEV__ = DEV;
 if (DEV) {
@@ -279,54 +279,69 @@ async function main() {
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
 
     // --- BG (Krok 1): single hardcoded default preset, no dev UI, no presets file ---
-    const bgPipeline = new BgPipeline();
-    bgPipeline.init(gl, LOGIC_W, LOGIC_H);
-    bgPipeline.setPreset({
-      id: "default",
-      name: "Default",
-      schemaVersion: 2,
-      seed: 0,
-      common: { scrollSpeedX: -60 },
-      quality: {},
-      layers: [
-        {
-          id: "layer0",
-          kind: "meshTerrain",
-          enabled: true,
-          opacity: 1,
-          blend: "alpha",
-          parallaxMul: 1,
-          params: {
-            mesh: {
-              amp: 0.24,  freq: 5.4,  speed: 0.23,
-              amp2: 0.12, freq2: 14.0, speed2: 0.55,
+  // --- BG: content-driven presets/bindings (MVP) ---
+  const bgPipeline = new BgPipeline();
+  bgPipeline.init(gl, LOGIC_W, LOGIC_H);
+  
+  // content presets/bindings from CONTENT (wired above)
+  const bgPresetsFile: any = (CONTENT as any).bgPresets;
+  const bgBindings: any = (CONTENT as any).bgBindings;
 
-              warpAmp: 0.24, warpFreq: 1.8, warpSpeed: 0.30,
+  const bgPresetsArr: any[] = Array.isArray(bgPresetsFile?.presets) ? bgPresetsFile.presets : [];
 
-              bumpAmp: 0.11, bumpFreq: 16.0, bumpSpeed: 0.48, bumpSharp: 1.60,
-              
-              depthAmpPow: 1.0,
+  const resolveInitialPresetId = (levelId: string | null) => {
+    const bindings = Array.isArray(bgBindings?.bindings) ? bgBindings.bindings : [];
+    const hit = levelId ? bindings.find((b: any) => b?.levelId === levelId) : null;
+    return (hit?.presetId ?? bgBindings?.defaultPresetId ?? null) as (string | null);
+  };
 
-              ampDepthNear: 0.120,
-              ampDepthFar:  12.6,
-              ampDepthBias: 0.72,
-              ampDepthPow:  2.6,
+  // try to get a stable levelId (whatever createGame/session provides)
+  const levelId =
+    (game as any)?.session?.levelId ??
+    (game as any)?.session?.level?.id ??
+    (game as any)?.levelId ??
+    null;
 
-              bumpDepthNear: 0.06,
-              bumpDepthFar:  2.25,
-              bumpDepthBias: 0.74,
-              bumpDepthPow:  2.6,
+  const initialId = resolveInitialPresetId(levelId);
+  const initial =
+    (initialId ? bgPresetsArr.find((p: any) => p?.id === initialId) : null) ??
+    bgPresetsArr[0] ??
+    null;
 
-              tilt: 1.65, persp: 1.48, xSpan: 2.8,
-              lineAlpha: 0.22, gridX: 120, gridZ: 80
-            }
-          }
-        }
-      ]
-    } as any);
+  // expose registry for dev tooling / future UI
+  (window as any).__CM = (window as any).__CM || {};
+  (window as any).__CM.bg = {
+    presets: () => bgPresetsArr,
+    setPresetById: (id: string) => {
+      const p = bgPresetsArr.find((x: any) => x?.id === id);
+      if (p) bgPipeline.setPreset(p);
+      (window as any).__CM.bgActivePresetId = id;
+    },
+    getActivePresetId: () => (window as any).__CM.bgActivePresetId ?? null,
+  };
 
+  (window as any).__CM.bgActivePresetId = initial?.id ?? null;
 
+  // apply initial preset (fallback to DEFAULT_MESH_TERRAIN_PRESET if content missing)
+  bgPipeline.setPreset((initial ?? DEFAULT_MESH_TERRAIN_PRESET) as any);
+  console.log("[BG] levelId=", levelId, "initialId=", initialId, "initial=", initial?.id, "presets=", bgPresetsArr.length);
 
+  if (DEV) {
+    let devUIPanel: HTMLElement | null = null;
+
+    window.addEventListener("keydown", async (e) => {
+      if (e.key.toLowerCase() !== "u") return;
+
+      if (!devUIPanel) {
+        const { createMeshDevUI } = await import("./game/bg/dev/MeshDevUI");
+        devUIPanel = createMeshDevUI(bgPipeline);
+      } else {
+        const visible = devUIPanel.style.display !== "none";
+        devUIPanel.style.display = visible ? "none" : "block";
+      }
+    });
+  }
+  
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;

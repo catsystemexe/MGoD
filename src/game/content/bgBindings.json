@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultPresetId": "bg.flowRibbon.default",
+  "defaultPresetId": "bg.meshTerrain.default"
   "bindings": [
     {
       "levelId": "debug",
