@@ -390,11 +390,19 @@ async function main() {
   console.log("[BG] levelId=", levelId, "initialId=", initialId, "initial=", initial?.id, "presets=", bgPresetsArr.length);
 
   if (DEV) {
+    // --- PostFX DEV UI (F key) ---
+    const { createPostFxDevUI } = await import("./game/bg/dev/PostFxDevUI");
+    createPostFxDevUI(bgPipeline);
     let devUIPanel: HTMLElement | null = null;
 
     window.addEventListener("keydown", async (e) => {
       if (e.key.toLowerCase() !== "u") return;
 
+      // --- MESH DEV UI (U) key) ---
+      if (DEV) {
+      
+      }
+      
       if (!devUIPanel) {
         const { createMeshDevUI } = await import("./game/bg/dev/MeshDevUI");
         devUIPanel = createMeshDevUI(bgPipeline);

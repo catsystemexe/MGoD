@@ -160,6 +160,10 @@ export class BgPipeline {
   private w = 0;
   private h = 0;
 
+  private sceneFbo: WebGLFramebuffer | null = null;
+  private sceneTex: WebGLTexture | null = null;
+
+  
   private lastTimeSec = 0;
   private autoX = 0;
 
@@ -167,12 +171,52 @@ export class BgPipeline {
     this.gl = gl;
     this.w = w;
     this.h = h;
-    
+
+    this.createSceneRT();
   }
 
+  private createSceneRT() {
+    const gl = this.gl!;
+
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      this.w,
+      this.h,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      tex,
+      0
+    );
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    this.sceneTex = tex;
+    this.sceneFbo = fbo;
+  }
+
+  
   setPreset(preset: BgPreset): void {
     const next: BgSnapshot = { preset, resolvedSeed: (preset as any).seed ?? 0 };
-
+   
+    
     // First set: just store snapshot; renderers are lazy-created per layer in draw()
     if (!this.snapshot) {
       this.snapshot = next;
@@ -191,17 +235,14 @@ export class BgPipeline {
     for (const [layerId, ent] of this.renderers) {
       const l2 = curById.get(layerId);
       if (!l2) {
-        try {
-          ent.r.dispose();
-        } catch {}
+        try { ent.r.dispose(); } catch {}
         this.renderers.delete(layerId);
         continue;
       }
+
       const nextKind = String(l2.kind ?? "");
       if (nextKind && ent.kind !== nextKind) {
-        try {
-          ent.r.dispose();
-        } catch {}
+        try { ent.r.dispose(); } catch {}
         this.renderers.delete(layerId);
       }
     }
@@ -211,8 +252,18 @@ export class BgPipeline {
     // reset drift state
     this.autoX = 0;
     this.lastTimeSec = 0;
+    }
+  
+  // === DEV API ===
+  getWorkingPreset(): BgPreset | null {
+    return this.snapshot?.preset ?? null;
   }
 
+  applyPreset(p: BgPreset): void {
+    this.setPreset(p);
+  }
+
+  
   draw(ctx: BgDrawCtx): void {
     if (!this.snapshot || !this.gl) return;
 
@@ -227,6 +278,12 @@ export class BgPipeline {
       const quality: any = preset.quality ?? {};
       const layers: any[] = Array.isArray(preset.layers) ? preset.layers : [];
 
+      // === First pass: render scene into RT ===
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
+      gl.viewport(0, 0, this.w, this.h);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      
       const rawScroll: any = (ctx as any).scroll;
 
       // ctx.scroll může být legacy number nebo {x,y}
@@ -328,7 +385,16 @@ export class BgPipeline {
           shader: layer?.params?.shader ?? {},
           flow: layer?.params?.flow ?? {},
           mesh: layer?.params?.mesh ?? {},
+          postFx: layer?.params?.postFx ?? {},
         };
+
+        if (kind === "postFx") {
+          common.__bgInputTex = this.sceneTex;
+          common.__bgW = this.w;
+          common.__bgH = this.h;
+
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
 
         ent.r.setUniforms(params, tSec, effScroll, null);
         ent.r.draw();

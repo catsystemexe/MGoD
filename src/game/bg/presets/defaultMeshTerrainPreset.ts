@@ -5,6 +5,7 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
   name: "Mesh Terrain Default",
   schemaVersion: 2,
   seed: 0,
+
   common: {
     timeScale: 1,
     scrollSpeedX: 0,
@@ -17,11 +18,13 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
     vignette: 0,
     bgFade: 0,
   },
+
   quality: {
     logicScale: 1,
     noiseTexSize: 128,
     internalResolution: "auto",
   },
+
   layers: [
     {
       id: "layer0",
@@ -68,8 +71,25 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
           lineAlpha: 0.22,
           gridX: 120,
           gridZ: 80,
-        },
-      },
+        }
+      }
     },
-  ],
+
+    // --- POST FX LAYER ---
+    {
+      id: "post",
+      kind: "postFx",
+      enabled: true,
+      opacity: 1,
+      blend: "alpha",
+      parallaxMul: 1,
+      params: {
+        postFx: {
+          aberr: 0.002,
+          vignette: 0.2,
+          grain: 0.1
+        }
+      }
+    }
+  ]
 };
