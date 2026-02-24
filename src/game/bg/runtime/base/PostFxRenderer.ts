@@ -80,8 +80,6 @@ export class PostFxRenderer implements BaseRenderer {
       aberrFar:  1.65,
         posterize: 0.0,
         barrel: 0.0,
-        vignette: 0.0,
-        grain: 0.0,
 scatterDensity: 1.5,
 scatterPow: 1.8,
 scatterColor: [0.02,0.05,0.09],
@@ -131,8 +129,6 @@ uniform float uPoster;
 uniform float uNeonAmt;
 uniform float uNeonHeightMix;
 uniform float uBarrel;
-uniform float uVignette;
-uniform float uGrain;
 uniform float uScatterDensity;
 uniform float uScatterPow;
 uniform vec3  uScatterColor;
@@ -153,22 +149,9 @@ vec2 barrelWarp(vec2 uv, float k){
   return c * 0.5 + 0.5;
 }
 
-float vignetteMask(vec2 uv, float v){
-  vec2 d = abs(uv - 0.5);
-  float r = max(d.x, d.y);
-  float m = smoothstep(0.55, 0.95, r);
-  return 1.0 - clamp(m * v, 0.0, 1.0);
-}
-
 float glitchSliceOffset(float y, float slices, float t, float speed){
   float id = floor(y * slices);
   return (hash12(vec2(id, t*speed)) - 0.5);
-}
-
-float grainNoise(vec2 uv, float t){
-  vec2 px = uv * uRes;
-  float n = hash12(floor(px) + fract(px) * 0.01 + t * 17.0);
-  return n - 0.5;
 }
 
 vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
@@ -273,14 +256,6 @@ col *= mix(1.0, 0.85, scatter);
 
     float neonMask = clamp(edge * 6.0, 0.0, 1.0);
     col = mix(col, col * (1.0 + uNeonAmt), neonMask);
-
-if (uVignette > 0.00001){
-  col *= vignetteMask(uv, uVignette);
-}
-
-if (uGrain > 0.00001){
-  col += grainNoise(uv, uTime) * uGrain;
-}
 
     o = vec4(col, 1.0);
 }

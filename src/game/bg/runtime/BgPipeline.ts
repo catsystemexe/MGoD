@@ -162,10 +162,14 @@ export class BgPipeline {
   private h = 0;
 
   private sceneRt: GlRt | null = null;
-
+  private pingA: GlRt | null = null;
+  private pingB: GlRt | null = null;
   private rtW = 0;
   private rtH = 0;
   private rtPad = 0;
+
+    private fxRtA: GlRt | null = null;
+    private fxRtB: GlRt | null = null;
 
   
   private lastTimeSec = 0;
@@ -186,6 +190,9 @@ export class BgPipeline {
       disposeRt(gl, this.sceneRt);
       this.sceneRt = null;
     }
+    if (this.pingA) { disposeRt(gl, this.pingA); this.pingA = null; }
+    if (this.pingB) { disposeRt(gl, this.pingB); this.pingB = null; }
+
     // Overscan padding: enough to cover chroma shift etc.
     // Keep simple: pad in pixels based on viewport size.
     const pad = Math.ceil(Math.max(this.w, this.h) * 0.08); // 8% overscan
@@ -194,6 +201,16 @@ export class BgPipeline {
     this.rtH = this.h + pad * 2;
 
     this.sceneRt = createColorRt(gl, this.rtW, this.rtH);
+    this.pingA   = createColorRt(gl, this.rtW, this.rtH);
+    this.pingB   = createColorRt(gl, this.rtW, this.rtH);
+
+    // ping-pong RTs for postFx chain
+    if (!this.fxRtA) this.fxRtA = createColorRt(gl, this.rtW, this.rtH);
+    else resizeColorRt(gl, this.fxRtA, this.rtW, this.rtH);
+
+    if (!this.fxRtB) this.fxRtB = createColorRt(gl, this.rtW, this.rtH);
+    else resizeColorRt(gl, this.fxRtB, this.rtW, this.rtH);
+
   }
 
 
@@ -289,6 +306,15 @@ export class BgPipeline {
       const quality: any = preset.quality ?? {};
       const layers: any[] = Array.isArray(preset.layers) ? preset.layers : [];
 
+        const postFxIdx: number[] = [];
+        for (let i = 0; i < layers.length; i++) {
+          const l = layers[i];
+          if (!l || typeof l !== "object") continue;
+          if (l.enabled === false) continue;
+          if (String(l.kind ?? "") === "postFx") postFxIdx.push(i);
+        }
+
+
       // === First pass: render scene into RT ===
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneRt!.fb);
       gl.viewport(0, 0, this.rtW, this.rtH);
@@ -338,6 +364,9 @@ export class BgPipeline {
         const layerId = String(layer.id ?? `layer_${i}`);
           const kind = String(layer.kind ?? "");
           if (!kind) continue;
+
+          // scene pass: skip postFx here
+          if (kind === "postFx") continue;
 
         // If kind changed for the same layerId, recreate renderer (cache invalidation)
         const existing = this.renderers.get(layerId);
@@ -402,22 +431,7 @@ export class BgPipeline {
           postFx: layer?.params?.postFx ?? {},
         };
 
-        if (kind === "postFx") {
-          common.__bgInputTex = this.sceneRt!.tex;
-          common.__bgW = this.w;
-          common.__bgH = this.h;
-          common.__bgRtW = this.rtW;
-          common.__bgRtH = this.rtH;
-          common.__bgPad = this.rtPad;
-
-          gl.bindFramebuffer(gl.FRAMEBUFFER, saved.fb);
-          gl.viewport(
-            saved.viewport[0],
-            saved.viewport[1],
-            saved.viewport[2],
-            saved.viewport[3]
-          );
-        }
+       
 
         ent.r.setUniforms(params, tSec, effScroll, null);
         ent.r.draw();
@@ -431,6 +445,112 @@ export class BgPipeline {
         } else {
           gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
           gl.blendEquation(gl.FUNC_ADD);
+        }
+      }
+
+      // === Second pass: chain postFx layers with ping-pong RTs ===
+      if (postFxIdx.length > 0) {
+        let srcTex: WebGLTexture = this.sceneRt!.tex;
+        let ping = 0;
+
+        for (let pi = 0; pi < postFxIdx.length; pi++) {
+          const i = postFxIdx[pi];
+          const layer = layers[i];
+          if (!layer || typeof layer !== "object") continue;
+          if (layer.enabled === false) continue;
+
+          const layerId = String(layer.id ?? `layer_${i}`);
+          const kind = String(layer.kind ?? "");
+          if (kind !== "postFx") continue;
+
+          // kind swap safety
+          const existing = this.renderers.get(layerId);
+          if (existing && existing.kind !== kind) {
+            try { existing.r?.dispose?.(); } catch {}
+            this.renderers.delete(layerId);
+          }
+
+          // get/create renderer
+          let ent = this.renderers.get(layerId);
+          if (!ent) {
+            const r = createRenderer(kind);
+            r.init(gl, this.w, this.h);
+            try { r.rebuild({}); } catch {}
+            ent = { kind, r };
+            this.renderers.set(layerId, ent);
+          }
+
+          // per-layer parallax (mostly irrelevant for postFx, but keep consistent)
+          const parMul = Number(layer.parallaxMul ?? 1);
+          const effScroll = {
+            x: baseScroll.x * (Number.isFinite(parMul) ? parMul : 1),
+            y: baseScroll.y * (Number.isFinite(parMul) ? parMul : 1),
+          };
+
+          // params expected by renderer
+          const params = {
+            common,
+            quality,
+            shader: layer?.params?.shader ?? {},
+            flow: layer?.params?.flow ?? {},
+            mesh: layer?.params?.mesh ?? {},
+            postFx: layer?.params?.postFx ?? {},
+          };
+
+          // feed input
+          common.__bgInputTex = srcTex;
+          common.__bgW = this.w;
+          common.__bgH = this.h;
+          common.__bgRtW = this.rtW;
+          common.__bgRtH = this.rtH;
+          common.__bgPad = this.rtPad;
+
+          const isLast = pi === postFxIdx.length - 1;
+
+          if (isLast) {
+            // final -> default FB
+            const opacity = Math.max(0, Math.min(1, Number(layer.opacity ?? 1)));
+            gl.enable(gl.BLEND);
+            gl.blendColor(0, 0, 0, opacity);
+
+            let blendRaw: any = (layer as any).blend;
+            if (blendRaw === 0 || blendRaw === "0") blendRaw = "add";
+            if (blendRaw === 1 || blendRaw === "1") blendRaw = "alpha";
+            const blend = (blendRaw === "add" || blendRaw === "alpha") ? blendRaw : "alpha";
+
+            if (blend === "add") {
+              gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
+              gl.blendEquation(gl.FUNC_ADD);
+            } else {
+              gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+              gl.blendEquation(gl.FUNC_ADD);
+            }
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, saved.fb);
+            gl.viewport(saved.viewport[0], saved.viewport[1], saved.viewport[2], saved.viewport[3]);
+
+            ent.r.setUniforms(params, tSec, effScroll, null);
+            ent.r.draw();
+          } else {
+            // intermediate -> ping RT (overwrite)
+            gl.disable(gl.BLEND);
+
+            const rt = (ping === 0 ? this.pingA : this.pingB)!;
+            ping ^= 1;
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, rt.fb);
+            gl.viewport(0, 0, this.rtW, this.rtH);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            // draw only into center rect (keep padding semantics)
+            gl.viewport(this.rtPad, this.rtPad, this.w, this.h);
+
+            ent.r.setUniforms(params, tSec, effScroll, null);
+            ent.r.draw();
+
+            srcTex = rt.tex;
+          }
         }
       }
     } finally {
