@@ -83,7 +83,17 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
       parallaxMul: 1,
       params: {
         postFx: {
-          aberr: 0.002,        }
+          aberr: 0.002,
+            scatterDensity: 1.8,
+            scatterPow: 2.0,
+            scatterColor: [0.05, 0.12, 0.20],
+            glitchStrength: 0.08,
+            glitchSlices: 60,
+            glitchSpeed: 4.0,
+          barrel: 0.0,
+          vignette: 0.15,
+          grain: 0.015,
+        }
       }
     }
   ]

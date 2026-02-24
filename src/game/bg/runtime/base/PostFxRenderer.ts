@@ -47,9 +47,10 @@ export class PostFxRenderer implements BaseRenderer {
   private uFogAmt: WebGLUniformLocation | null = null;
   private uFogPow: WebGLUniformLocation | null = null;
 
-  private uAber: WebGLUniformLocation | null = null;  private uScan: WebGLUniformLocation | null = null;
-  private uPoster: WebGLUniformLocation | null = null;
-    private uNeonAmt: WebGLUniformLocation | null = null;    private uNeonHeightMix: WebGLUniformLocation | null = null;
+      private uAber: WebGLUniformLocation | null = null;  private uScan: WebGLUniformLocation | null = null;
+      private uPoster: WebGLUniformLocation | null = null;
+      private uBarrel: WebGLUniformLocation | null = null;
+       private uNeonAmt: WebGLUniformLocation | null = null;    private uNeonHeightMix: WebGLUniformLocation | null = null;
 
   // state from setUniforms
   private time = 0;
@@ -72,9 +73,18 @@ export class PostFxRenderer implements BaseRenderer {
     fogAmt: 0.35,
     fogPow: 1.6,
 
-    aberr: 0.0025,    scan: 0.10,
-    posterize: 0.0,
-      neonAmt: 0.0,      neonHeightMix: 0.5,  };
+        aberr: 0.0025,    scan: 0.10,
+        posterize: 0.0,
+        barrel: 0.0,
+        vignette: 0.0,
+        grain: 0.0,
+scatterDensity: 1.5,
+scatterPow: 1.8,
+scatterColor: [0.02,0.05,0.09],
+glitchStrength: 0.0,
+glitchSlices: 40.0,
+glitchSpeed: 2.0,
+        neonAmt: 0.0,      neonHeightMix: 0.5,  };
 
   init(gl: WebGL2RenderingContext, w: number, h: number): void {
     this.gl = gl;
@@ -114,11 +124,45 @@ uniform float uAber;uniform float uScan;
 uniform float uPoster;
 uniform float uNeonAmt;
 uniform float uNeonHeightMix;
+uniform float uBarrel;
+uniform float uVignette;
+uniform float uGrain;
+uniform float uScatterDensity;
+uniform float uScatterPow;
+uniform vec3  uScatterColor;
+uniform float uGlitchStrength;
+uniform float uGlitchSlices;
+uniform float uGlitchSpeed;
       
 float hash12(vec2 p){
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 barrelWarp(vec2 uv, float k){
+  vec2 c = uv * 2.0 - 1.0;
+  float r2 = dot(c, c);
+  c *= 1.0 + k * r2;
+  return c * 0.5 + 0.5;
+}
+
+float vignetteMask(vec2 uv, float v){
+  vec2 d = abs(uv - 0.5);
+  float r = max(d.x, d.y);
+  float m = smoothstep(0.55, 0.95, r);
+  return 1.0 - clamp(m * v, 0.0, 1.0);
+}
+
+float glitchSliceOffset(float y, float slices, float t, float speed){
+  float id = floor(y * slices);
+  return (hash12(vec2(id, t*speed)) - 0.5);
+}
+
+float grainNoise(vec2 uv, float t){
+  vec2 px = uv * uRes;
+  float n = hash12(floor(px) + fract(px) * 0.01 + t * 17.0);
+  return n - 0.5;
 }
 
 vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
@@ -153,7 +197,22 @@ vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
 
     void main(){
   vec2 uv = vUv;
-    vec2 uvScene = (uv * uRes + uPadPx) / max(uRtRes, vec2(1.0));
+  if (abs(uBarrel) > 0.00001){
+    uv = barrelWarp(uv, uBarrel);
+  }
+    
+  // micro-slice glitch (UV displacement)
+  if (uGlitchStrength > 0.00001){
+    float slices = max(1.0, uGlitchSlices);
+    float t = floor(uTime * uGlitchSpeed);
+    float dx = glitchSliceOffset(uv.y, slices, t, 1.0) * uGlitchStrength;
+    // thin bands only
+    float band = abs(fract(uv.y * slices) - 0.5);
+    float m = 1.0 - smoothstep(0.0, 0.08, band);
+    uv.x += dx * m;
+  }
+
+vec2 uvScene = (uv * uRes + uPadPx) / max(uRtRes, vec2(1.0));
     vec3 col = sampleAber(uv, uvScene, uAber);
 
 
@@ -165,6 +224,11 @@ vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
   // fog (stronger towards top / distance feeling)
   float f = pow(clamp(uv.y, 0.0, 1.0), max(0.01, uFogPow)) * uFogAmt;
   col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
+// === Atmospheric Scattering 2.0 ===
+float depth = pow(clamp(uv.y,0.0,1.0), uScatterPow);
+float scatter = 1.0 - exp(-depth * uScatterDensity);
+col = mix(col, uScatterColor, scatter);
+col *= mix(1.0, 0.85, scatter);
   // scanlines (subtle)
   float scan = sin((uv.y * uRes.y) * 3.14159) * 0.5 + 0.5;
   col *= mix(1.0, 0.92 + 0.08*scan, clamp(uScan, 0.0, 1.0));
@@ -188,6 +252,14 @@ vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
 
     float neonMask = clamp(edge * 6.0, 0.0, 1.0);
     col = mix(col, col * (1.0 + uNeonAmt), neonMask);
+
+if (uVignette > 0.00001){
+  col *= vignetteMask(uv, uVignette);
+}
+
+if (uGrain > 0.00001){
+  col += grainNoise(uv, uTime) * uGrain;
+}
 
     o = vec4(col, 1.0);
 }
@@ -221,6 +293,13 @@ this.uTintA = gl.getUniformLocation(prog, "uTintA");
 
     this.uAber = gl.getUniformLocation(prog, "uAber");    this.uScan = gl.getUniformLocation(prog, "uScan");
     this.uPoster = gl.getUniformLocation(prog, "uPoster");
+    this.uBarrel = gl.getUniformLocation(prog, "uBarrel");
+this.uScatterDensity = gl.getUniformLocation(prog, "uScatterDensity");
+this.uScatterPow = gl.getUniformLocation(prog, "uScatterPow");
+this.uScatterColor = gl.getUniformLocation(prog, "uScatterColor");
+this.uGlitchStrength = gl.getUniformLocation(prog, "uGlitchStrength");
+this.uGlitchSlices = gl.getUniformLocation(prog, "uGlitchSlices");
+this.uGlitchSpeed = gl.getUniformLocation(prog, "uGlitchSpeed");
       this.uNeonAmt = gl.getUniformLocation(prog, "uNeonAmt");      this.uNeonHeightMix = gl.getUniformLocation(prog, "uNeonHeightMix");  }
 
   rebuild(_args: any): void {}
@@ -252,8 +331,17 @@ const fx = params?.postFx ?? params?.fx ?? params?.layerFx ?? params?.params?.po
       if (fx.fogPow !== undefined) this.p.fogPow = Number(fx.fogPow) || this.p.fogPow;
 
       if (fx.aberr !== undefined) this.p.aberr = Number(fx.aberr) || this.p.aberr;      if (fx.scan !== undefined) this.p.scan = Number(fx.scan) || this.p.scan;
-      if (fx.posterize !== undefined) this.p.posterize = Number(fx.posterize) || this.p.posterize;
-        if (fx.neonAmt !== undefined) this.p.neonAmt = Number(fx.neonAmt) || this.p.neonAmt;        if (fx.neonHeightMix !== undefined) this.p.neonHeightMix = Number(fx.neonHeightMix) || this.p.neonHeightMix;    }
+            if (fx.posterize !== undefined) this.p.posterize = Number(fx.posterize) || this.p.posterize;
+            if (fx.barrel !== undefined) this.p.barrel = Number(fx.barrel) || 0;
+if (fx.scatterDensity !== undefined) this.p.scatterDensity = Number(fx.scatterDensity);
+if (fx.scatterPow !== undefined) this.p.scatterPow = Number(fx.scatterPow);
+if (fx.scatterColor !== undefined && Array.isArray(fx.scatterColor)) this.p.scatterColor = fx.scatterColor;
+if (fx.glitchStrength !== undefined) this.p.glitchStrength = Number(fx.glitchStrength);
+if (fx.glitchSlices !== undefined) this.p.glitchSlices = Number(fx.glitchSlices);
+if (fx.glitchSpeed !== undefined) this.p.glitchSpeed = Number(fx.glitchSpeed);
+            if (fx.neonAmt !== undefined) this.p.neonAmt = Number(fx.neonAmt) || this.p.neonAmt;
+            if (fx.neonHeightMix !== undefined) this.p.neonHeightMix = Number(fx.neonHeightMix) || this.p.neonHeightMix;
+          }
   }
 
   draw(): void {
@@ -283,9 +371,18 @@ gl.uniform3f(this.uTintA, this.p.tintA[0], this.p.tintA[1], this.p.tintA[2]);
     gl.uniform1f(this.uFogAmt, this.p.fogAmt);
     gl.uniform1f(this.uFogPow, this.p.fogPow);
 
-    gl.uniform1f(this.uAber, this.p.aberr);    gl.uniform1f(this.uScan, this.p.scan);
-    gl.uniform1f(this.uPoster, this.p.posterize);
-      gl.uniform1f(this.uNeonAmt, this.p.neonAmt);      gl.uniform1f(this.uNeonHeightMix, this.p.neonHeightMix);
+          gl.uniform1f(this.uAber, this.p.aberr);
+          gl.uniform1f(this.uScan, this.p.scan);
+          gl.uniform1f(this.uPoster, this.p.posterize);
+          if (this.uBarrel) gl.uniform1f(this.uBarrel, this.p.barrel);
+if (this.uScatterDensity) gl.uniform1f(this.uScatterDensity, this.p.scatterDensity);
+if (this.uScatterPow) gl.uniform1f(this.uScatterPow, this.p.scatterPow);
+if (this.uScatterColor) gl.uniform3f(this.uScatterColor, this.p.scatterColor[0], this.p.scatterColor[1], this.p.scatterColor[2]);
+if (this.uGlitchStrength) gl.uniform1f(this.uGlitchStrength, this.p.glitchStrength);
+if (this.uGlitchSlices) gl.uniform1f(this.uGlitchSlices, this.p.glitchSlices);
+if (this.uGlitchSpeed) gl.uniform1f(this.uGlitchSpeed, this.p.glitchSpeed);
+          gl.uniform1f(this.uNeonAmt, this.p.neonAmt);
+          gl.uniform1f(this.uNeonHeightMix, this.p.neonHeightMix);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     gl.bindVertexArray(null);
