@@ -3,6 +3,7 @@ import { BgSnapshot } from "./BgSnapshot";
 import { BgDrawCtx } from "./BgDrawCtx";
 import { BaseRenderer } from "./base/BaseRenderer";
 import { createRenderer } from "./base/createRenderer";
+import { createColorRt, resizeColorRt, disposeRt, type GlRt } from "./fx/GlRt";
 
 type BgGlState = {
   fb: WebGLFramebuffer | null;
@@ -160,8 +161,11 @@ export class BgPipeline {
   private w = 0;
   private h = 0;
 
-  private sceneFbo: WebGLFramebuffer | null = null;
-  private sceneTex: WebGLTexture | null = null;
+  private sceneRt: GlRt | null = null;
+
+  private rtW = 0;
+  private rtH = 0;
+  private rtPad = 0;
 
   
   private lastTimeSec = 0;
@@ -177,40 +181,21 @@ export class BgPipeline {
 
   private createSceneRT() {
     const gl = this.gl!;
+    // dispose old RT if re-init
+    if (this.sceneRt) {
+      disposeRt(gl, this.sceneRt);
+      this.sceneRt = null;
+    }
+    // Overscan padding: enough to cover chroma shift etc.
+    // Keep simple: pad in pixels based on viewport size.
+    const pad = Math.ceil(Math.max(this.w, this.h) * 0.08); // 8% overscan
+    this.rtPad = pad;
+    this.rtW = this.w + pad * 2;
+    this.rtH = this.h + pad * 2;
 
-    const tex = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      this.w,
-      this.h,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null
-    );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    const fbo = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      tex,
-      0
-    );
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    this.sceneTex = tex;
-    this.sceneFbo = fbo;
+    this.sceneRt = createColorRt(gl, this.rtW, this.rtH);
   }
+
 
   
   setPreset(preset: BgPreset): void {
@@ -279,10 +264,13 @@ export class BgPipeline {
       const layers: any[] = Array.isArray(preset.layers) ? preset.layers : [];
 
       // === First pass: render scene into RT ===
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
-      gl.viewport(0, 0, this.w, this.h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneRt!.fb);
+      gl.viewport(0, 0, this.rtW, this.rtH);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // draw scene into center rect (overscan padding around)
+      gl.viewport(this.rtPad, this.rtPad, this.w, this.h);
       
       const rawScroll: any = (ctx as any).scroll;
 
@@ -389,11 +377,20 @@ export class BgPipeline {
         };
 
         if (kind === "postFx") {
-          common.__bgInputTex = this.sceneTex;
+          common.__bgInputTex = this.sceneRt!.tex;
           common.__bgW = this.w;
           common.__bgH = this.h;
+          common.__bgRtW = this.rtW;
+          common.__bgRtH = this.rtH;
+          common.__bgPad = this.rtPad;
 
-          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, saved.fb);
+          gl.viewport(
+            saved.viewport[0],
+            saved.viewport[1],
+            saved.viewport[2],
+            saved.viewport[3]
+          );
         }
 
         ent.r.setUniforms(params, tSec, effScroll, null);

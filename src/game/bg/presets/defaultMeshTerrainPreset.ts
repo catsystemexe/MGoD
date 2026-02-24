@@ -14,9 +14,7 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
     exposure: 1,
     contrast: 1,
     gamma: 1,
-    colorize: 0,
-    vignette: 0,
-    bgFade: 0,
+    colorize: 0,    bgFade: 0,
   },
 
   quality: {
@@ -85,10 +83,7 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
       parallaxMul: 1,
       params: {
         postFx: {
-          aberr: 0.002,
-          vignette: 0.2,
-          grain: 0.1
-        }
+          aberr: 0.002,        }
       }
     }
   ]

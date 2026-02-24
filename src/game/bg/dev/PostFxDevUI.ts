@@ -8,10 +8,9 @@ export type PostFxParamDef = {
 };
 
 const PARAMS: PostFxParamDef[] = [
-  { key: "aberr",    min: 0, max: 0.01, step: 0.0001 },
-  { key: "vignette", min: 0, max: 1,    step: 0.01   },
-  { key: "grain",    min: 0, max: 1,    step: 0.01   },
-];
+    { key: "aberr", min: 0, max: 0.2, step: 0.0001 },
+    { key: "neonAmt", min: 0, max: 150, step: 0.01 },
+    { key: "neonHeightMix", min: 0, max: 1, step: 0.01 },];
 
 export function createPostFxDevUI(bgPipeline: any) {
 
