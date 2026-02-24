@@ -77,7 +77,7 @@ export function createPostFxDevUI(bgPipeline: any) {
 
       slider.oninput = () => {
         fx[def.key] = Number(slider.value);
-        bgPipeline.applyPreset?.(preset);
+        bgPipeline.applyPresetNoReset?.(preset);
       };
 
       wrap.appendChild(slider);

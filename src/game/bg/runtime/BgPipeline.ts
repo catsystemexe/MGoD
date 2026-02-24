@@ -238,6 +238,32 @@ export class BgPipeline {
     this.autoX = 0;
     this.lastTimeSec = 0;
     }
+  applyPresetNoReset(preset: BgPreset): void {
+    const next: BgSnapshot = { preset, resolvedSeed: (preset as any).seed ?? 0 };
+
+    // dispose removed / changed layers (same logic as setPreset but without drift reset)
+    const cur: any = preset;
+    const curLayers: any[] = Array.isArray(cur?.layers) ? cur.layers : [];
+    const curById = new Map(curLayers.map((l) => [String(l?.id), l]));
+
+    for (const [layerId, ent] of this.renderers) {
+      const l2 = curById.get(layerId);
+      if (!l2) {
+        try { ent.r.dispose(); } catch {}
+        this.renderers.delete(layerId);
+        continue;
+      }
+
+      const nextKind = String(l2.kind ?? "");
+      if (nextKind && ent.kind !== nextKind) {
+        try { ent.r.dispose(); } catch {}
+        this.renderers.delete(layerId);
+      }
+    }
+
+    this.snapshot = next;
+  }
+
   
   // === DEV API ===
   getWorkingPreset(): BgPreset | null {
