@@ -9,6 +9,8 @@ export type PostFxParamDef = {
 
 const PARAMS: PostFxParamDef[] = [
     { key: "aberr", min: 0, max: 0.2, step: 0.0001 },
+    { key: "aberrNear", min: 0.0, max: 2.5, step: 0.001 },
+    { key: "aberrFar",  min: 0.0, max: 3.5, step: 0.001 },
     { key: "neonAmt", min: 0, max: 150, step: 0.01 },
     { key: "neonHeightMix", min: 0, max: 1, step: 0.01 },
     { key: "barrel", min: -0.35, max: 1.35, step: 0.001 },

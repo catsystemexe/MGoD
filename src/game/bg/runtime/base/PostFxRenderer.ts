@@ -49,6 +49,8 @@ export class PostFxRenderer implements BaseRenderer {
 
       private uAber: WebGLUniformLocation | null = null;  private uScan: WebGLUniformLocation | null = null;
       private uPoster: WebGLUniformLocation | null = null;
+    private uAberNear: WebGLUniformLocation | null = null;
+    private uAberFar: WebGLUniformLocation | null = null;
       private uBarrel: WebGLUniformLocation | null = null;
        private uNeonAmt: WebGLUniformLocation | null = null;    private uNeonHeightMix: WebGLUniformLocation | null = null;
 
@@ -74,6 +76,8 @@ export class PostFxRenderer implements BaseRenderer {
     fogPow: 1.6,
 
         aberr: 0.0025,    scan: 0.10,
+      aberrNear: 0.35,
+      aberrFar:  1.65,
         posterize: 0.0,
         barrel: 0.0,
         vignette: 0.0,
@@ -122,6 +126,8 @@ uniform float uFogPow;
 
 uniform float uAber;uniform float uScan;
 uniform float uPoster;
+  uniform float uAberNear;
+  uniform float uAberFar;
 uniform float uNeonAmt;
 uniform float uNeonHeightMix;
 uniform float uBarrel;
@@ -176,8 +182,23 @@ vec3 sampleAber(vec2 uv, vec2 uvScene, float a){
       float edgeSoft = max(1.5 / max(uRes.x, uRes.y), a * 0.55);
       float aEff = a * smoothstep(0.0, edgeSoft, edge);
 
+        // near->far aberration multiplier (fake depth via uv.y)
+        float depthProxy = pow(clamp(uv.y, 0.0, 1.0), 1.35);
+        aEff *= mix(uAberNear, uAberFar, clamp(depthProxy, 0.0, 1.0));
+
+
+
       // radial offset in screen-normalized units; convert to RT UV using (uRes/uRtRes)
-      vec2 off = c * (aEff * (0.35 + 1.25*r));
+      // radialvec2 off = c * (aEff * (0.35 + 1.25*r));
+      
+vec2 stretch = vec2(1.4, 0.6); // horizontal bias
+vec2 off = c * stretch * (aEff * (0.25 + 1.45*r));
+
+        // linear (directional) bias aka "linea" feel (subtle).
+        // Pushes channels slightly along X, stronger with depth.
+        vec2 dir = normalize(vec2(1.0, 0.15));
+        off += dir * (aEff * 0.22);
+
       vec2 scale = uRes / max(uRtRes, vec2(1.0)); // safe
 
       // clamp to the *inner* (non-padded) rect inside the RT
@@ -293,6 +314,8 @@ this.uTintA = gl.getUniformLocation(prog, "uTintA");
 
     this.uAber = gl.getUniformLocation(prog, "uAber");    this.uScan = gl.getUniformLocation(prog, "uScan");
     this.uPoster = gl.getUniformLocation(prog, "uPoster");
+      this.uAberNear = gl.getUniformLocation(prog, "uAberNear");
+      this.uAberFar  = gl.getUniformLocation(prog, "uAberFar");
     this.uBarrel = gl.getUniformLocation(prog, "uBarrel");
 this.uScatterDensity = gl.getUniformLocation(prog, "uScatterDensity");
 this.uScatterPow = gl.getUniformLocation(prog, "uScatterPow");
@@ -330,7 +353,10 @@ const fx = params?.postFx ?? params?.fx ?? params?.layerFx ?? params?.params?.po
       if (fx.fogAmt !== undefined) this.p.fogAmt = Number(fx.fogAmt) || this.p.fogAmt;
       if (fx.fogPow !== undefined) this.p.fogPow = Number(fx.fogPow) || this.p.fogPow;
 
-      if (fx.aberr !== undefined) this.p.aberr = Number(fx.aberr) || this.p.aberr;      if (fx.scan !== undefined) this.p.scan = Number(fx.scan) || this.p.scan;
+      if (fx.aberr !== undefined) this.p.aberr = Number(fx.aberr) || this.p.aberr;
+        if (fx.aberrNear !== undefined) this.p.aberrNear = Number(fx.aberrNear);
+        if (fx.aberrFar !== undefined)  this.p.aberrFar  = Number(fx.aberrFar);
+        if (fx.scan !== undefined) this.p.scan = Number(fx.scan) || this.p.scan;
             if (fx.posterize !== undefined) this.p.posterize = Number(fx.posterize) || this.p.posterize;
             if (fx.barrel !== undefined) this.p.barrel = Number(fx.barrel) || 0;
 if (fx.scatterDensity !== undefined) this.p.scatterDensity = Number(fx.scatterDensity);
@@ -374,6 +400,8 @@ gl.uniform3f(this.uTintA, this.p.tintA[0], this.p.tintA[1], this.p.tintA[2]);
           gl.uniform1f(this.uAber, this.p.aberr);
           gl.uniform1f(this.uScan, this.p.scan);
           gl.uniform1f(this.uPoster, this.p.posterize);
+      if (this.uAberNear) gl.uniform1f(this.uAberNear, this.p.aberrNear);
+      if (this.uAberFar)  gl.uniform1f(this.uAberFar,  this.p.aberrFar);
           if (this.uBarrel) gl.uniform1f(this.uBarrel, this.p.barrel);
 if (this.uScatterDensity) gl.uniform1f(this.uScatterDensity, this.p.scatterDensity);
 if (this.uScatterPow) gl.uniform1f(this.uScatterPow, this.p.scatterPow);

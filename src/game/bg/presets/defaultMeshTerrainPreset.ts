@@ -84,6 +84,8 @@ export const DEFAULT_MESH_TERRAIN_PRESET: BgPresetV2 = {
       params: {
         postFx: {
           aberr: 0.002,
+            aberrNear: 0.35,
+            aberrFar: 1.65,
             scatterDensity: 1.8,
             scatterPow: 2.0,
             scatterColor: [0.05, 0.12, 0.20],
