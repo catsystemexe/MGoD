@@ -1,3 +1,5 @@
+import { createPostFxDevUI } from "../bg/dev/PostFxDevUI";
+import { createMeshDevUI } from "../bg/dev/MeshDevUI";
 import { EventBus } from "../../engine/core/EventBus";
 import { DevHotkeys } from "../../ui/DevHotkeys";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";

@@ -3,6 +3,7 @@ import { ShaderBgRenderer } from "./ShaderBgRenderer";
 import { FlowSegmentsRenderer } from "./FlowSegmentsRenderer";
 import { FlowRibbonRenderer } from "./FlowRibbonRenderer";
 import { MeshTerrainRenderer } from "./MeshTerrainRenderer";
+import { PostFxRenderer } from "./PostFxRenderer";
 
 export function createRenderer(kind: string): BaseRenderer {
   switch (kind) {
@@ -13,7 +14,9 @@ export function createRenderer(kind: string): BaseRenderer {
       return new FlowSegmentsRenderer();
     case "flowRibbon":
       return new FlowRibbonRenderer();
-    case "shader":
+    case "postFx":
+        return new PostFxRenderer();
+      case "shader":
     default:
       return new ShaderBgRenderer();
   }
