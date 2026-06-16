@@ -61,7 +61,7 @@ export class PlayerSystem {
     const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
     const dx = aimTarget.x - this.player.pos.x;
     const dy = aimTarget.y - this.player.pos.y;
-    const len = Math.hypot(dx, dy) || 1;
+    const len = Math.hypot(dx, dy);
 
     // --- Aim dir + rot (stored on player entity for renderer)
     const pAny2 = this.player as any;
@@ -69,14 +69,16 @@ export class PlayerSystem {
     // ensure aimDir exists
     if (!pAny2.aimDir) pAny2.aimDir = { x: 1, y: 0 };
 
-    // normalized aim dir
-    pAny2.aimDir.x = dx / len;
-    pAny2.aimDir.y = dy / len;
+    // normalized aim dir; keep the last valid direction when target overlaps player
+    if (len > 0) {
+      pAny2.aimDir.x = dx / len;
+      pAny2.aimDir.y = dy / len;
 
-    // rotation in logic space (y down). Renderer/SpriteProgram flips NDC Y => use -atan2
-    const ROT_OFFSET = 0; // tweak if your sprite points up/left/etc.
-    pAny2.rot = Math.atan2(dy, dx) + ROT_OFFSET;
-    if (!Number.isFinite(pAny2.rot)) pAny2.rot = 0;
+      // rotation in logic space (y down). Renderer/SpriteProgram flips NDC Y => use -atan2
+      const ROT_OFFSET = 0; // tweak if your sprite points up/left/etc.
+      pAny2.rot = Math.atan2(dy, dx) + ROT_OFFSET;
+      if (!Number.isFinite(pAny2.rot)) pAny2.rot = 0;
+    }
 
     
     /// --- Movement (smooth accel/decel) + posPrev for render interpolation

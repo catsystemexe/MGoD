@@ -253,11 +253,13 @@ export async function createGame(
 
       
 
+        const devWaveKeys = DIRECTOR_DEFS_MVP.waves.map((w: any) => String(w.id)).slice(0, 9);
+
         // expose mapping for overlay (DEV only)
         let devHotkeys: any = null;
 
         if ((globalThis as any).__DEV__) {
-          (window as any).__CM.devWaveHotkeys = DEV_WAVE_KEYS.map((id, i) => ({
+          (window as any).__CM.devWaveHotkeys = devWaveKeys.map((id, i) => ({
             n: i + 1,
             waveId: id,
           }));
@@ -294,7 +296,7 @@ export async function createGame(
 
           if (!(n >= 1 && n <= 9)) return;
 
-          const waveId = (DEV_WAVE_KEYS as any)[n - 1] as string | undefined;
+          const waveId = devWaveKeys[n - 1] as string | undefined;
           if (!waveId) return;
 
           e.preventDefault();
