@@ -183,6 +183,18 @@ export class DamageSystem<T extends BaseEntity> {
 
     // markKill EARLY so other systems skip it in same tick
     this.store.markKill(target);
+
+    // Flow-owned kill event so ScoreSystem (and other Flow listeners) can react.
+    // Mirrors applyPlayerContact's emit() exactly; only difference is isPlayer: false.
+    // NOTE: this also activates LootDropSystem for enemy kills (25% roll →
+    // emits SPAWN_PICKUP), which SpawnSystem currently silently drops
+    // (handler commented out, default: break). This is intentional/accepted —
+    // pickups remain a separate open scope decision.
+    this.bus.emit(EventType.ENTITY_KILLED, {
+      target,
+      source,
+      isPlayer: false,
+    });
 // explosion FX (particles-driven)
 if (typeof (this.store as any).spawn === "function" && ent?.pos) {
   const ex = Number(ent.pos.x ?? 0);

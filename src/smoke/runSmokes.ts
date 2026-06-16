@@ -14,6 +14,7 @@ const SMOKES = [
   "../game/systems/ProjectileSystem.smoke",
   "../game/systems/ProjectileConsumedKillsSameTick.smoke",
   "../game/systems/ProjectileTTL.smoke",
+  "../game/systems/CombatLoop.smoke",
   "../game/systems/Flow.smoke",
   "../game/systems/StartToSpawn.integration.smoke",
   "../game/systems/SpawnOwnership.contract.smoke",
