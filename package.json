@@ -1,4 +1,6 @@
 {
+  "name": "captain-meow",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
@@ -11,6 +13,7 @@
     "vite": "^7.3.1"
   },
   "devDependencies": {
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
   }
 }
