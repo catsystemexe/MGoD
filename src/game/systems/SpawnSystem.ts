@@ -19,7 +19,9 @@ import type { WeaponDB } from "../defs/Weapons";
 export interface SpawnSystemConfig {
   rng01: () => number;
   logicSize: { w: number; h: number };
-  weaponDb: WeaponDB;
+  weaponDb?: WeaponDB;
+  projectile?: Record<string, any>;
+  bomb?: any;
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -95,6 +97,11 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
         private readonly cfg: SpawnSystemConfig,
         private readonly world: WorldState,
       ) {
+    if (!this.cfg.weaponDb && this.cfg.projectile && typeof this.cfg.projectile === "object") {
+      this.cfg.weaponDb = Object.fromEntries(
+        Object.entries(this.cfg.projectile).map(([id, projectile]) => [id, { id, cooldownSec: 0, projectile }]),
+      ) as WeaponDB;
+    }
     if (typeof this.cfg?.rng01 !== "function") throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
     if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
@@ -111,11 +118,12 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
  
           
-          const def = this.cfg.weaponDb[p.weaponTypeId];
+          const weaponTypeId = String((p as any).weaponTypeId ?? (p as any).weapon ?? "primary");
+          const def = this.cfg.weaponDb?.[weaponTypeId];
           const wcfg = def?.projectile;
           if (!wcfg) {
             if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
-              console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", p.weaponTypeId, "def=", def);
+              console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", weaponTypeId, "def=", def);
             }
             break;
           }
@@ -123,7 +131,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           // DEBUG: enable in browser console: __CM_DEBUG_PROJECTILES = true
           if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
             // keep it small to avoid spam
-            console.log("[SPAWN_PROJECTILE]", p.weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);
+            console.log("[SPAWN_PROJECTILE]", weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);
           }
           
           const dx = p.dir.x;
@@ -134,7 +142,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
   this.store.spawn((ent: any) => {
     ent.kind = "projectile";
     ent.owner = p.owner;
-    ent.weaponTypeId = p.weaponTypeId;
+    ent.weaponTypeId = weaponTypeId;
 
 
 
@@ -162,32 +170,33 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           break;
         }
 
-          /* case EventType.SPAWN_BOMB: {
-            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
-            // const b = this.cfg.bomb;
+          case EventType.SPAWN_BOMB: {
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
+            const b = (this.cfg as any).bomb;
+            if (!b) break;
 
-            // const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
-            // const travel = Math.max(0.001, b.travelSec);
-            // const vx = to.x / travel;
-            // const vy = to.y / travel;
+            const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
+            const travel = Math.max(0.001, Number(b.travelSec ?? 0.25));
+            const vx = to.x / travel;
+            const vy = to.y / travel;
 
-            // this.store.spawn((ent: any) => {
-            //   ent.kind = "bomb";
-            //   ent.owner = p.owner;
-            //   ent.pos = { x: p.origin.x, y: p.origin.y };
-            //   ent.posPrev = { x: p.origin.x, y: p.origin.y };
-            //   ent.vel = { x: vx, y: vy };
-            //   ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
-            //   ent.damage = b.damage;
-            //   ent.radius = b.radius;
-            //   ent.target = { x: p.target.x, y: p.target.y };
-            //   ent.pendingKill = false;
-            // });
+            this.store.spawn((ent: any) => {
+              ent.kind = "bomb";
+              ent.owner = p.owner;
+              ent.pos = { x: p.origin.x, y: p.origin.y };
+              ent.posPrev = { x: p.origin.x, y: p.origin.y };
+              ent.vel = { x: vx, y: vy };
+              ent.ttl = Math.max(0.001, Number(b.ttlSec ?? b.travelSec ?? 0.25));
+              ent.damage = Number(b.damage ?? 0);
+              ent.radius = Number(b.radius ?? 1);
+              ent.target = { x: p.target.x, y: p.target.y };
+              ent.pendingKill = false;
+            });
 
-            // break;
-          } */
+            break;
+          }
 
-        case EventType.SPAWN_ENEMY: {
+                case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
             if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
               console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
