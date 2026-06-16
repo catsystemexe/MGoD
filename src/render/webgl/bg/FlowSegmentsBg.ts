@@ -86,7 +86,6 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
 
 export class FlowSegmentsBg {
   private gl: WebGL2RenderingContext;
-  private bgSegments: FlowSegmentsBg;
   private prog: WebGLProgram;
   private vao: WebGLVertexArrayObject;
   private vbo: WebGLBuffer;

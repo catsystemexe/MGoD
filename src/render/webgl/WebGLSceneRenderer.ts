@@ -445,12 +445,15 @@ export class WebGLSceneRenderer {
 
     // sprite anim time
     const tSec = performance.now() * 0.001;
+    const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
+    const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
+
     // BG pass (shader or flow)
     if (bgKind === "flow") {
       const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
 
       if (labKind === "flowSegments") {
-        this.bgSegments.draw({
+        this.bgFlowSegments.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,
@@ -460,7 +463,7 @@ export class WebGLSceneRenderer {
         });
       } else {
         // default: flowRibbon
-        this.bgFlow.draw({
+        this.bgFlowRibbon.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,

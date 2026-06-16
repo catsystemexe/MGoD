@@ -63,8 +63,8 @@ export class WeaponSystem {
        constructor(
          private readonly bus: EventBus<CMEventMap>,
           private readonly cfg: WeaponsConfig,
-            private readonly db: WeaponDB,
-         private readonly world: { scrollX: number; scrollY: number },
+            private readonly db: WeaponDB = {},
+         private readonly world: { scrollX: number; scrollY: number } = { scrollX: 0, scrollY: 0 },
            private readonly opts?: {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
@@ -103,13 +103,16 @@ export class WeaponSystem {
 
      const dir = { x: 1, y: 0 }; // default forward fire (no mouse aim)
 
-     const primaryId = this.cfg.primary;
-     const secondaryId = this.cfg.secondary;
-     const bombId = this.cfg.bomb;
+     const primaryCfg = (this.cfg as any).primary;
+     const secondaryCfg = (this.cfg as any).secondary;
+     const bombCfg = (this.cfg as any).bomb;
+     const primaryId = typeof primaryCfg === "string" ? primaryCfg : "primary";
+     const secondaryId = typeof secondaryCfg === "string" ? secondaryCfg : "secondary";
+     const bombId = typeof bombCfg === "string" ? bombCfg : "bomb";
 
-     const primary = this.db[primaryId];
-     const secondary = this.db[secondaryId];
-     const bomb = this.db[bombId];
+     const primary = this.db[primaryId] ?? (typeof primaryCfg === "object" ? primaryCfg : undefined);
+     const secondary = this.db[secondaryId] ?? (typeof secondaryCfg === "object" ? secondaryCfg : undefined);
+     const bomb = this.db[bombId] ?? (typeof bombCfg === "object" ? bombCfg : undefined);
 
      this.st.cdPrimary = tryFire(
        !!actions.firePrimary,
