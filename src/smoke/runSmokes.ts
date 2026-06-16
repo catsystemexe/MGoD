@@ -1,5 +1,7 @@
 // src/smoke/runSmokes.ts
 const SMOKES = [
+  "../engine/core/EventBus.smoke",
+  "../engine/ecs/EntityStore.smoke",
   "../game/systems/PlayerSystem.smoke",
   "../game/systems/WeaponSystem.smoke",
   "../game/systems/SimulationLoop.smoke",
@@ -8,6 +10,10 @@ const SMOKES = [
   "../game/systems/DirectorSpawn.smoke",
   "../game/systems/SpawnDelayOneTick.smoke",
   "../game/systems/EnemyCapRespected.smoke",
+  "../game/systems/CollisionSystem.smoke",
+  "../game/systems/ProjectileSystem.smoke",
+  "../game/systems/ProjectileConsumedKillsSameTick.smoke",
+  "../game/systems/ProjectileTTL.smoke",
   "../game/systems/Flow.smoke",
   "../game/systems/StartToSpawn.integration.smoke",
   "../game/systems/SpawnOwnership.contract.smoke",
