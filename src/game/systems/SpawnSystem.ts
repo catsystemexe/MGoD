@@ -21,6 +21,7 @@ export interface SpawnSystemConfig {
   logicSize: { w: number; h: number };
   weaponDb: WeaponDB;
   bomb?: any;
+  pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -301,28 +302,31 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           break;
         }
 
-          /* case EventType.SPAWN_PICKUP: {
-            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-            // const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+          case EventType.SPAWN_PICKUP: {
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
+            const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
 
-            // this.store.spawn((ent: any) => {
-            //   ent.kind = "pickup";
-            //   ent.defId = String(p.defId ?? "unknown");
+            // p.pos originates from a killed enemy => already WORLD space (unified
+            // contract). Do NOT add scroll here (unlike viewport-relative enemy
+            // spawn patterns); the position is already absolute world coords.
+            const x = Number(p.pos?.x ?? 0);
+            const y = Number(p.pos?.y ?? 0);
 
-            //   const x = p.pos.x;
-            //   const y = p.pos.y;
+            this.store.spawn((ent: any) => {
+              ent.kind = "pickup";
+              ent.defId = String(p.defId ?? "unknown");
 
-            //   ent.pos = { x, y };
-            //   ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
+              ent.pos = { x, y };
+              ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
 
-            //   ent.vel = { x: 0, y: pcfg.fallSpeed };
-            //   ent.radius = pcfg.radius;
-            //   ent.ttl = pcfg.ttlSec;
-            //   ent.pendingKill = false;
-            // });
+              ent.vel = { x: 0, y: pcfg.fallSpeed };
+              ent.radius = pcfg.radius;
+              ent.ttl = pcfg.ttlSec;
+              ent.pendingKill = false;
+            });
 
-            // break;
-          } */
+            break;
+          }
 
         default:
           break;
