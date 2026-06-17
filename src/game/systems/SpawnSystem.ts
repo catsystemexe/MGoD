@@ -19,8 +19,7 @@ import type { WeaponDB } from "../defs/Weapons";
 export interface SpawnSystemConfig {
   rng01: () => number;
   logicSize: { w: number; h: number };
-  weaponDb?: WeaponDB;
-  projectile?: Record<string, any>;
+  weaponDb: WeaponDB;
   bomb?: any;
 }
 
@@ -97,11 +96,6 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
         private readonly cfg: SpawnSystemConfig,
         private readonly world: WorldState,
       ) {
-    if (!this.cfg.weaponDb && this.cfg.projectile && typeof this.cfg.projectile === "object") {
-      this.cfg.weaponDb = Object.fromEntries(
-        Object.entries(this.cfg.projectile).map(([id, projectile]) => [id, { id, cooldownSec: 0, projectile }]),
-      ) as WeaponDB;
-    }
     if (typeof this.cfg?.rng01 !== "function") throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
     if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
       throw new Error(`[SpawnSystem] cfg.logicSize must be {w:number,h:number}`);
@@ -118,8 +112,8 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
  
           
-          const weaponTypeId = String((p as any).weaponTypeId ?? (p as any).weapon ?? "primary");
-          const def = this.cfg.weaponDb?.[weaponTypeId];
+          const weaponTypeId = p.weaponTypeId;
+          const def = this.cfg.weaponDb[weaponTypeId];
           const wcfg = def?.projectile;
           if (!wcfg) {
             if ((globalThis as any).__CM_DEBUG_PROJECTILES) {

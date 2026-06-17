@@ -4,6 +4,7 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
 import { WeaponSystem } from "./WeaponSystem";
+import { WEAPON_DB } from "../defs/WeaponDB";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -18,11 +19,12 @@ function main() {
     onError: (m) => console.error(m),
   });
 
-  const ws = new WeaponSystem(bus, {
-    primary: { cooldownSec: 0.2 },
-    secondary: { cooldownSec: 0.5 },
-    bombCooldownSec: 0.8,
-  });
+  const ws = new WeaponSystem(
+    bus,
+    { primary: "w1.basic", secondary: "w2.basic", bomb: "b1.basic", bombCooldownSec: 0.8 },
+    WEAPON_DB,
+    { scrollX: 0, scrollY: 0 },
+  );
 
   const shipRef: EntityRef = { slot: 1, gen: 1 };
   const shipPos = { x: 100, y: 50 };

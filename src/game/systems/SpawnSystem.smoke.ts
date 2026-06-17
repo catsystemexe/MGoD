@@ -6,6 +6,7 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 
 import { SpawnSystem, type SpawnableEntity } from "./SpawnSystem";
+import { createWorldState } from "../data/WorldState";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -22,15 +23,19 @@ function main() {
 
   const store = new EntityStore<SpawnableEntity>(32);
 
-  const spawn = new SpawnSystem(store, {
-    rng01: () => 0.5,
-    logicSize: { w: 400, h: 224 },
-    projectile: {
-      primary: { speed: 200, ttlSec: 1.0, damage: 3, radius: 2 },
-      secondary: { speed: 140, ttlSec: 1.2, damage: 7, radius: 3 },
+  const spawn = new SpawnSystem(
+    store,
+    {
+      rng01: () => 0.5,
+      logicSize: { w: 400, h: 224 },
+      weaponDb: {
+        primary: { id: "primary", cooldownSec: 0, projectile: { speed: 200, ttlSec: 1.0, damage: 3, radius: 2 } },
+        secondary: { id: "secondary", cooldownSec: 0, projectile: { speed: 140, ttlSec: 1.2, damage: 7, radius: 3 } },
+      },
+      bomb: { travelSec: 0.25, damage: 20, radius: 10, ttlSec: 0.25 },
     },
-    bomb: { travelSec: 0.25, damage: 20, radius: 10, ttlSec: 0.25 },
-  });
+    createWorldState(),
+  );
 
   const ship: EntityRef = { slot: 1, gen: 1 };
 
@@ -44,7 +49,7 @@ function main() {
     owner: ship,
     origin: { x: 10, y: 20 },
     dir: { x: 1, y: 0 },
-    weapon: "primary",
+    weaponTypeId: "primary",
   });
 
   bus.emitNext(EventType.SPAWN_BOMB, {
