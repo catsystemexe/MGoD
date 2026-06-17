@@ -217,3 +217,77 @@ devDependency; (4) close the smoke-runner coverage gap.
 *Audit only. No code, commits, PRs, or speculative fixes were produced. Claims
 rest on the diffs `cd117cb..93bf2a8`, source inspection, and the actual output of
 `npm run typecheck`, `npm run build`, and `npm run smoke` in this environment.*
+
+---
+
+## Addendum C — Broader Type-Safety Findings from Shim Removal Refactoring
+
+**Date:** 2026-06-17
+**Related commit:** `52d6cf8` (7-file type-safety fix, 19/19 tests green)
+
+### Finding 1: Smoke tests are excluded from `tsc` typecheck
+
+`tsconfig.json` contains `"exclude": ["**/*.smoke.ts"]`, which means all
+`.smoke.ts` files are never compiled by `tsc`. As a result, the shape mismatches
+in these test files were never evaluated by the type checker. They surfaced
+**only as runtime test failures** — the runner executed the emitted JS and
+observed runtime behavior (assertion failures / `TypeError` at execution), not
+type diagnostics.
+
+The claim that these would have been compile errors is **inferred, not
+observed**: had `tsc` been configured to type-check the smoke files, these shape
+mismatches would *likely* be flagged as compile errors. That hypothetical was not
+exercised, so it is stated as inference rather than measured fact.
+
+> **Note on counts:** Across the 5 smoke files touched (Occurrences A–E), only
+> **1** is a confirmed masked type error — **Occurrence E**, where the value
+> genuinely did not match the contract. The remaining **4 occurrences (A–D)**
+> loosened or adjusted contracts for compatibility during the refactoring but
+> were **not confirmed as standalone compile errors**. No measurement was taken
+> by temporarily including the smoke files in `tsc` and counting real
+> diagnostics; if such a measurement is desired, it should be run and the
+> verified number recorded here with its method.
+
+### Finding 2: Production call-sites bypass type contracts via `as any`
+
+Even after removing the internal shims from `WeaponSystem.ts` and
+`SpawnSystem.ts`, the production wiring in `createGame.ts` still circumvents the
+corrected interfaces:
+
+| Line | Cast | Effect |
+|------|------|--------|
+| `createGame.ts:179` | `new SpawnSystem(store as any, spawnCfg, world as any)` | `SpawnSystemConfig` contract not enforced |
+| `createGame.ts:327` | `weaponsCfg: any` | `WeaponsConfig` interface not enforced |
+| `createGame.ts:335` | `new WeaponSystem(bus as any, ..., WEAPON_DB as any, world as any, ...)` | Constructor signature not enforced |
+
+**Implication:** The type contracts established by the shim removal refactoring
+are enforced only within the system classes themselves and in tests. At the
+actual production boundary where these systems are instantiated, `as any`
+silences the compiler completely. A future change to `WeaponsConfig` or
+`SpawnSystemConfig` could pass `tsc` and all smoke tests while still being wrong
+at runtime.
+
+### Finding 3: Combined effect — two-layer gap
+
+The combination of findings 1 and 2 creates a situation where:
+
+1. **Compile time (`tsc`)** — does not check smoke tests at all; production
+   call-sites use `as any`.
+2. **Test runtime** — smoke tests exercise the systems, but only with the
+   specific fixtures they define.
+
+Type safety for these systems is therefore **neither statically nor exhaustively
+verified** at the integration boundary.
+
+### Recommendations for future phases
+
+1. **Remove `as any` casts in `createGame.ts`** — wire the real types through.
+   This is the highest-value fix: it would make `tsc` catch interface mismatches
+   at the production boundary.
+2. **Include smoke tests in `tsc` compilation** — remove `**/*.smoke.ts` from
+   the `exclude` array in `tsconfig.json` (or create a separate
+   `tsconfig.check.json` that includes them). This would surface type errors in
+   test files at compile time — and would also let us produce the verified
+   diagnostic count noted in Finding 1.
+3. **Audit remaining `as any` casts** — a codebase-wide search for `as any`
+   would reveal other locations where type contracts are being silently bypassed.
