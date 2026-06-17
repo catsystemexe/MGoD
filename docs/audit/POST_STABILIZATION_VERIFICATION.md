@@ -291,3 +291,26 @@ verified** at the integration boundary.
    diagnostic count noted in Finding 1.
 3. **Audit remaining `as any` casts** — a codebase-wide search for `as any`
    would reveal other locations where type contracts are being silently bypassed.
+
+## Addendum D — Pre-existing VFX hit-spark camera bug (NOT caused by the world-space migration)
+
+**Finding:** `DamageSystem.ts:54-57` sends enemy hit-spark VFX particles using
+WORLD-space position, with a comment claiming "camera subtraction happens in
+renderVFX()". `WebGLSceneRenderer.ts:903-904` (renderVFX) reads `sx`/`sy` but the
+HITS draw path (`WebGLSceneRenderer.ts:990-994`) never actually subtracts them from
+the particle draw position.
+
+**Effect:** hit-spark VFX particles draw at the wrong screen position whenever
+`scrollY != 0` (and now also `scrollX != 0`, since `enemy.x` was always world).
+Purely cosmetic — no gameplay/collision impact.
+
+**Status:** pre-existing, **NOT introduced or worsened** by the world-space
+coordinate unification (commit `02b4657`). Enemy entities were already world-space
+before and after that migration, so the hit-spark mispositioning is unchanged by it.
+Not fixed — tracked for a future cosmetic-polish pass.
+
+**Honest scope note:** the same `renderVFX` function never applies the camera offset
+to its MUZZLE or TRACER particles either (they also draw raw `fx.x`/`fx.y`); `sx`/`sy`
+are effectively unused in the function. Those emitters originate from the
+player/weapon and were not audited here — folded into the same future
+cosmetic-polish pass rather than that scope.
