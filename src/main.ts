@@ -352,8 +352,13 @@ async function main() {
 // per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
-        const dx = t.x - game.playerEnt.pos.x;
-        const dy = t.y - game.playerEnt.pos.y;
+        // playerEnt.pos is WORLD; aim target is SCREEN -> compare in SCREEN space
+        const wsx = Number((game as any).world?.scrollX ?? 0);
+        const wsy = Number((game as any).world?.scrollY ?? 0);
+        const pScreenX = game.playerEnt.pos.x - wsx;
+        const pScreenY = game.playerEnt.pos.y - wsy;
+        const dx = t.x - pScreenX;
+        const dy = t.y - pScreenY;
         const len = Math.hypot(dx, dy) || 1;
 
         // angle in "logic space" (y is down)

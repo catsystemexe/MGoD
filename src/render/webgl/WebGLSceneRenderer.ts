@@ -577,11 +577,10 @@ export class WebGLSceneRenderer {
         ix = Math.round(ix);
         iy = Math.round(iy);
       }
-      // Camera: world-space entities -> convert to screen-space
-      if (!(kind === "player" || kind === "projectile" || kind === "bomb")) {
-        ix -= sx;
-        iy -= sy;
-      }
+      // Camera: ALL gameplay entities live in WORLD space (unified contract),
+      // so every entity converts world -> screen the same way.
+      ix -= sx;
+      iy -= sy;
 
       
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)

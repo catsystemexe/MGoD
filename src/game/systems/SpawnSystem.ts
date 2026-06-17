@@ -225,7 +225,11 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          // pattern is relative to viewport => store WORLD coords (add camera ONCE)
+          // Unified contract: all gameplay entities live in WORLD space.
+          // Enemy spawn patterns are authored viewport-relative (where on screen we
+          // want them to appear), so convert pattern -> world ONCE here by adding the
+          // current scroll. Projectiles/bombs need no such conversion: their origin
+          // already comes from the player (WORLD) via WeaponSystem.
           const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
           const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
           this.store.spawn((ent: any) => {

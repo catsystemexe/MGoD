@@ -34,15 +34,17 @@ export class WorldScrollSystem {
     const padTop = Number.isFinite((this.world as any).cameraPadTop) ? Number((this.world as any).cameraPadTop) : 140;
     const padBot = Number.isFinite((this.world as any).cameraPadBottom) ? Number((this.world as any).cameraPadBottom) : 140;
 
-    const py = Number((this.player as any).pos?.y ?? H * 0.5);
-
     const camY = Number((this.world as any).scrollY ?? 0);
-    const topLine = camY + padTop;
-    const botLine = camY + (H - padBot);
+
+    // player.pos.y is WORLD space. Convert to SCREEN to evaluate the dead-band,
+    // which is defined in screen pixels (padTop from the top edge, padBot from the
+    // bottom edge). Then express the desired camera back in WORLD space.
+    const pyWorld = Number((this.player as any).pos?.y ?? (camY + H * 0.5));
+    const pyScreen = pyWorld - camY;
 
     let desired = camY;
-    if (py < topLine) desired = py - padTop;
-    else if (py > botLine) desired = py - (H - padBot);
+    if (pyScreen < padTop) desired = pyWorld - padTop;                  // player above top dead-band
+    else if (pyScreen > (H - padBot)) desired = pyWorld - (H - padBot); // player below bottom dead-band
 
     desired = clamp(desired, camMinY, camMaxY);
 

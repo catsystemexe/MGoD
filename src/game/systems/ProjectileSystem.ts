@@ -43,10 +43,11 @@ export class ProjectileSystem {
     const W = this.logicW;
     const H = this.logicH;
 
+    const camX = safeNum(this.world?.scrollX, 0);
     const camY = safeNum(this.world?.scrollY, 0);
     const band = 140;   // slightly looser than enemies (shots can travel)
 
-    // X bounds in screen space
+    // X band tolerance (world-space, around camera)
     const xMargin = 24;
 
     this.store.debugForEachAlive((_ref, e: MovingTTL) => {
@@ -81,8 +82,9 @@ export class ProjectileSystem {
       if (e.kind === "projectile" || e.kind === "bomb") {
         const r = safeNum((e as any).radius, e.kind === "bomb" ? 6 : 1);
 
-        if (e.pos.x < -r - xMargin) { e.pendingKill = true; return; }
-        if (e.pos.x > W + r + xMargin) { e.pendingKill = true; return; }
+        // world-space X band around camera
+        if (e.pos.x < camX - r - xMargin) { e.pendingKill = true; return; }
+        if (e.pos.x > camX + W + r + xMargin) { e.pendingKill = true; return; }
 
         // world-space Y band around camera
         if (e.pos.y < camY - r - band) { e.pendingKill = true; return; }
