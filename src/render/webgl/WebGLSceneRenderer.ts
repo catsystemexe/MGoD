@@ -7,6 +7,9 @@ import { cosinePalette, MUZZLE_PALETTE, TRACER_PALETTE } from "../../game/vfx/co
 import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
+import type { FlowDisturbance } from "./bg/flowStep";
+
+const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
@@ -462,6 +465,7 @@ export class WebGLSceneRenderer {
           scrollX: sx,
           scrollY: sy,
           presetIndex,
+          disturbances: this.collectFlowDisturbances(sx, sy),
         });
       } else {
         // default: flowRibbon
@@ -895,6 +899,55 @@ export class WebGLSceneRenderer {
 
     gl.bindVertexArray(null);
   }
+// --- BG flow disturbances: blast/hit ripples that perturb the flow field ---
+  // Reads the same VFXSystem ring buffers the renderer already consumes (no new
+  // event wiring) and converts each live source to a SCREEN-space disturbance.
+  // Two sources are combined into one list:
+  //   explosions -> kick 180 px/s, reach = radius × 2.5 (big shockwave)
+  //   hits       -> kick  60 px/s, reach = (count×step) × 1.2 (local ripple)
+  private collectFlowDisturbances(sx: number, sy: number): FlowDisturbance[] {
+    const vfx = (window as any).__CM?.game?.vfx;
+    if (!vfx) return NO_FLOW_DISTURB;
+
+    const out: FlowDisturbance[] = [];
+
+    if (vfx.getExplosions) {
+      const list = vfx.getExplosions();
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (!e || !e.alive) continue;
+        out.push({
+          x: e.x - sx,
+          y: e.y - sy,
+          radius: Math.max(1, Number(e.radius) || 0) * 2.5,
+          age: e.age,
+          ttl: e.ttl,
+          kick: 180,
+        });
+      }
+    }
+
+    if (vfx.getHits) {
+      const list = vfx.getHits();
+      for (let i = 0; i < list.length; i++) {
+        const h = list[i];
+        if (!h || !h.alive) continue;
+        // hits carry no explicit radius -> use their spark spread (count×step).
+        const baseR = Math.max(8, (h.count | 0) * (Number(h.step) || 0));
+        out.push({
+          x: h.x - sx,
+          y: h.y - sy,
+          radius: baseR * 1.2,
+          age: h.age,
+          ttl: h.ttl,
+          kick: 60,
+        });
+      }
+    }
+
+    return out;
+  }
+
 // --- VFX: muzzle + tracers + hits (no ECS, no allocations) ---
   renderVFX(vfx: any): void {
     if (!vfx) return;

@@ -19,6 +19,7 @@ const SMOKES = [
   "../game/systems/LootPickupChain.smoke",
   "../game/systems/BombExplosionChain.smoke",
   "../game/systems/WeaponVFXEmit.smoke",
+  "../render/webgl/bg/FlowDisturbanceKick.smoke",
   "../game/systems/Flow.smoke",
   "../game/systems/StartToSpawn.integration.smoke",
   "../game/systems/SpawnOwnership.contract.smoke",
