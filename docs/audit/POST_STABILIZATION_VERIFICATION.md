@@ -318,8 +318,19 @@ cosmetic-polish pass rather than that scope.
 **Resolution (bomb-explosion change):** the camera correction is now **fixed for the
 HITS path and the new explosion VFX path** — both subtract `sx`/`sy` in `renderVFX`,
 so hit-sparks and AoE explosions render at the correct screen position at any scroll.
-The MUZZLE/TRACER path is **left untouched on purpose**: it is currently **dead code**
-— `WeaponSystem`'s `opts.onSpawnProjectile` / `opts.onTracer` callbacks are wired in
-`createGame.ts` but **never invoked** anywhere inside `WeaponSystem`, so no muzzle or
-tracer particles are ever emitted. If that VFX path is reactivated in the future, it
-will need the same `- sx` / `- sy` camera correction applied to its draw positions.
+
+**Addendum D Update (muzzle/tracer VFX activation):** The MUZZLE/TRACER path is
+**no longer dead code** — it is now **activated and camera-corrected** (commit hash
+to be recorded). `WeaponSystem.emitProjectile()` now invokes both `opts.onSpawnProjectile`
+and `opts.onTracer` callbacks immediately after emitting the `SPAWN_PROJECTILE` event,
+passing the muzzle spawn point (world coordinates, offset 12 pixels forward) and
+direction vector. `WebGLSceneRenderer.renderVFX()` now applies the camera offset
+(`-sx` / `-sy`) to both MUZZLE and TRACER particle draw positions, parallel to the
+HITS/EXPLOSION correction. Additionally, a new cosine-palette system (`cosinePalette.ts`)
+provides procedural color gradients:
+- **MUZZLE:** warm gold (t=0 → RGB 1.00,0.78,0.45) transitioning to deep orange (t=1 → RGB 0.84,0.56,0.25), using `MUZZLE_PALETTE` parameters
+- **TRACER:** cyan-green beam (tail=0 → RGB 0.00,1.00,0.82) transitioning to bright green (tail=1 → RGB 0.04,0.91,0.19), using `TRACER_PALETTE` parameters
+
+Both gradients use the Quilez cosine formula `color(t) = a + b*cos(2π*(c*t+d))` applied
+per RGB channel. Regression test `WeaponVFXEmit.smoke.ts` verifies callback invocation
+at the correct muzzle point with correct direction.

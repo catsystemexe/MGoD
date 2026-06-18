@@ -93,6 +93,12 @@ export class WeaponSystem {
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
     });
+
+    // Muzzle flash + tracer VFX at the spawn point (WORLD coords; renderVFX
+    // subtracts the camera). Previously dead: these callbacks were wired in
+    // createGame but never invoked here, so no muzzle/tracer ever emitted.
+    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
   }
   
    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {

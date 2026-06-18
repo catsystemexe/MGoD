@@ -2,6 +2,8 @@ import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
 import { getGlyph } from "../glyphs/GlyphDB";
 
+import { cosinePalette, MUZZLE_PALETTE, TRACER_PALETTE } from "../../game/vfx/cosinePalette";
+
 import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
@@ -924,8 +926,11 @@ export class WebGLSceneRenderer {
 
       const size = fx.size * (1.0 + t * 0.5);
 
-      gl.uniform4f(this.uColor, 1.0, 0.9, 0.6, alpha);
-      gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+      // cosine-palette muzzle color: bright gold -> deep orange over its life.
+      const [mr, mg, mb] = cosinePalette(t, MUZZLE_PALETTE.a, MUZZLE_PALETTE.b, MUZZLE_PALETTE.c, MUZZLE_PALETTE.d);
+      gl.uniform4f(this.uColor, mr, mg, mb, alpha);
+      // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+      gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
       gl.uniform2f(this.uSize, size, size);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
@@ -941,8 +946,6 @@ export class WebGLSceneRenderer {
       const t = fx.age / fx.ttl;
       const alpha = 1.0 - t;
 
-      gl.uniform4f(this.uColor, 0.6, 1.0, 0.6, alpha);
-
       const n = Math.max(1, Math.floor(fx.len / Math.max(0.001, fx.step)));
       for (let k = 0; k < n; k++) {
         const d = k * fx.step;
@@ -952,7 +955,11 @@ export class WebGLSceneRenderer {
         const tail = 1.0 - k / n;
         const sz = fx.size * (0.6 + 0.4 * tail);
 
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        // cosine-palette gradient ALONG the beam (cyan-green head -> green tail).
+        const [tr, tg, tb] = cosinePalette(tail, TRACER_PALETTE.a, TRACER_PALETTE.b, TRACER_PALETTE.c, TRACER_PALETTE.d);
+        gl.uniform4f(this.uColor, tr, tg, tb, alpha);
+        // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+        gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
         gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
