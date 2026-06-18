@@ -21,4 +21,7 @@ export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
   [EventType.CA_CELLS_KILLED]: Phase.Flow,
   [EventType.ENTITY_DAMAGED]: Phase.Flow,
   [EventType.ENTITY_KILLED]: Phase.Flow,
+
+  // emitted in Simulation (ProjectileSystem bomb detonation), consumed in Impact
+  [EventType.EXPLOSION]: Phase.Impact,
 } as const;

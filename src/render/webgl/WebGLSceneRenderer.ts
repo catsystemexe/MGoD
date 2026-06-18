@@ -991,8 +991,46 @@ export class WebGLSceneRenderer {
         const py = fx.y + Math.sin(ang) * (dist + jitter);
 
         const grow = 1.0 + t * 0.8;
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+        gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
         gl.uniform2f(this.uSize, fx.size * grow, fx.size * grow);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+    }
+  }
+
+  // EXPLOSIONS (expanding AoE ring + core flash). WORLD coords -> subtract camera.
+  if (vfx.getExplosions) {
+    const list = vfx.getExplosions();
+    for (let i = 0; i < list.length; i++) {
+      const fx = list[i];
+      if (!fx.alive) continue;
+
+      const t = Math.min(1.0, fx.age / fx.ttl);
+      const ease = 1.0 - (1.0 - t) * (1.0 - t); // easeOut for the ring radius
+      const alpha = (1.0 - t) * (1.0 - t);
+
+      const cx = fx.x - sx;
+      const cy = fx.y - sy;
+
+      // core flash (shrinks as it fades)
+      const flash = Math.max(2, fx.radius * (0.30 + 0.30 * (1.0 - t)));
+      gl.uniform4f(this.uColor, 1.0, 0.85, 0.45, alpha);
+      gl.uniform2f(this.uPos, Math.round(cx), Math.round(cy));
+      gl.uniform2f(this.uSize, flash, flash);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // expanding ring of dots out to fx.radius
+      const ring = fx.radius * ease;
+      const count = 16;
+      const sz = 3.0 + 2.0 * (1.0 - t);
+      gl.uniform4f(this.uColor, 1.0, 0.55, 0.2, alpha);
+      for (let k = 0; k < count; k++) {
+        const ang = (k / count) * Math.PI * 2;
+        const px = cx + Math.cos(ang) * ring;
+        const py = cy + Math.sin(ang) * ring;
+        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
     }

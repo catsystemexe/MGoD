@@ -166,10 +166,23 @@ export async function createGame(
 
   const flow = new FlowSystem(flowDispatcher);
   // ---- Spawn system (Director-owned requests are applied here)
+        // Bomb tuning (see docs/audit). BOMB_DAMAGE=8 one-shots the weaker/mid enemy
+        // types (hp 5..8) but spares the 3 toughest (crown 9, obelisk 10, mandala 11).
+        // EXPLOSION_RADIUS=48 is a true area effect (~7x the largest enemy radius).
+        const BOMB_DAMAGE = 8;
+        const EXPLOSION_RADIUS = 48;
+
         const spawnCfg = {
           rng01: Math.random,
           logicSize: { w: LOGIC_W, h: LOGIC_H },
           weaponDb: WEAPON_DB,
+          bomb: {
+            travelSec: 0.45,            // time to reach bombTarget
+            ttlSec: 0.9,               // safety detonation if target never reached (~2x travel)
+            damage: BOMB_DAMAGE,
+            radius: 6,                 // bomb sprite/collision radius (NOT the blast)
+            explosionRadius: EXPLOSION_RADIUS,
+          },
         };
 
  
@@ -335,6 +348,7 @@ export async function createGame(
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
           onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
           onTracer: (p: any) => vfx.onTracer(p), // tracer
+          onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
@@ -347,6 +361,7 @@ export async function createGame(
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
     onHitSpark: (p: any) => vfx.onHitSpark(p),
+    onExplosion: (p: any) => vfx.onExplosion(p),
   });
 
   const impact = new ImpactPhaseSystem(damage, caImpact);
@@ -446,6 +461,7 @@ export async function createGame(
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
             shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 },
             shipRef: playerRef,
+            bombs: Number(playerEnt.bombs ?? 0),
           });
         }
 

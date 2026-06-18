@@ -22,6 +22,9 @@ export const EventType = {
   CA_CELLS_KILLED: "CA_CELLS_KILLED",
   ENTITY_DAMAGED: "ENTITY_DAMAGED",
   ENTITY_KILLED: "ENTITY_KILLED",
+
+  // General area-of-effect detonation (bomb today; CA terrain / enemy death later)
+  EXPLOSION: "EXPLOSION",
 } as const;
 
 export type EventType = (typeof EventType)[keyof typeof EventType];
@@ -86,5 +89,13 @@ export type CMEventMap = {
     target: EntityRef;
     source: string;
     isPlayer: boolean;
+  };
+
+  [EventType.EXPLOSION]: {
+    x: number;
+    y: number;
+    radius: number;
+    damage: number;
+    source: string;
   };
 };

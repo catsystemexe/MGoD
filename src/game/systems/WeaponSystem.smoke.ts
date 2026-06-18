@@ -85,7 +85,7 @@ function main() {
       bombPressed: true,
       bombTarget: { x: 123, y: 77 },
     },
-    { shipPos, shipRef }
+    { shipPos, shipRef, bombs: 1 } // bomb now gated on inventory
   );
 
   bus.enterPhase(Phase.Cleanup);

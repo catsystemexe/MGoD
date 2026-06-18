@@ -314,3 +314,12 @@ to its MUZZLE or TRACER particles either (they also draw raw `fx.x`/`fx.y`); `sx
 are effectively unused in the function. Those emitters originate from the
 player/weapon and were not audited here — folded into the same future
 cosmetic-polish pass rather than that scope.
+
+**Resolution (bomb-explosion change):** the camera correction is now **fixed for the
+HITS path and the new explosion VFX path** — both subtract `sx`/`sy` in `renderVFX`,
+so hit-sparks and AoE explosions render at the correct screen position at any scroll.
+The MUZZLE/TRACER path is **left untouched on purpose**: it is currently **dead code**
+— `WeaponSystem`'s `opts.onSpawnProjectile` / `opts.onTracer` callbacks are wired in
+`createGame.ts` but **never invoked** anywhere inside `WeaponSystem`, so no muzzle or
+tracer particles are ever emitted. If that VFX path is reactivated in the future, it
+will need the same `- sx` / `- sy` camera correction applied to its draw positions.

@@ -1,7 +1,10 @@
 import type { EventBus } from "../../engine/core/EventBus";
-import type { CMEventMap } from "../../engine/core/events";
+import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { WorldState } from "../data/WorldState";
+
+// Bomb detonates when it arrives within this many px of its target (primary trigger).
+const ARRIVE_EPS = 4;
 
 type Vec2 = { x: number; y: number };
 
@@ -30,7 +33,7 @@ function safeNum(v: any, fb: number): number {
 
 export class ProjectileSystem {
   constructor(
-    private _bus: EventBus<CMEventMap>,
+    private bus: EventBus<CMEventMap>,
     private store: EntityStore<any>,
     private readonly logicW: number,
     private readonly logicH: number,
@@ -69,11 +72,38 @@ export class ProjectileSystem {
       // Lifetime
       e.ttl -= dtSec;
 
+      // BOMB detonation: proximity to target (primary) or TTL expiry (fallback).
+      // Emits a general EXPLOSION (Impact-owned) consumed by DamageSystem (AoE on
+      // enemies) and CAImpactSystem (terrain). Detected here because detonation is a
+      // movement/lifetime event of the bomb entity.
+      if (e.kind === "bomb") {
+        const b: any = e;
+        const tx = Number(b.target?.x ?? b.pos.x);
+        const ty = Number(b.target?.y ?? b.pos.y);
+        const ddx = b.pos.x - tx;
+        const ddy = b.pos.y - ty;
+        const reachedTarget = (ddx * ddx + ddy * ddy) <= (ARRIVE_EPS * ARRIVE_EPS);
+        const expired = e.ttl <= 0;
+
+        if (reachedTarget || expired) {
+          this.bus.emit(EventType.EXPLOSION, {
+            x: b.pos.x,
+            y: b.pos.y,
+            radius: Number(b.explosionRadius ?? b.radius ?? 1),
+            damage: Number(b.damage ?? 0),
+            source: reachedTarget ? "bomb" : "bomb.ttl",
+          });
+          e.pendingKill = true;
+        }
+        if (e.pendingKill) return;
+        // still flying -> skip generic TTL-kill, fall through to A+ cull
+      }
+
       // TTL kill conditions
       if (e.kind === "projectile") {
         if ((e as any).consumed || e.ttl <= 0) e.pendingKill = true;
-      } else {
-        // particle OR bomb OR fx
+      } else if (e.kind !== "bomb") {
+        // particle OR fx (bomb handled above)
         if (e.ttl <= 0) e.pendingKill = true;
       }
       if (e.pendingKill) return;

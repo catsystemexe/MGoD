@@ -20,7 +20,7 @@ export interface SpawnSystemConfig {
   rng01: () => number;
   logicSize: { w: number; h: number };
   weaponDb: WeaponDB;
-  bomb?: any;
+  bomb?: { travelSec: number; ttlSec?: number; damage: number; radius: number; explosionRadius: number };
   pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
 
@@ -49,6 +49,7 @@ export interface BombEntity extends BaseEntity {
   ttl: number;
   damage: number;
   radius: number;
+  explosionRadius: number;
   target: Vec2;
 }
 
@@ -184,6 +185,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
               ent.ttl = Math.max(0.001, Number(b.ttlSec ?? b.travelSec ?? 0.25));
               ent.damage = Number(b.damage ?? 0);
               ent.radius = Number(b.radius ?? 1);
+              ent.explosionRadius = Number(b.explosionRadius ?? b.radius ?? 1);
               ent.target = { x: p.target.x, y: p.target.y };
               ent.pendingKill = false;
             });

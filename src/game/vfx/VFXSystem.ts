@@ -32,6 +32,14 @@ export type MuzzleFlash = {
   size: number;
 };
 
+export type Explosion = {
+  alive: boolean;
+  x: number; y: number;
+  age: number;
+  ttl: number;
+  radius: number; // AoE radius in logic units (drives the expanding ring)
+};
+
 export type VFXParams = {
   muzzleTTL: number;
   muzzleSize: number;
@@ -46,6 +54,8 @@ export type VFXParams = {
   hitStep: number;
   hitSpread: number;
   hitSize: number;
+
+  explosionTTL: number;
 };
 
 
@@ -55,9 +65,12 @@ export class VFXSystem {
 
   private hits: HitSpark[];
   private hIdx = 0;
-  
+
   private tracers: Tracer[];
   private tIdx = 0;
+
+  private explosions: Explosion[];
+  private eIdx = 0;
 
   
   params: VFXParams = {
@@ -77,6 +90,9 @@ export class VFXSystem {
     hitStep: 2,
     hitSpread: 0.85,
     hitSize: 2.5,
+
+    // explosion: expanding AoE ring (longer than a hit spark)
+    explosionTTL: 0.40,
   };
 
 
@@ -148,6 +164,14 @@ export class VFXSystem {
     spread: 0.6,
   }));
 
+  this.explosions = Array.from({ length: max }, () => ({
+    alive: false,
+    x: 0, y: 0,
+    age: 0,
+    ttl: 0.40,
+    radius: 0,
+  }));
+
   }
   
   private static normDir(dx: number, dy: number): { dx: number; dy: number } {
@@ -216,6 +240,18 @@ export class VFXSystem {
     fx.spread = this.params.hitSpread;
   }
 
+  onExplosion(p: { x: number; y: number; radius: number }) {
+    const fx = this.explosions[this.eIdx];
+    this.eIdx = (this.eIdx + 1) % this.explosions.length;
+
+    fx.alive = true;
+    fx.x = p.x;
+    fx.y = p.y;
+    fx.age = 0;
+    fx.ttl = this.params.explosionTTL;
+    fx.radius = Number(p.radius ?? 0);
+  }
+
 
   update(dtSec: number) {
     this.dbg("update", { dtSec });
@@ -240,6 +276,13 @@ export class VFXSystem {
       fx.age += dtSec;
       if (fx.age >= fx.ttl) fx.alive = false;
     }
+
+    // explosions
+    for (const fx of this.explosions) {
+      if (!fx.alive) continue;
+      fx.age += dtSec;
+      if (fx.age >= fx.ttl) fx.alive = false;
+    }
   }
   
   getMuzzle(): readonly MuzzleFlash[] {
@@ -251,5 +294,8 @@ export class VFXSystem {
   }
   getHits(): readonly HitSpark[] {
     return this.hits;
+  }
+  getExplosions(): readonly Explosion[] {
+    return this.explosions;
   }
 }
