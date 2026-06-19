@@ -8,6 +8,7 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import { SpawnSystem } from "./SpawnSystem";
 import { WeaponSystem } from "./WeaponSystem";
 import { ProjectileSystem } from "./ProjectileSystem";
+import { createWorldState } from "../data/WorldState";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -43,25 +44,31 @@ function main() {
 
   const store = new EntityStore<any>(128);
 
+  // Shared weapon DB (string-id loadout indexes into this) — current contract.
+  const weaponDb = {
+    primary: { id: "primary", cooldownSec: 0.10, projectile: { speed: 220, ttlSec: 0.25, damage: 3, radius: 2 } },
+    secondary: { id: "secondary", cooldownSec: 0.10, projectile: { speed: 200, ttlSec: 0.25, damage: 2, radius: 2 } },
+    bomb: { id: "bomb", cooldownSec: 0.50, bomb: { travelSec: 0.4, ttlSec: 0.4, damage: 10, radius: 10 } },
+  };
+
   // SpawnSystem (Director phase consumes spawn requests)
-  const spawn = new SpawnSystem(store as any, {
-    rng01: () => 0.5,
-    logicSize: { w: 224, h: 256 },
-    projectile: {
-      primary: { speed: 220, ttlSec: 0.25, damage: 3, radius: 2 },
-      secondary: { speed: 200, ttlSec: 0.25, damage: 2, radius: 2 },
+  const spawn = new SpawnSystem(
+    store as any,
+    {
+      rng01: () => 0.5,
+      logicSize: { w: 224, h: 256 },
+      weaponDb,
+      bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
     },
-    bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
-  });
+    createWorldState(),
+  );
 
   // WeaponSystem (Simulation emits SPAWN_PROJECTILE via emitNext -> Director next tick)
   const weapons = new WeaponSystem(
     bus,
-    {
-      primary: { cooldownSec: 0.10 },
-      secondary: { cooldownSec: 0.10 },
-      bombCooldownSec: 0.50,
-    } as any
+    { primary: "primary", secondary: "secondary", bomb: "bomb", bombCooldownSec: 0.50 },
+    weaponDb,
+    { scrollX: 0, scrollY: 0 },
   );
 
   // ProjectileSystem (Simulation TTL + move)

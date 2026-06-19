@@ -67,6 +67,14 @@ export async function createGame(
 
    const vfx = new VFXSystem(64);
 
+  // ---- Audio (output concern; synth-only v1). Dynamic import ONLY so the Node
+  // smoke runner never transitively pulls Tone.js. No-op until first gesture.
+  let audio: import("../../audio/AudioSystem").AudioSystem | null = null;
+  if (typeof window !== "undefined") {
+    const audioMod = await import("../../audio/AudioSystem");
+    audio = audioMod.createAudioSystem();
+  }
+
   // ---- VFX (cosmetic, per-frame)
   // In browser we expose it for debugging; in Node (smokes) there is no window.
       if (typeof window !== "undefined") {
@@ -166,10 +174,23 @@ export async function createGame(
 
   const flow = new FlowSystem(flowDispatcher);
   // ---- Spawn system (Director-owned requests are applied here)
+        // Bomb tuning (see docs/audit). BOMB_DAMAGE=8 one-shots the weaker/mid enemy
+        // types (hp 5..8) but spares the 3 toughest (crown 9, obelisk 10, mandala 11).
+        // EXPLOSION_RADIUS=48 is a true area effect (~7x the largest enemy radius).
+        const BOMB_DAMAGE = 8;
+        const EXPLOSION_RADIUS = 48;
+
         const spawnCfg = {
           rng01: Math.random,
           logicSize: { w: LOGIC_W, h: LOGIC_H },
           weaponDb: WEAPON_DB,
+          bomb: {
+            travelSec: 0.45,            // time to reach bombTarget
+            ttlSec: 0.9,               // safety detonation if target never reached (~2x travel)
+            damage: BOMB_DAMAGE,
+            radius: 6,                 // bomb sprite/collision radius (NOT the blast)
+            explosionRadius: EXPLOSION_RADIUS,
+          },
         };
 
  
@@ -253,11 +274,13 @@ export async function createGame(
 
       
 
+        const devWaveKeys = DIRECTOR_DEFS_MVP.waves.map((w: any) => String(w.id)).slice(0, 9);
+
         // expose mapping for overlay (DEV only)
         let devHotkeys: any = null;
 
         if ((globalThis as any).__DEV__) {
-          (window as any).__CM.devWaveHotkeys = DEV_WAVE_KEYS.map((id, i) => ({
+          (window as any).__CM.devWaveHotkeys = devWaveKeys.map((id, i) => ({
             n: i + 1,
             waveId: id,
           }));
@@ -294,7 +317,7 @@ export async function createGame(
 
           if (!(n >= 1 && n <= 9)) return;
 
-          const waveId = (DEV_WAVE_KEYS as any)[n - 1] as string | undefined;
+          const waveId = devWaveKeys[n - 1] as string | undefined;
           if (!waveId) return;
 
           e.preventDefault();
@@ -331,8 +354,9 @@ export async function createGame(
   }
 
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
-          onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
+          onSpawnProjectile: (p: any) => { vfx.onSpawnProjectile(p); audio?.noteFire(); }, // muzzle + pew
           onTracer: (p: any) => vfx.onTracer(p), // tracer
+          onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
@@ -344,7 +368,8 @@ export async function createGame(
   const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
-    onHitSpark: (p: any) => vfx.onHitSpark(p),
+    onHitSpark: (p: any) => { vfx.onHitSpark(p); audio?.noteHit(); },
+    onExplosion: (p: any) => { vfx.onExplosion(p); audio?.noteExplosion(p); },
   });
 
   const impact = new ImpactPhaseSystem(damage, caImpact);
@@ -444,6 +469,7 @@ export async function createGame(
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
             shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 },
             shipRef: playerRef,
+            bombs: Number(playerEnt.bombs ?? 0),
           });
         }
 
@@ -492,6 +518,7 @@ return {
   session,
   director, // devui needs director
   vfx,
+  audio,
   inputRt,
   playerRef,
   inputMgr,

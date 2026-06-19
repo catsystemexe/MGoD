@@ -2,6 +2,7 @@ import { getGL } from "./gl";
 import { RenderTarget } from "./RenderTarget";
 import { computeDisplay, type DisplayInfo } from "./DisplayRenderer";
 import { createBlitProgram, type BlitProgram } from "./BlitProgram";
+import { createPostProcessPass, type PostProcessPass } from "./PostProcessPass";
 
 export type GraphicsMode = "classic_896x504";
 export const MODE_RES: Record<GraphicsMode, { w: number; h: number }> = {
@@ -18,6 +19,7 @@ export class Graphics {
   private scene: RenderTarget;
   private enemies: RenderTarget;
   private blit: BlitProgram;
+  private postProcess: PostProcessPass;
     private display: DisplayInfo | null = null;
 
     // debug: detect display drift without spamming console each frame
@@ -33,6 +35,7 @@ export class Graphics {
       this.scene = new RenderTarget(this.gl, this.logicW, this.logicH, "nearest");
       this.enemies = new RenderTarget(this.gl, this.logicW, this.logicH, "linear");
       this.blit = createBlitProgram(this.gl);
+      this.postProcess = createPostProcessPass(this.gl);
     // default state
     const gl = this.gl;
     gl.disable(gl.DEPTH_TEST);
@@ -128,8 +131,15 @@ export class Graphics {
   }
 
   
-  /** Present SceneRT -> screen s integer scale + viewport */
-  present(): void {
+  /**
+   * Present SceneRT -> screen s integer scale + viewport.
+   *
+   * Display Reality Layer toggle: when `opts.postProcess !== false` (default ON)
+   * the CRT post-process program is used; otherwise the plain passthrough blit.
+   * Only the program/uniforms differ — letterbox, viewport and clears below are
+   * identical in both paths.
+   */
+  present(opts?: { postProcess?: boolean; timeSec?: number; caIntensity?: number }): void {
     const gl = this.gl;
     const d = this.display;
     if (!d) return;
@@ -158,12 +168,23 @@ export class Graphics {
     // viewport do kterého se vykreslí pixel-perfect obraz
     gl.viewport(d.viewportX, d.viewportY, d.viewportW, d.viewportH);
 
-    gl.useProgram(this.blit.prog);
-    gl.bindVertexArray(this.blit.vao);
+    // Pick program: post-process (default) vs passthrough blit.
+    const usePost = opts?.postProcess !== false;
+    const pass = usePost ? this.postProcess : this.blit;
+
+    gl.useProgram(pass.prog);
+    gl.bindVertexArray(pass.vao);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.scene.tex);
-    gl.uniform1i(this.blit.uTex, 0);
+    gl.uniform1i(pass.uTex, 0);
+
+    if (usePost) {
+      // uResolution = logic-res of the sampled SceneRT (one scanline per row).
+      gl.uniform1f(this.postProcess.uTime, opts?.timeSec ?? 0);
+      gl.uniform2f(this.postProcess.uRes, this.scene.w, this.scene.h);
+      gl.uniform1f(this.postProcess.uCaInt, opts?.caIntensity ?? 0.0022);
+    }
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 

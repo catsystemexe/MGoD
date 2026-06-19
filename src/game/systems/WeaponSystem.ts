@@ -22,6 +22,7 @@ export type WeaponSnapshot = {
   shipRef: EntityRef;
   shipPos: Vec2;
   shipVel?: Vec2;
+  bombs?: number; // current bomb inventory (gates SPAWN_BOMB)
 };
 
 type WeaponSystemState = {
@@ -68,6 +69,7 @@ export class WeaponSystem {
            private readonly opts?: {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
+      onConsumeBomb?: () => void; // called when a bomb is actually fired (decrement inventory)
     },
   ) {}
 
@@ -91,6 +93,12 @@ export class WeaponSystem {
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
     });
+
+    // Muzzle flash + tracer VFX at the spawn point (WORLD coords; renderVFX
+    // subtracts the camera). Previously dead: these callbacks were wired in
+    // createGame but never invoked here, so no muzzle/tracer ever emitted.
+    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
   }
   
    update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
@@ -125,11 +133,14 @@ export class WeaponSystem {
        () => this.emitProjectile(secondaryId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
      );
 
+     // Gate bomb on inventory: no bomb -> neither emit NOR burn cooldown.
+     const hasBomb = Number(snap.bombs ?? 0) > 0;
      this.st.cdBomb = tryFire(
-       !!actions.bombPressed,
+       !!actions.bombPressed && hasBomb,
        this.st.cdBomb,
        Number(bomb?.cooldownSec ?? this.cfg.bombCooldownSec ?? 0.8),
        () => {
+          this.opts?.onConsumeBomb?.(); // decrement inventory (owner mutates the player entity)
           this.bus.emitNext(EventType.SPAWN_BOMB, {
             owner: snap.shipRef,
             origin: { x: snap.shipPos.x, y: snap.shipPos.y },

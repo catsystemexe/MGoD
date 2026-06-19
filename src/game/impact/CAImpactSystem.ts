@@ -21,6 +21,12 @@ export class CAImpactSystem {
     let killedTotal = 0;
 
     for (const e of events) {
+      // General AoE detonation (bomb today, more later) — carries its own radius.
+      if (e.type === EventType.EXPLOSION) {
+        const { x, y, radius } = e.payload as CMEventMap[typeof EventType.EXPLOSION];
+        killedTotal += this.ca.applyExplosion(x, y, radius);
+        continue;
+      }
       if (e.type !== EventType.PROJECTILE_HIT_CA) continue;
       const { x, y } = e.payload as CMEventMap[typeof EventType.PROJECTILE_HIT_CA];
       killedTotal += this.ca.applyExplosion(x, y, this.rules.explosionRadius);

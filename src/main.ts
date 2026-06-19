@@ -174,6 +174,36 @@ async function main() {
     diff: (m: number) => window.__CM.director?.setDifficulty?.(m),
   };
 
+  // ---- Display Reality Layer (post-process) toggle — default ON.
+  // Works without DevUI (showcase mode): hotkey F or window.__CM.fx.* in console.
+  (globalThis as any).__CM_FX__ ??= true;
+  window.__CM.fx = {
+    on: () => { (globalThis as any).__CM_FX__ = true; console.log("[FX] ON"); },
+    off: () => { (globalThis as any).__CM_FX__ = false; console.log("[FX] OFF"); },
+    toggle: () => {
+      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
+      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
+    },
+    isOn: () => !!(globalThis as any).__CM_FX__,
+  };
+
+  // ---- Audio Reality Layer (synth-only) — armed on first user gesture.
+  // Tone.start() must follow a gesture (autoplay policy); guard with a flag so
+  // we never re-resume. iPad has no keyboard -> pointerdown is the real path.
+  let audioArmed = false;
+  const armAudio = async () => {
+    if (audioArmed) return;
+    audioArmed = true;
+    try { await (game as any).audio?.resume(); } catch (e) { console.warn("[AUDIO] resume failed", e); }
+  };
+
+  let audioEnabled = true;
+  window.__CM.audio = {
+    on: () => { audioEnabled = true; (game as any).audio?.setEnabled(true); console.log("[AUDIO] ON"); },
+    off: () => { audioEnabled = false; (game as any).audio?.setEnabled(false); console.log("[AUDIO] OFF"); },
+    freqs: () => (game as any).audio?.getFreqs(),
+  };
+
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
   // ---- BG Lab UI (F7 toggle) ----
@@ -209,6 +239,9 @@ async function main() {
   // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
+
+    // First keypress arms the Web Audio context (autoplay policy).
+    void armAudio();
 
     // Start from TITLE
     if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") {
@@ -247,6 +280,21 @@ async function main() {
       console.log("[BG] kind", next);
       return;
     }
+
+    // Post-process (Display Reality Layer) toggle (F): ON <-> OFF
+    if (e.code === "KeyF") {
+      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
+      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
+      return;
+    }
+
+    // Audio mute toggle (M): parallel to F for the FX layer.
+    if (e.code === "KeyM") {
+      audioEnabled = !audioEnabled;
+      (game as any).audio?.setEnabled(audioEnabled);
+      console.log("[AUDIO]", audioEnabled ? "ON" : "OFF");
+      return;
+    }
     
     
 
@@ -279,6 +327,8 @@ async function main() {
   window.addEventListener(
     "pointerdown",
     (e) => {
+      // First tap arms the Web Audio context (iPad's only gesture path).
+      void armAudio();
       // start only from TITLE; also prevent wrapper drag/select
       if (hudMode === "TITLE") {
         e.preventDefault();
@@ -349,11 +399,18 @@ async function main() {
 
         // cosmetic VFX (per-frame, not in fixed tick)
         (game as any).vfx?.update?.(dt);
+        // audio pump (per-frame, parallel to VFX)
+        (game as any).audio?.update?.(dt);
 // per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);
-        const dx = t.x - game.playerEnt.pos.x;
-        const dy = t.y - game.playerEnt.pos.y;
+        // playerEnt.pos is WORLD; aim target is SCREEN -> compare in SCREEN space
+        const wsx = Number((game as any).world?.scrollX ?? 0);
+        const wsy = Number((game as any).world?.scrollY ?? 0);
+        const pScreenX = game.playerEnt.pos.x - wsx;
+        const pScreenY = game.playerEnt.pos.y - wsy;
+        const dx = t.x - pScreenX;
+        const dy = t.y - pScreenY;
         const len = Math.hypot(dx, dy) || 1;
 
         // angle in "logic space" (y is down)
@@ -432,7 +489,26 @@ async function main() {
         (renderer as any).renderVFX?.((game as any).vfx);
       });
 
-      gfx.present();
+      // Event-driven chromatic aberration: peak CA over active VFX, decaying
+      // with each effect's TTL. Explosion adds up to +0.008 (~3.5x baseline),
+      // hit spark up to +0.004. Falls back to baseline when nothing is active.
+      let caIntensity = 0.0022; // baseline
+      const expl = (game as any).vfx?.getExplosions?.() ?? [];
+      const hits = (game as any).vfx?.getHits?.() ?? [];
+      for (const e of expl) {
+        const t = 1 - e.age / e.ttl; // 1=fresh, 0=old
+        caIntensity = Math.max(caIntensity, 0.0022 + 0.008 * t);
+      }
+      for (const h of hits) {
+        const t = 1 - h.age / h.ttl;
+        caIntensity = Math.max(caIntensity, 0.0022 + 0.004 * t);
+      }
+
+      gfx.present({
+        postProcess: !!(globalThis as any).__CM_FX__,
+        timeSec: now / 1000, // rAF timestamp (ms) -> seconds, same clock as performance.now()
+        caIntensity,
+      });
 
 } catch (err) {
       console.error("[BOOT] frame() crashed", err);

@@ -106,6 +106,13 @@ export type FlowPreset = {
     mid: [number, number, number, number];
     near: [number, number, number, number];
   };
+
+  // optional per-preset calibration for the explosion/hit disturbance kick.
+  // kickScale multiplies the incoming kick (default 1.0) so a preset can be
+  // tuned without touching constants in the renderer/step code.
+  disturbance?: {
+    kickScale?: number;
+  };
 };
 
 export const FLOW_PRESETS: FlowPreset[] = [
@@ -184,6 +191,8 @@ export const FLOW_PRESETS: FlowPreset[] = [
       mid:  [0.55, 0.85, 1.00, 0.14],
       near: [0.85, 0.95, 1.00, 0.18],
     },
+
+    disturbance: { kickScale: 0.25 },
   },
 
   {
@@ -270,5 +279,7 @@ export const FLOW_PRESETS: FlowPreset[] = [
       mid:  [0.65, 1.00, 0.85, 0.22],
       near: [0.90, 1.00, 0.95, 0.28],
     },
+
+    disturbance: { kickScale: 0.25 },
   },
 ];

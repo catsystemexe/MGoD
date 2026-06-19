@@ -57,11 +57,19 @@ export class PlayerSystem {
       return;
     }
 
-    // --- Aim dir (deterministic, from sampled actions)
-    const aimTarget = readAimTarget(actions, { x: this.player.pos.x + 1, y: this.player.pos.y });
-    const dx = aimTarget.x - this.player.pos.x;
-    const dy = aimTarget.y - this.player.pos.y;
-    const len = Math.hypot(dx, dy) || 1;
+    // --- World->screen for this tick.
+    // player.pos is WORLD space; input/aim targets are SCREEN space.
+    const sx = Number(this.cfg.world?.scrollX ?? 0);
+    const sy = Number(this.cfg.world?.scrollY ?? 0);
+    const screenX = this.player.pos.x - sx;
+    const screenY = this.player.pos.y - sy;
+
+    // --- Aim dir (deterministic, from sampled actions). aimTarget is SCREEN space,
+    //     so compare against the player's SCREEN position.
+    const aimTarget = readAimTarget(actions, { x: screenX + 1, y: screenY });
+    const dx = aimTarget.x - screenX;
+    const dy = aimTarget.y - screenY;
+    const len = Math.hypot(dx, dy);
 
     // --- Aim dir + rot (stored on player entity for renderer)
     const pAny2 = this.player as any;
@@ -69,14 +77,16 @@ export class PlayerSystem {
     // ensure aimDir exists
     if (!pAny2.aimDir) pAny2.aimDir = { x: 1, y: 0 };
 
-    // normalized aim dir
-    pAny2.aimDir.x = dx / len;
-    pAny2.aimDir.y = dy / len;
+    // normalized aim dir; keep the last valid direction when target overlaps player
+    if (len > 0) {
+      pAny2.aimDir.x = dx / len;
+      pAny2.aimDir.y = dy / len;
 
-    // rotation in logic space (y down). Renderer/SpriteProgram flips NDC Y => use -atan2
-    const ROT_OFFSET = 0; // tweak if your sprite points up/left/etc.
-    pAny2.rot = Math.atan2(dy, dx) + ROT_OFFSET;
-    if (!Number.isFinite(pAny2.rot)) pAny2.rot = 0;
+      // rotation in logic space (y down). Renderer/SpriteProgram flips NDC Y => use -atan2
+      const ROT_OFFSET = 0; // tweak if your sprite points up/left/etc.
+      pAny2.rot = Math.atan2(dy, dx) + ROT_OFFSET;
+      if (!Number.isFinite(pAny2.rot)) pAny2.rot = 0;
+    }
 
     
     /// --- Movement (smooth accel/decel) + posPrev for render interpolation
@@ -102,16 +112,19 @@ export class PlayerSystem {
     this.player.vel.x = this.player.vel.x + (tvx - this.player.vel.x) * t;
     this.player.vel.y = this.player.vel.y + (tvy - this.player.vel.y) * t;
     
-    const nx = this.player.pos.x + this.player.vel.x * dtSec;
-    const ny = this.player.pos.y + this.player.vel.y * dtSec;
-
-    // clamp to bounds, respecting radius
+    // clamp to bounds, respecting radius.
     const r = this.player.radius ?? 0;
 
-    const sx = Number(this.cfg.world?.scrollX ?? 0);
-    const sy = Number(this.cfg.world?.scrollY ?? 0);
+    // Integrate + clamp in SCREEN space (identical to legacy behavior), then lift
+    // back to WORLD by re-adding the current scroll. bounds stay screen-fixed, so the
+    // player occupies the same on-screen rectangle as before regardless of scroll.
+    const nsx = screenX + this.player.vel.x * dtSec;
+    const nsy = screenY + this.player.vel.y * dtSec;
 
-    this.player.pos.x = clamp(nx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
-    this.player.pos.y = clamp(ny, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
+    const csx = clamp(nsx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
+    const csy = clamp(nsy, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
+
+    this.player.pos.x = csx + sx;
+    this.player.pos.y = csy + sy;
   }
 }

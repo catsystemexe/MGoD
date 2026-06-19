@@ -2,9 +2,14 @@ import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
 import { getGlyph } from "../glyphs/GlyphDB";
 
+import { cosinePalette, MUZZLE_PALETTE, TRACER_PALETTE } from "../../game/vfx/cosinePalette";
+
 import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
+import type { FlowDisturbance } from "./bg/flowStep";
+
+const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
@@ -445,22 +450,26 @@ export class WebGLSceneRenderer {
 
     // sprite anim time
     const tSec = performance.now() * 0.001;
+    const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
+    const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
+
     // BG pass (shader or flow)
     if (bgKind === "flow") {
       const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
 
       if (labKind === "flowSegments") {
-        this.bgSegments.draw({
+        this.bgFlowSegments.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,
           scrollX: sx,
           scrollY: sy,
           presetIndex,
+          disturbances: this.collectFlowDisturbances(sx, sy),
         });
       } else {
         // default: flowRibbon
-        this.bgFlow.draw({
+        this.bgFlowRibbon.draw({
           logicW: this.logicW,
           logicH: this.logicH,
           timeSec: tSec,
@@ -574,11 +583,10 @@ export class WebGLSceneRenderer {
         ix = Math.round(ix);
         iy = Math.round(iy);
       }
-      // Camera: world-space entities -> convert to screen-space
-      if (!(kind === "player" || kind === "projectile" || kind === "bomb")) {
-        ix -= sx;
-        iy -= sy;
-      }
+      // Camera: ALL gameplay entities live in WORLD space (unified contract),
+      // so every entity converts world -> screen the same way.
+      ix -= sx;
+      iy -= sy;
 
       
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
@@ -891,6 +899,55 @@ export class WebGLSceneRenderer {
 
     gl.bindVertexArray(null);
   }
+// --- BG flow disturbances: blast/hit ripples that perturb the flow field ---
+  // Reads the same VFXSystem ring buffers the renderer already consumes (no new
+  // event wiring) and converts each live source to a SCREEN-space disturbance.
+  // Two sources are combined into one list:
+  //   explosions -> kick 180 px/s, reach = radius × 2.5 (big shockwave)
+  //   hits       -> kick  60 px/s, reach = (count×step) × 1.2 (local ripple)
+  private collectFlowDisturbances(sx: number, sy: number): FlowDisturbance[] {
+    const vfx = (window as any).__CM?.game?.vfx;
+    if (!vfx) return NO_FLOW_DISTURB;
+
+    const out: FlowDisturbance[] = [];
+
+    if (vfx.getExplosions) {
+      const list = vfx.getExplosions();
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (!e || !e.alive) continue;
+        out.push({
+          x: e.x - sx,
+          y: e.y - sy,
+          radius: Math.max(1, Number(e.radius) || 0) * 2.5,
+          age: e.age,
+          ttl: e.ttl,
+          kick: 180,
+        });
+      }
+    }
+
+    if (vfx.getHits) {
+      const list = vfx.getHits();
+      for (let i = 0; i < list.length; i++) {
+        const h = list[i];
+        if (!h || !h.alive) continue;
+        // hits carry no explicit radius -> use their spark spread (count×step).
+        const baseR = Math.max(8, (h.count | 0) * (Number(h.step) || 0));
+        out.push({
+          x: h.x - sx,
+          y: h.y - sy,
+          radius: baseR * 1.2,
+          age: h.age,
+          ttl: h.ttl,
+          kick: 60,
+        });
+      }
+    }
+
+    return out;
+  }
+
 // --- VFX: muzzle + tracers + hits (no ECS, no allocations) ---
   renderVFX(vfx: any): void {
     if (!vfx) return;
@@ -922,8 +979,11 @@ export class WebGLSceneRenderer {
 
       const size = fx.size * (1.0 + t * 0.5);
 
-      gl.uniform4f(this.uColor, 1.0, 0.9, 0.6, alpha);
-      gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+      // cosine-palette muzzle color: bright gold -> deep orange over its life.
+      const [mr, mg, mb] = cosinePalette(t, MUZZLE_PALETTE.a, MUZZLE_PALETTE.b, MUZZLE_PALETTE.c, MUZZLE_PALETTE.d);
+      gl.uniform4f(this.uColor, mr, mg, mb, alpha);
+      // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+      gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
       gl.uniform2f(this.uSize, size, size);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
@@ -939,8 +999,6 @@ export class WebGLSceneRenderer {
       const t = fx.age / fx.ttl;
       const alpha = 1.0 - t;
 
-      gl.uniform4f(this.uColor, 0.6, 1.0, 0.6, alpha);
-
       const n = Math.max(1, Math.floor(fx.len / Math.max(0.001, fx.step)));
       for (let k = 0; k < n; k++) {
         const d = k * fx.step;
@@ -950,7 +1008,11 @@ export class WebGLSceneRenderer {
         const tail = 1.0 - k / n;
         const sz = fx.size * (0.6 + 0.4 * tail);
 
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        // cosine-palette gradient ALONG the beam (cyan-green head -> green tail).
+        const [tr, tg, tb] = cosinePalette(tail, TRACER_PALETTE.a, TRACER_PALETTE.b, TRACER_PALETTE.c, TRACER_PALETTE.d);
+        gl.uniform4f(this.uColor, tr, tg, tb, alpha);
+        // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+        gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
         gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
@@ -989,8 +1051,46 @@ export class WebGLSceneRenderer {
         const py = fx.y + Math.sin(ang) * (dist + jitter);
 
         const grow = 1.0 + t * 0.8;
-        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        // Addendum D fix: fx.x/fx.y are WORLD coords -> subtract camera.
+        gl.uniform2f(this.uPos, Math.round(px - sx), Math.round(py - sy));
         gl.uniform2f(this.uSize, fx.size * grow, fx.size * grow);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+    }
+  }
+
+  // EXPLOSIONS (expanding AoE ring + core flash). WORLD coords -> subtract camera.
+  if (vfx.getExplosions) {
+    const list = vfx.getExplosions();
+    for (let i = 0; i < list.length; i++) {
+      const fx = list[i];
+      if (!fx.alive) continue;
+
+      const t = Math.min(1.0, fx.age / fx.ttl);
+      const ease = 1.0 - (1.0 - t) * (1.0 - t); // easeOut for the ring radius
+      const alpha = (1.0 - t) * (1.0 - t);
+
+      const cx = fx.x - sx;
+      const cy = fx.y - sy;
+
+      // core flash (shrinks as it fades)
+      const flash = Math.max(2, fx.radius * (0.30 + 0.30 * (1.0 - t)));
+      gl.uniform4f(this.uColor, 1.0, 0.85, 0.45, alpha);
+      gl.uniform2f(this.uPos, Math.round(cx), Math.round(cy));
+      gl.uniform2f(this.uSize, flash, flash);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // expanding ring of dots out to fx.radius
+      const ring = fx.radius * ease;
+      const count = 16;
+      const sz = 3.0 + 2.0 * (1.0 - t);
+      gl.uniform4f(this.uColor, 1.0, 0.55, 0.2, alpha);
+      for (let k = 0; k < count; k++) {
+        const ang = (k / count) * Math.PI * 2;
+        const px = cx + Math.cos(ang) * ring;
+        const py = cy + Math.sin(ang) * ring;
+        gl.uniform2f(this.uPos, Math.round(px), Math.round(py));
+        gl.uniform2f(this.uSize, sz, sz);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
     }
