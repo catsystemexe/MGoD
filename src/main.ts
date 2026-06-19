@@ -174,6 +174,19 @@ async function main() {
     diff: (m: number) => window.__CM.director?.setDifficulty?.(m),
   };
 
+  // ---- Display Reality Layer (post-process) toggle — default ON.
+  // Works without DevUI (showcase mode): hotkey F or window.__CM.fx.* in console.
+  (globalThis as any).__CM_FX__ ??= true;
+  window.__CM.fx = {
+    on: () => { (globalThis as any).__CM_FX__ = true; console.log("[FX] ON"); },
+    off: () => { (globalThis as any).__CM_FX__ = false; console.log("[FX] OFF"); },
+    toggle: () => {
+      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
+      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
+    },
+    isOn: () => !!(globalThis as any).__CM_FX__,
+  };
+
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
   // ---- BG Lab UI (F7 toggle) ----
@@ -245,6 +258,13 @@ async function main() {
       const next = cur === "flow" ? "shader" : "flow";
       (globalThis as any).__CM_BG_KIND__ = next;
       console.log("[BG] kind", next);
+      return;
+    }
+
+    // Post-process (Display Reality Layer) toggle (F): ON <-> OFF
+    if (e.code === "KeyF") {
+      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
+      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
       return;
     }
     
@@ -437,7 +457,10 @@ async function main() {
         (renderer as any).renderVFX?.((game as any).vfx);
       });
 
-      gfx.present();
+      gfx.present({
+        postProcess: !!(globalThis as any).__CM_FX__,
+        timeSec: now / 1000, // rAF timestamp (ms) -> seconds, same clock as performance.now()
+      });
 
 } catch (err) {
       console.error("[BOOT] frame() crashed", err);
