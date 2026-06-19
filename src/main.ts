@@ -487,6 +487,11 @@ async function main() {
       gfx.renderScene(() => {
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
+        // Atmospheric FX overlay (audio-reactive); after VFX so it gets CRT post.
+        (renderer as any).renderAtmosphere?.(
+          now / 1000,
+          (game as any).audio?.getFreqs?.() ?? null,
+        );
       });
 
       // Event-driven chromatic aberration: peak CA over active VFX, decaying

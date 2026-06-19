@@ -8,6 +8,7 @@ import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
 import type { FlowDisturbance } from "./bg/flowStep";
+import { createAtmosphericFXPass, type AtmosphericFXPass } from "./AtmosphericFXPass";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
@@ -84,6 +85,7 @@ export class WebGLSceneRenderer {
   private bg: DemosceneBg;
   private bgFlowRibbon: FlowRibbonBg;
   private bgFlowSegments: FlowSegmentsBg;
+  private atmosphericFX: AtmosphericFXPass;
 
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
@@ -162,6 +164,7 @@ export class WebGLSceneRenderer {
        this.bg = new DemosceneBg(gl);
     this.bgFlowRibbon = new FlowRibbonBg(gl);
     this.bgFlowSegments = new FlowSegmentsBg(gl);
+    this.atmosphericFX = createAtmosphericFXPass(gl);
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -1098,7 +1101,17 @@ export class WebGLSceneRenderer {
 
   gl.bindVertexArray(null);
 }
-  
-                                 }
-  
-  
+
+  // --- Atmospheric FX overlay (Visual Layer 2): audio-reactive energy field.
+  // Drawn AFTER entities + VFX so it gets the same CRT post-process downstream.
+  // Honors the same KeyF toggle as PostProcessPass (__CM_FX__ === false -> off).
+  renderAtmosphere(timeSec: number, freqs: Float32Array | null): void {
+    if ((globalThis as any).__CM_FX__ === false) return;
+    this.atmosphericFX.draw({
+      logicW: this.logicW,
+      logicH: this.logicH,
+      timeSec,
+      freqs,
+    });
+  }
+}
