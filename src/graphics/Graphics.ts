@@ -139,7 +139,7 @@ export class Graphics {
    * Only the program/uniforms differ — letterbox, viewport and clears below are
    * identical in both paths.
    */
-  present(opts?: { postProcess?: boolean; timeSec?: number }): void {
+  present(opts?: { postProcess?: boolean; timeSec?: number; caIntensity?: number }): void {
     const gl = this.gl;
     const d = this.display;
     if (!d) return;
@@ -183,6 +183,7 @@ export class Graphics {
       // uResolution = logic-res of the sampled SceneRT (one scanline per row).
       gl.uniform1f(this.postProcess.uTime, opts?.timeSec ?? 0);
       gl.uniform2f(this.postProcess.uRes, this.scene.w, this.scene.h);
+      gl.uniform1f(this.postProcess.uCaInt, opts?.caIntensity ?? 0.0022);
     }
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);

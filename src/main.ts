@@ -457,9 +457,25 @@ async function main() {
         (renderer as any).renderVFX?.((game as any).vfx);
       });
 
+      // Event-driven chromatic aberration: peak CA over active VFX, decaying
+      // with each effect's TTL. Explosion adds up to +0.008 (~3.5x baseline),
+      // hit spark up to +0.004. Falls back to baseline when nothing is active.
+      let caIntensity = 0.0022; // baseline
+      const expl = (game as any).vfx?.getExplosions?.() ?? [];
+      const hits = (game as any).vfx?.getHits?.() ?? [];
+      for (const e of expl) {
+        const t = 1 - e.age / e.ttl; // 1=fresh, 0=old
+        caIntensity = Math.max(caIntensity, 0.0022 + 0.008 * t);
+      }
+      for (const h of hits) {
+        const t = 1 - h.age / h.ttl;
+        caIntensity = Math.max(caIntensity, 0.0022 + 0.004 * t);
+      }
+
       gfx.present({
         postProcess: !!(globalThis as any).__CM_FX__,
         timeSec: now / 1000, // rAF timestamp (ms) -> seconds, same clock as performance.now()
+        caIntensity,
       });
 
 } catch (err) {

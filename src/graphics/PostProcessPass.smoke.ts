@@ -72,7 +72,7 @@ function main() {
   assert(counts.vaos === 1, "must create exactly 1 VAO, got " + counts.vaos);
 
   // returned shape: prog, vao, uTex, uTime, uRes
-  for (const k of ["prog", "vao", "uTex", "uTime", "uRes"] as const) {
+  for (const k of ["prog", "vao", "uTex", "uTime", "uRes", "uCaInt"] as const) {
     assert(k in pass, "returned pass must expose '" + k + "'");
   }
   assert(pass.prog && pass.vao && pass.uTex, "prog/vao/uTex must be non-null");
@@ -87,7 +87,8 @@ function main() {
   // (3b) content guard: CA + glow terms must remain in the source.
   assert(/vec2 ca/.test(POSTPROCESS_FS), "FS must contain chromatic aberration (ca) term");
   assert(/glow \*= 0\.25/.test(POSTPROCESS_FS), "FS must contain phosphor glow averaging");
-  assert(/0\.0022/.test(POSTPROCESS_FS), "FS must contain CA constant 0.0022");
+  assert(/uniform\s+float\s+uCAIntensity/.test(POSTPROCESS_FS), "FS must declare uCAIntensity uniform");
+  assert(/\* uCAIntensity/.test(POSTPROCESS_FS), "FS must drive CA by the uCAIntensity uniform (runtime, not constant)");
   assert(/0\.12/.test(POSTPROCESS_FS), "FS must contain glow intensity 0.12");
 
   // (4) regression: a reported bad COMPILE must be detected (guard throws).

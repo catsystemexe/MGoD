@@ -18,6 +18,7 @@ export type PostProcessPass = {
   uTex: WebGLUniformLocation;
   uTime: WebGLUniformLocation | null;
   uRes: WebGLUniformLocation | null;
+  uCaInt: WebGLUniformLocation | null;
 };
 
 // Exported so a unit test can assert the effects are still present in the
@@ -44,13 +45,14 @@ in vec2 vUV;
 uniform sampler2D uTex;
 uniform float uTime;
 uniform vec2 uResolution;
+uniform float uCAIntensity;  // runtime-driven CA strength (baseline 0.0022)
 out vec4 outColor;
 
 void main() {
   vec2 texel = 1.0 / uResolution;
 
-  // CHROMATIC ABERRATION (static, radial, ~1px at edges).
-  vec2 ca = (vUV - 0.5) * 0.0022;
+  // CHROMATIC ABERRATION (radial, ~1px at edges at baseline 0.0022).
+  vec2 ca = (vUV - 0.5) * uCAIntensity;
   float r = texture(uTex, vUV + ca).r;
   float g = texture(uTex, vUV     ).g;
   float b = texture(uTex, vUV - ca).b;
@@ -124,6 +126,7 @@ export function createPostProcessPass(gl: WebGL2RenderingContext): PostProcessPa
   // location is a harmless no-op, so do not throw on them.
   const uTime = gl.getUniformLocation(prog, "uTime");
   const uRes = gl.getUniformLocation(prog, "uResolution");
+  const uCaInt = gl.getUniformLocation(prog, "uCAIntensity");
 
-  return { prog, vao, uTex, uTime, uRes };
+  return { prog, vao, uTex, uTime, uRes, uCaInt };
 }
