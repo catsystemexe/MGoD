@@ -8,6 +8,7 @@ export type DamageRules = {
   projectileHitEnemyDamage: number;
   playerHitEnemyDamage: number;
   onHitSpark?: (p: { x: number; y: number; dx: number; dy: number }) => void;
+  onExplosion?: (p: { x: number; y: number; radius: number }) => void;
 };
 
 export class DamageSystem<T extends BaseEntity> {
@@ -101,6 +102,29 @@ export class DamageSystem<T extends BaseEntity> {
           // CA handled elsewhere
           break;
 
+        case EventType.EXPLOSION: {
+          const { x, y, radius, damage, source } =
+            e.payload as CMEventMap[typeof EventType.EXPLOSION];
+
+          // VFX hook (world coords; renderer subtracts camera)
+          this.rules.onExplosion?.({ x, y, radius });
+
+          // AoE: collect every enemy whose circle overlaps the blast, THEN damage.
+          // (collect-first avoids mutating the store mid-iteration via markKill)
+          const victims: EntityRef[] = [];
+          (this.store as any).debugForEachAlive((ref: EntityRef, ent: any) => {
+            if (!ent || ent.pendingKill) return;
+            if (ent.kind !== "enemy") return;
+            const ddx = Number(ent.pos?.x ?? 0) - x;
+            const ddy = Number(ent.pos?.y ?? 0) - y;
+            const rr = radius + Number(ent.radius ?? 0);
+            if (ddx * ddx + ddy * ddy <= rr * rr) victims.push(ref);
+          });
+
+          for (const v of victims) this.applyHpDamage(v, damage, source);
+          break;
+        }
+
         default:
           throw new Error(`[DamageSystem] Unexpected event in Impact drain: ${String(e.type)}`);
       }
@@ -183,6 +207,18 @@ export class DamageSystem<T extends BaseEntity> {
 
     // markKill EARLY so other systems skip it in same tick
     this.store.markKill(target);
+
+    // Flow-owned kill event so ScoreSystem (and other Flow listeners) can react.
+    // Mirrors applyPlayerContact's emit() exactly; only difference is isPlayer: false.
+    // NOTE: this also activates LootDropSystem for enemy kills (25% roll →
+    // emits SPAWN_PICKUP), which SpawnSystem currently silently drops
+    // (handler commented out, default: break). This is intentional/accepted —
+    // pickups remain a separate open scope decision.
+    this.bus.emit(EventType.ENTITY_KILLED, {
+      target,
+      source,
+      isPlayer: false,
+    });
 // explosion FX (particles-driven)
 if (typeof (this.store as any).spawn === "function" && ent?.pos) {
   const ex = Number(ent.pos.x ?? 0);

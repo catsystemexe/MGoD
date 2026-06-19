@@ -20,6 +20,8 @@ export interface SpawnSystemConfig {
   rng01: () => number;
   logicSize: { w: number; h: number };
   weaponDb: WeaponDB;
+  bomb?: { travelSec: number; ttlSec?: number; damage: number; radius: number; explosionRadius: number };
+  pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
 
 export interface ProjectileEntity extends BaseEntity {
@@ -47,6 +49,7 @@ export interface BombEntity extends BaseEntity {
   ttl: number;
   damage: number;
   radius: number;
+  explosionRadius: number;
   target: Vec2;
 }
 
@@ -111,11 +114,12 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           const p = e.payload as CMEventMap[typeof EventType.SPAWN_PROJECTILE];
  
           
-          const def = this.cfg.weaponDb[p.weaponTypeId];
+          const weaponTypeId = p.weaponTypeId;
+          const def = this.cfg.weaponDb[weaponTypeId];
           const wcfg = def?.projectile;
           if (!wcfg) {
             if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
-              console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", p.weaponTypeId, "def=", def);
+              console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", weaponTypeId, "def=", def);
             }
             break;
           }
@@ -123,7 +127,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           // DEBUG: enable in browser console: __CM_DEBUG_PROJECTILES = true
           if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
             // keep it small to avoid spam
-            console.log("[SPAWN_PROJECTILE]", p.weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);
+            console.log("[SPAWN_PROJECTILE]", weaponTypeId, p.origin.x, p.origin.y, p.dir.x, p.dir.y, wcfg.speed, wcfg.ttlSec);
           }
           
           const dx = p.dir.x;
@@ -134,7 +138,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
   this.store.spawn((ent: any) => {
     ent.kind = "projectile";
     ent.owner = p.owner;
-    ent.weaponTypeId = p.weaponTypeId;
+    ent.weaponTypeId = weaponTypeId;
 
 
 
@@ -162,32 +166,34 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           break;
         }
 
-          /* case EventType.SPAWN_BOMB: {
-            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
-            // const b = this.cfg.bomb;
+          case EventType.SPAWN_BOMB: {
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_BOMB];
+            const b = (this.cfg as any).bomb;
+            if (!b) break;
 
-            // const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
-            // const travel = Math.max(0.001, b.travelSec);
-            // const vx = to.x / travel;
-            // const vy = to.y / travel;
+            const to = { x: p.target.x - p.origin.x, y: p.target.y - p.origin.y };
+            const travel = Math.max(0.001, Number(b.travelSec ?? 0.25));
+            const vx = to.x / travel;
+            const vy = to.y / travel;
 
-            // this.store.spawn((ent: any) => {
-            //   ent.kind = "bomb";
-            //   ent.owner = p.owner;
-            //   ent.pos = { x: p.origin.x, y: p.origin.y };
-            //   ent.posPrev = { x: p.origin.x, y: p.origin.y };
-            //   ent.vel = { x: vx, y: vy };
-            //   ent.ttl = Math.max(0.001, (b.ttlSec ?? b.travelSec));
-            //   ent.damage = b.damage;
-            //   ent.radius = b.radius;
-            //   ent.target = { x: p.target.x, y: p.target.y };
-            //   ent.pendingKill = false;
-            // });
+            this.store.spawn((ent: any) => {
+              ent.kind = "bomb";
+              ent.owner = p.owner;
+              ent.pos = { x: p.origin.x, y: p.origin.y };
+              ent.posPrev = { x: p.origin.x, y: p.origin.y };
+              ent.vel = { x: vx, y: vy };
+              ent.ttl = Math.max(0.001, Number(b.ttlSec ?? b.travelSec ?? 0.25));
+              ent.damage = Number(b.damage ?? 0);
+              ent.radius = Number(b.radius ?? 1);
+              ent.explosionRadius = Number(b.explosionRadius ?? b.radius ?? 1);
+              ent.target = { x: p.target.x, y: p.target.y };
+              ent.pendingKill = false;
+            });
 
-            // break;
-          } */
+            break;
+          }
 
-        case EventType.SPAWN_ENEMY: {
+                case EventType.SPAWN_ENEMY: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
             if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
               console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
@@ -222,7 +228,11 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
 
-          // pattern is relative to viewport => store WORLD coords (add camera ONCE)
+          // Unified contract: all gameplay entities live in WORLD space.
+          // Enemy spawn patterns are authored viewport-relative (where on screen we
+          // want them to appear), so convert pattern -> world ONCE here by adding the
+          // current scroll. Projectiles/bombs need no such conversion: their origin
+          // already comes from the player (WORLD) via WeaponSystem.
           const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
           const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
           this.store.spawn((ent: any) => {
@@ -294,28 +304,31 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           break;
         }
 
-          /* case EventType.SPAWN_PICKUP: {
-            // const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-            // const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+          case EventType.SPAWN_PICKUP: {
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
+            const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
 
-            // this.store.spawn((ent: any) => {
-            //   ent.kind = "pickup";
-            //   ent.defId = String(p.defId ?? "unknown");
+            // p.pos originates from a killed enemy => already WORLD space (unified
+            // contract). Do NOT add scroll here (unlike viewport-relative enemy
+            // spawn patterns); the position is already absolute world coords.
+            const x = Number(p.pos?.x ?? 0);
+            const y = Number(p.pos?.y ?? 0);
 
-            //   const x = p.pos.x;
-            //   const y = p.pos.y;
+            this.store.spawn((ent: any) => {
+              ent.kind = "pickup";
+              ent.defId = String(p.defId ?? "unknown");
 
-            //   ent.pos = { x, y };
-            //   ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
+              ent.pos = { x, y };
+              ent.posPrev = { x, y }; // IMPORTANT: prevents shimmer/pop on first frames
 
-            //   ent.vel = { x: 0, y: pcfg.fallSpeed };
-            //   ent.radius = pcfg.radius;
-            //   ent.ttl = pcfg.ttlSec;
-            //   ent.pendingKill = false;
-            // });
+              ent.vel = { x: 0, y: pcfg.fallSpeed };
+              ent.radius = pcfg.radius;
+              ent.ttl = pcfg.ttlSec;
+              ent.pendingKill = false;
+            });
 
-            // break;
-          } */
+            break;
+          }
 
         default:
           break;

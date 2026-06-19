@@ -1,3 +1,7 @@
 node_modules
 dist
 .replit
+
+# generated audit deliverable (binary; source lives in docs/audit/)
+CaptanMeow_audit.zip
+*.zip

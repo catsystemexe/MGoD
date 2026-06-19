@@ -8,7 +8,7 @@ import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
 export interface PlayerEntity {
   kind: "player";
-  // NOTE: player.pos is in SCREEN space (logic screen), not world space
+  // NOTE: player.pos is in WORLD space (unified contract — same as all entities)
   pos: { x: number; y: number };
   radius: number;
   pendingKill: boolean;
@@ -91,11 +91,10 @@ export class CollisionSystem {
   update(): void {
     // silence unused cfg warning (CA collision later)
     void this.cfg;
+    // Unified contract: every entity (player, enemy, projectile, pickup) lives in
+    // WORLD space, so collisions compare pos.x/pos.y directly — no camera conversion.
+    void this.world;
 
-    const camY = Number((this.world as any)?.scrollY ?? 0);
-    const camX = Number((this.world as any)?.scrollX ?? 0);
-
-    
     const enemies: Array<{ ref: EntityRef; e: EnemyEntity }> = [];
     const pickups: Array<{ ref: EntityRef; e: PickupEntity }> = [];
 
@@ -114,7 +113,7 @@ export class CollisionSystem {
       }
     });
 
-    // 2) projectile -> enemy (proj.x is SCREEN, enemy.x is WORLD => add camX)
+    // 2) projectile -> enemy (both WORLD space => compare directly)
     this.store.debugForEachAlive((projRef, e: any) => {
       if (!e || e.pendingKill) return;
       if (e.kind !== "projectile") return;
@@ -123,8 +122,8 @@ export class CollisionSystem {
       const proj = e as ProjectileEntity;
       const pr = Number(proj.radius ?? 0);
 
-      const psx = Number(proj.pos?.x ?? 0) + camX; // SCREEN -> WORLD
-      const psy = Number(proj.pos?.y ?? 0);        // already WORLD (WeaponSystem adds scrollY on spawn)
+      const psx = Number(proj.pos?.x ?? 0);
+      const psy = Number(proj.pos?.y ?? 0);
 
       for (const { ref: enemyRef, e: enemy } of enemies) {
         const rr = pr + Number(enemy.radius ?? 0);
@@ -136,12 +135,10 @@ export class CollisionSystem {
       }
     });
 
-    // 2.5) player -> pickup (player SCREEN space -> convert to WORLD space)
+    // 2.5) player -> pickup (both WORLD space => compare directly)
     if (playerRef && player && player.kind === "player") {
-      const px = Number(player.pos?.x ?? 0);
-      const py = Number(player.pos?.y ?? 0);
-      const pwy = py + camY;
-      const pwx = px + camX;
+      const pwx = Number(player.pos?.x ?? 0);
+      const pwy = Number(player.pos?.y ?? 0);
       const pr = Number(player.radius ?? 3);
 
       for (const { ref: pickRef, e: pick } of pickups) {
@@ -162,17 +159,14 @@ export class CollisionSystem {
       }
     }
 
-    // 3) player -> enemy (CONTACT) (player SCREEN space -> convert to WORLD space)
+    // 3) player -> enemy (CONTACT) (both WORLD space => compare directly)
     if (!playerRef || !player || player.kind !== "player") return;
 
     const inv = Number(player.invulnT ?? 0);
     if (Number.isFinite(inv) && inv > 0) return;
 
-    const px = Number(player.pos?.x ?? 0);
-    const py = Number(player.pos?.y ?? 0);
-
-    const pwx = px + camX;
-    const pwy = py + camY;
+    const pwx = Number(player.pos?.x ?? 0);
+    const pwy = Number(player.pos?.y ?? 0);
 
     const pr = Number(player.radius ?? 3);
 

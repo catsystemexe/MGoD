@@ -3,6 +3,7 @@ import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpawnSystem } from "./SpawnSystem";
+import { createWorldState } from "../data/WorldState";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -33,15 +34,19 @@ function main() {
 
   const store = new EntityStore<any>(32);
 
-  const spawn = new SpawnSystem(store as any, {
-    rng01: () => 0.5,
-    logicSize: { w: 224, h: 256 },
-    projectile: {
-      primary: { speed: 100, ttlSec: 1, damage: 1, radius: 1 },
-      secondary: { speed: 100, ttlSec: 1, damage: 1, radius: 1 },
+  const spawn = new SpawnSystem(
+    store as any,
+    {
+      rng01: () => 0.5,
+      logicSize: { w: 224, h: 256 },
+      weaponDb: {
+        primary: { id: "primary", cooldownSec: 0, projectile: { speed: 100, ttlSec: 1, damage: 1, radius: 1 } },
+        secondary: { id: "secondary", cooldownSec: 0, projectile: { speed: 100, ttlSec: 1, damage: 1, radius: 1 } },
+      },
+      bomb: { travelSec: 1, damage: 1, radius: 1, ttlSec: 1 },
     },
-    bomb: { travelSec: 1, damage: 1, radius: 1, ttlSec: 1 },
-  });
+    createWorldState(),
+  );
 
   // -----------------------
   // Tick 0: emitNext -> should NOT spawn in the same tick
@@ -54,7 +59,7 @@ function main() {
       owner: { slot: 1, gen: 0 },
       origin: { x: 10, y: 10 },
       dir: { x: 1, y: 0 },
-      weapon: "primary",
+      weaponTypeId: "primary",
     });
   });
 
