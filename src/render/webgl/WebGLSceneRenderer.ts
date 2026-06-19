@@ -91,7 +91,7 @@ export class WebGLSceneRenderer {
   private bgFlowRibbon: FlowRibbonBg;
   private bgFlowSegments: FlowSegmentsBg;
   private atmosphericFX: AtmosphericFXPass;
-  private sdfPass: SdfPass;
+  private sdfPass: SdfPass | null;
 
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
@@ -172,11 +172,18 @@ export class WebGLSceneRenderer {
     this.bgFlowSegments = new FlowSegmentsBg(gl);
     this.atmosphericFX = createAtmosphericFXPass(gl);
     // SDF vector pass — restores to the main program/VAO/uLogic after each draw.
-    this.sdfPass = createSdfPass(gl, this.logicW, this.logicH, {
-      prog: this.prog,
-      vao: this.vao,
-      uLogic: this.uLogic,
-    });
+    // Defensive: a shader compile/link failure must NOT blank the whole scene —
+    // degrade to null so entities fall through to the glyph/proc/quad paths.
+    try {
+      this.sdfPass = createSdfPass(gl, this.logicW, this.logicH, {
+        prog: this.prog,
+        vao: this.vao,
+        uLogic: this.uLogic,
+      });
+    } catch (e) {
+      console.warn("[SdfPass] failed to compile, SDF rendering disabled:", e);
+      this.sdfPass = null;
+    }
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -614,9 +621,10 @@ export class WebGLSceneRenderer {
           ? (e as any).spawnOrdinal
           : ((e as any).id ?? 0);
 
-      // 0) SDF vector shape (highest priority — short-circuits all other paths)
+      // 0) SDF vector shape (highest priority — short-circuits all other paths).
+      // Skipped entirely if the pass failed to compile (this.sdfPass === null).
       const sdf = (e as any).render?.sdf;
-      if (sdf && typeof sdf.shape === "string") {
+      if (this.sdfPass && sdf && typeof sdf.shape === "string") {
         // HP ratio drives deformation; fall back to player energy when no hp.
         const hpNow = safeNum((e as any).hp ?? (e as any).energy, 1);
         const hpMax = safeNum((e as any).maxHp ?? (e as any).energyMax, 1);

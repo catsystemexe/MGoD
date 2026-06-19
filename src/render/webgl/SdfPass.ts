@@ -206,6 +206,8 @@ function compileShader(gl: WebGL2RenderingContext, type: number, src: string): W
   gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
     const log = gl.getShaderInfoLog(sh) || "";
+    // Surface the exact compiler message (line/token) in the console before throwing.
+    console.error("[SdfPass] shader compile failed:", log);
     gl.deleteShader(sh);
     throw new Error("SdfPass: shader compile failed: " + log);
   }
@@ -224,6 +226,8 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
   gl.deleteShader(fs);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
     const log = gl.getProgramInfoLog(prog) || "";
+    // Surface the exact linker message in the console before throwing.
+    console.error("[SdfPass] program link failed:", log);
     gl.deleteProgram(prog);
     throw new Error("SdfPass: program link failed: " + log);
   }
