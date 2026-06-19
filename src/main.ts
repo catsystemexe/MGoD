@@ -187,6 +187,23 @@ async function main() {
     isOn: () => !!(globalThis as any).__CM_FX__,
   };
 
+  // ---- Audio Reality Layer (synth-only) — armed on first user gesture.
+  // Tone.start() must follow a gesture (autoplay policy); guard with a flag so
+  // we never re-resume. iPad has no keyboard -> pointerdown is the real path.
+  let audioArmed = false;
+  const armAudio = async () => {
+    if (audioArmed) return;
+    audioArmed = true;
+    try { await (game as any).audio?.resume(); } catch (e) { console.warn("[AUDIO] resume failed", e); }
+  };
+
+  let audioEnabled = true;
+  window.__CM.audio = {
+    on: () => { audioEnabled = true; (game as any).audio?.setEnabled(true); console.log("[AUDIO] ON"); },
+    off: () => { audioEnabled = false; (game as any).audio?.setEnabled(false); console.log("[AUDIO] OFF"); },
+    freqs: () => (game as any).audio?.getFreqs(),
+  };
+
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
   // ---- BG Lab UI (F7 toggle) ----
@@ -222,6 +239,9 @@ async function main() {
   // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
+
+    // First keypress arms the Web Audio context (autoplay policy).
+    void armAudio();
 
     // Start from TITLE
     if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") {
@@ -267,6 +287,14 @@ async function main() {
       console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
       return;
     }
+
+    // Audio mute toggle (M): parallel to F for the FX layer.
+    if (e.code === "KeyM") {
+      audioEnabled = !audioEnabled;
+      (game as any).audio?.setEnabled(audioEnabled);
+      console.log("[AUDIO]", audioEnabled ? "ON" : "OFF");
+      return;
+    }
     
     
 
@@ -299,6 +327,8 @@ async function main() {
   window.addEventListener(
     "pointerdown",
     (e) => {
+      // First tap arms the Web Audio context (iPad's only gesture path).
+      void armAudio();
       // start only from TITLE; also prevent wrapper drag/select
       if (hudMode === "TITLE") {
         e.preventDefault();
@@ -369,6 +399,8 @@ async function main() {
 
         // cosmetic VFX (per-frame, not in fixed tick)
         (game as any).vfx?.update?.(dt);
+        // audio pump (per-frame, parallel to VFX)
+        (game as any).audio?.update?.(dt);
 // per-frame aim (cosmetic; gameplay aim je i tak ze sampled actions v ticku)
       if (game?.inputMgr?.getAimTargetNow && game?.playerEnt?.aimDir) {
         const t = game.inputMgr.getAimTargetNow(LOGIC_W, LOGIC_H);

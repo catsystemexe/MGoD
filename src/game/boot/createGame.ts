@@ -67,6 +67,14 @@ export async function createGame(
 
    const vfx = new VFXSystem(64);
 
+  // ---- Audio (output concern; synth-only v1). Dynamic import ONLY so the Node
+  // smoke runner never transitively pulls Tone.js. No-op until first gesture.
+  let audio: import("../../audio/AudioSystem").AudioSystem | null = null;
+  if (typeof window !== "undefined") {
+    const audioMod = await import("../../audio/AudioSystem");
+    audio = audioMod.createAudioSystem();
+  }
+
   // ---- VFX (cosmetic, per-frame)
   // In browser we expose it for debugging; in Node (smokes) there is no window.
       if (typeof window !== "undefined") {
@@ -346,9 +354,9 @@ export async function createGame(
   }
 
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
-          onSpawnProjectile: (p: any) => vfx.onSpawnProjectile(p), // muzzle
+          onSpawnProjectile: (p: any) => { vfx.onSpawnProjectile(p); audio?.noteFire(); }, // muzzle + pew
           onTracer: (p: any) => vfx.onTracer(p), // tracer
-          onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); },
+          onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
@@ -360,8 +368,8 @@ export async function createGame(
   const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
-    onHitSpark: (p: any) => vfx.onHitSpark(p),
-    onExplosion: (p: any) => vfx.onExplosion(p),
+    onHitSpark: (p: any) => { vfx.onHitSpark(p); audio?.noteHit(); },
+    onExplosion: (p: any) => { vfx.onExplosion(p); audio?.noteExplosion(p); },
   });
 
   const impact = new ImpactPhaseSystem(damage, caImpact);
@@ -510,6 +518,7 @@ return {
   session,
   director, // devui needs director
   vfx,
+  audio,
   inputRt,
   playerRef,
   inputMgr,
