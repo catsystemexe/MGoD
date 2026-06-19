@@ -197,6 +197,7 @@ type MainRestore = {
   prog: WebGLProgram;
   vao: WebGLVertexArrayObject;
   uLogic: WebGLUniformLocation;
+  uColor: WebGLUniformLocation;
 };
 
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
@@ -301,11 +302,14 @@ export function createSdfPass(
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-      // restore main render state (loop expects BLEND off + main prog/vao bound)
+      // Restore the EXACT canonical state the main loop's other vector paths
+      // (proc/glyph) leave behind, so the next entity needs zero extra setup:
+      //   { main program, main VAO, uLogic, uColor=white, BLEND off }.
       gl.disable(gl.BLEND);
       gl.useProgram(main.prog);
       gl.bindVertexArray(main.vao);
       gl.uniform2f(main.uLogic, logicW, logicH);
+      gl.uniform4f(main.uColor, 1, 1, 1, 1);
     },
 
     dispose() {

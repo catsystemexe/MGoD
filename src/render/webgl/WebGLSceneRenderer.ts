@@ -179,6 +179,7 @@ export class WebGLSceneRenderer {
         prog: this.prog,
         vao: this.vao,
         uLogic: this.uLogic,
+        uColor: this.uColor,
       });
     } catch (e) {
       console.warn("[SdfPass] failed to compile, SDF rendering disabled:", e);
