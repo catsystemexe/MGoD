@@ -84,6 +84,12 @@ function main() {
   assert(/0\.012 \* sin\(uTime \* 0\.7\)/.test(POSTPROCESS_FS), "FS must keep the breathing term");
   assert(/gl_VertexID/.test(POSTPROCESS_VS), "VS must use gl_VertexID fullscreen triangle");
 
+  // (3b) content guard: CA + glow terms must remain in the source.
+  assert(/vec2 ca/.test(POSTPROCESS_FS), "FS must contain chromatic aberration (ca) term");
+  assert(/glow \*= 0\.25/.test(POSTPROCESS_FS), "FS must contain phosphor glow averaging");
+  assert(/0\.0022/.test(POSTPROCESS_FS), "FS must contain CA constant 0.0022");
+  assert(/0\.12/.test(POSTPROCESS_FS), "FS must contain glow intensity 0.12");
+
   // (4) regression: a reported bad COMPILE must be detected (guard throws).
   {
     let threw = false;
@@ -108,7 +114,7 @@ function main() {
     assert(threw, "bad link must throw 'program link failed'");
   }
 
-  console.log("[SMOKE] PostProcessPass OK ✅ (shape + 2 compiles/1 link + content + compile/link guards)");
+  console.log("[SMOKE] PostProcessPass OK ✅ (shape + 2 compiles/1 link + content[scanline/breath/CA/glow] + compile/link guards)");
 }
 
 main();

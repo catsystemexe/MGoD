@@ -45,7 +45,26 @@ uniform sampler2D uTex;
 uniform float uTime;
 uniform vec2 uResolution;
 out vec4 outColor;
+
 void main() {
+  vec2 texel = 1.0 / uResolution;
+
+  // CHROMATIC ABERRATION (static, radial, ~1px at edges).
+  vec2 ca = (vUV - 0.5) * 0.0022;
+  float r = texture(uTex, vUV + ca).r;
+  float g = texture(uTex, vUV     ).g;
+  float b = texture(uTex, vUV - ca).b;
+  vec3 base = vec3(r, g, b);
+
+  // PHOSPHOR GLOW (single-pass 4-tap diagonal smear, ~12%).
+  vec3 glow =
+      texture(uTex, vUV + vec2( texel.x,  texel.y)).rgb
+    + texture(uTex, vUV + vec2(-texel.x,  texel.y)).rgb
+    + texture(uTex, vUV + vec2( texel.x, -texel.y)).rgb
+    + texture(uTex, vUV + vec2(-texel.x, -texel.y)).rgb;
+  glow *= 0.25;
+  vec3 col = mix(base, glow, 0.12);
+
   // SCANLINES: darken every other physical row by 4%.
   float line = mod(floor(vUV.y * uResolution.y), 2.0);
   float scan = 1.0 - line * 0.04;
@@ -53,7 +72,7 @@ void main() {
   // SIGNAL BREATHING: slow ±1.2% luminance drift (analog signal gain wobble).
   float breath = 1.0 + 0.012 * sin(uTime * 0.7);
 
-  outColor = texture(uTex, vUV) * scan * breath;
+  outColor = vec4(col * scan * breath, 1.0);
 }
 `;
 
