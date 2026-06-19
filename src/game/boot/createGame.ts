@@ -102,24 +102,15 @@ export async function createGame(
     ent.energy = 5;
     ent.bombs = 1;
 
+    // HP-ratio source for the SDF deform/redshift (player tracks energy as life).
+    ent.maxHp = 5;
+
     ent.invulnT = 0;
       ent.deadT = 0;
       ent.hitFlashT = 0;
 
-      // --- Player render: procedural/vector parts (contract: EnemyDefs.proc.parts)
-      ent.render = ent.render || {};
-      (ent.render as any).color = "#ffffff";
-      (ent.render as any).proc = {
-        kind: "parts",
-        parts: [
-          // body (white)
-          { dx: 0, dy: 0, w: 18, h: 10, color: "#ffffff", alpha: 1 },
-          // nose (blue)
-          { dx: 10, dy: 0, w: 6, h: 6, color: "#88ccff", alpha: 1 },
-          // rear fin (orange) + subtle pulse (tiny life)
-          { dx: -9, dy: 0, w: 4, h: 12, color: "#ff9933", alpha: 1, pulseHz: 2.0, pulseAmp: 0.15 },
-        ],
-      };
+      // --- Player render: SDF vector shape (arrow). Energy drives deformation.
+      ent.render = { sdf: { shape: "arrow", color: "#00ffee" } };
 
       playerEnt = ent;
 });

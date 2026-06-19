@@ -3,9 +3,24 @@ import { CONTENT } from "../content/CONTENT";
 
 export type EnemyTypeId = string;
 
+// OPTIONAL: signed-distance-field shape (vector, GPU-evaluated). New render path
+// alongside glyph/proc/sprite. shape selects a primitive in SdfPass' fragment shader.
+export type SdfShape = "arrow" | "orb" | "crown" | "mandala" | "sigil";
+
+export interface SdfRenderDef {
+  shape: SdfShape;
+  color?: string; // hex, fallback na entity color
+  size?: number; // radius multiplier, default 1.0
+}
+
+const SDF_SHAPES: ReadonlySet<string> = new Set(["arrow", "orb", "crown", "mandala", "sigil"]);
+
 export interface EnemyRenderDef {
   // OPTIONAL: base color (fallback)
   color?: string; // CSS color, typicky "#rrggbb"
+
+  // OPTIONAL: signed-distance-field vector shape (GPU SDF pass)
+  sdf?: SdfRenderDef;
 
   // OPTIONAL: pixel-glyph id (render/glyphs)
   glyphId?: string;
@@ -125,6 +140,8 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
 
     const procRaw = t?.render?.proc ?? t?.proc;
 
+    const sdfRaw = t?.render?.sdf ?? t?.sdf;
+
     // ai overlay (optional)
     const aiRaw = t?.ai;
     const aiWeightRaw = t?.aiWeight;
@@ -187,6 +204,26 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       }
     }
 
+    // sdf: accept only { shape:<whitelist>, color?, size? }; otherwise warn + skip.
+    let sdf: SdfRenderDef | undefined;
+    if (sdfRaw !== undefined) {
+      const shapeRaw = isObj(sdfRaw) ? String((sdfRaw as any).shape ?? "") : "";
+      if (isObj(sdfRaw) && SDF_SHAPES.has(shapeRaw)) {
+        const scol = strOrUndef((sdfRaw as any).color);
+        const ssize =
+          typeof (sdfRaw as any).size === "number" && Number.isFinite((sdfRaw as any).size)
+            ? (sdfRaw as any).size
+            : undefined;
+        sdf = {
+          shape: shapeRaw as SdfShape,
+          ...(scol ? { color: scol } : {}),
+          ...(ssize !== undefined ? { size: ssize } : {}),
+        };
+      } else {
+        console.warn("[EnemyDefs] Invalid sdf (shape must be one of arrow/orb/crown/mandala/sigil) for", id, "value:", sdfRaw);
+      }
+    }
+
     const ai = isObj(aiRaw) ? (aiRaw as Record<string, unknown>) : undefined;
     const aiWeight = typeof aiWeightRaw === "number" && Number.isFinite(aiWeightRaw) ? aiWeightRaw : undefined;
     const aiEaseSec = typeof aiEaseSecRaw === "number" && Number.isFinite(aiEaseSecRaw) ? aiEaseSecRaw : undefined;
@@ -217,7 +254,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       console.warn("[EnemyDefs] Invalid proc (expected {kind:'parts',parts:[]}) for", id, "value:", procRaw);
     }
 
-    const hasRender = !!(color || glyphId || glyphs || proc);
+    const hasRender = !!(color || glyphId || glyphs || proc || sdf);
 
     out[id] = {
       hp,
@@ -231,6 +268,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
               ...(glyphId ? { glyphId } : {}),
               ...(glyphs ? { glyphs } : {}),
               ...(proc ? { proc } : {}),
+              ...(sdf ? { sdf } : {}),
             },
           }
         : {}),
