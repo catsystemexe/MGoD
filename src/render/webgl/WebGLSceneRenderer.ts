@@ -998,6 +998,27 @@ export class WebGLSceneRenderer {
       }
     }
 
+    if (this.store) {
+      this.store.debugForEachAlive((_ref: any, e: any) => {
+        let kick = 0, radius = 0;
+        if (e.kind === 'player') {
+          kick = 45; radius = 40;
+        } else if (e.kind === 'projectile') {
+          kick = 20; radius = 15;
+        } else if (e.kind === 'enemy') {
+          kick = 30; radius = 25;
+        } else return;
+        out.push({
+          x: e.pos.x - sx,
+          y: e.pos.y - sy,
+          radius,
+          kick,
+          age: 0,
+          ttl: 0.08,
+        });
+      });
+    }
+
     return out;
   }
 
