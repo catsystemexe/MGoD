@@ -206,7 +206,7 @@ async function main() {
 
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
-  // ---- Space Lab UI (L toggle) — FlowSegmentsBg dev panel ----
+  // ---- Space Lab UI (L toggle when Flow bg is active) ----
   try {
     const mod = await import("./ui/SpaceLabUI");
     (globalThis as any).__CM_SPACE_UI__ = new mod.SpaceLabUI();
@@ -214,7 +214,7 @@ async function main() {
     console.warn("[SPACE_LAB] init failed", e);
   }
 
-  // ---- Grid Lab UI (G toggle) ----
+  // ---- Grid Lab UI (L toggle when Mesh bg is active) ----
   try {
     const mod = await import("./ui/GridLabUI");
     (globalThis as any).__CM_GRID_UI__ = new mod.GridLabUI();
@@ -303,27 +303,17 @@ async function main() {
       return;
     }
 
-    // Grid Lab toggle (G): live synthwave grid params
-    if (e.code === "KeyG") {
-      const ui = (globalThis as any).__CM_GRID_UI__;
-      if (ui && typeof ui.toggle === "function") ui.toggle();
-      else console.log("[GRID_LAB] UI not ready");
-      return;
-    }
-
     // Context-sensitive dev panel toggle (L)
     if (e.code === "KeyL") {
       const mode = BG_MODES[bgModeIdx];
       if (mode.kind === "flow") {
         const ui = (globalThis as any).__CM_SPACE_UI__;
         if (ui && typeof ui.toggle === "function") ui.toggle();
-        else console.log("[SPACE_LAB] UI not ready");
+        else console.log("[L] Space Lab UI not ready");
       } else if (mode.lab && (mode.lab as any).mode === 7) {
         const ui = (globalThis as any).__CM_GRID_UI__;
         if (ui && typeof ui.toggle === "function") ui.toggle();
-        else console.log("[GRID_LAB] UI not ready");
-      } else {
-        console.log("[BG] no dev panel for", mode.label);
+        else console.log("[L] Mesh Lab UI not ready");
       }
       return;
     }
@@ -368,8 +358,8 @@ async function main() {
 
   const BG_MODES = [
     { kind: "flow",   lab: { kind: "flowSegments" }, preset: 0, label: "Flow" },
-    { kind: "shader", lab: { mode: 7 },              preset: 1, label: "Landscape" },
-    { kind: "shader", lab: { mode: 6 },              preset: 0, label: "Stars" },
+    { kind: "shader", lab: { mode: 7 },              preset: 1, label: "Mesh" },
+    { kind: "shader", lab: { mode: 6 },              preset: 0, label: "Space" },
   ];
   let bgModeIdx = 0;
 
@@ -378,7 +368,12 @@ async function main() {
     (globalThis as any).__CM_BG_KIND__ = m.kind;
     (globalThis as any).__CM_BG_LAB__ = { ...m.lab };
     (globalThis as any).__CM_BG_PRESET__ = m.preset;
-    console.log("[BG] mode", m.label, `(${m.kind}, preset=${m.preset})`);
+    // Close all dev panels before switching
+    const spaceLab = (globalThis as any).__CM_SPACE_UI__;
+    const gridLab = (globalThis as any).__CM_GRID_UI__;
+    if (spaceLab && typeof spaceLab.hide === "function") spaceLab.hide();
+    if (gridLab && typeof gridLab.hide === "function") gridLab.hide();
+    console.log("[BG]", m.label);
   }
 
   (globalThis as any).__CM_BG_VISIBLE__ = true;
