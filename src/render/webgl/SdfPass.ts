@@ -28,6 +28,7 @@ const SHAPE_ID: Record<string, number> = {
   sigil: 4,
   bolt: 5,
   triangle: 6,
+  rocket: 7,
 };
 
 // Bounded-quad vertex shader: identical world->screen transform to the main
@@ -108,6 +109,10 @@ float sdStar(vec2 p, float r, int n, float m) {
 
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 
+float wire2(float d, float th) {
+  return smoothstep(th, th * 0.5, abs(d));
+}
+
 void main() {
   float hp = clamp(uHpRatio, 0.0, 1.0);
 
@@ -162,6 +167,44 @@ void main() {
     vec2 q = vec2(abs(p.x) - len, p.y);
     d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     t = 0.5 + p.x * 0.4;
+  } else if (uShapeType == 7) {
+    // ROCKET — wireframe style, points +X
+    float body = sdBox(p - vec2(0.1, 0.0), vec2(0.45, 0.12));
+    vec2 np = p - vec2(0.55, 0.0);
+    float nose = sdEquilateral(vec2(np.y, -np.x), 0.13);
+    float wing1 = sdBox(p - vec2(-0.1, 0.28), vec2(0.25, 0.06));
+    float wing2 = sdBox(p - vec2(-0.1, -0.28), vec2(0.25, 0.06));
+    float eng = abs(length(p - vec2(-0.55, 0.0)) - 0.10) - 0.015;
+    float det1 = sdBox(p - vec2(0.05, 0.0), vec2(0.018, 0.10));
+    float det2 = sdBox(p - vec2(0.25, 0.0), vec2(0.018, 0.10));
+
+    float w = 0.0;
+    w = max(w, wire2(min(body, nose), 0.012));
+    w = max(w, wire2(min(wing1, wing2), 0.012));
+    w = max(w, wire2(eng, 0.008));
+    w = max(w, wire2(det1, 0.006));
+    w = max(w, wire2(det2, 0.006));
+
+    float allP = min(min(min(body, nose), min(wing1, wing2)), eng);
+    float glowR = exp(-max(allP, 0.0) * 12.0) * 0.4;
+
+    float fillW = max(0.0, min(1.0, -allP / 0.02 + 0.5));
+    float aOut = clamp(fillW * 0.15 + w + glowR, 0.0, 1.0);
+    if (aOut < 0.003) discard;
+
+    vec3 wCol = uColor * (w + glowR);
+
+    // low-HP redshift (wireframe friendly)
+    wCol = mix(vec3(0.9, 0.15, 0.1) * (w + glowR),
+               wCol, hp);
+    wCol += (1.0 - hp) * 0.4 *
+            (0.5 + 0.5 * sin(uTime * 8.0)) *
+            vec3(0.5, 0.0, 0.0);
+
+    // hit flash overrides toward white (last)
+    wCol = mix(wCol, vec3(1.0), clamp(uHitFlash, 0.0, 1.0));
+    outColor = vec4(wCol, aOut);
+    return;
   } else {
     // TRIANGLE — clean equilateral pointing +X
     vec2 q = vec2(-p.y, p.x);
