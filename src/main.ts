@@ -497,6 +497,7 @@ async function main() {
           now / 1000,
           (game as any).audio?.getFreqs?.() ?? null,
           hasEvent,
+          Number((game as any).world?.scrollX ?? 0),
         );
       });
 

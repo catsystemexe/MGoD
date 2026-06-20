@@ -1148,7 +1148,12 @@ export class WebGLSceneRenderer {
   // --- Atmospheric FX overlay (Visual Layer 2): audio-reactive energy field.
   // Drawn AFTER entities + VFX so it gets the same CRT post-process downstream.
   // Honors the same KeyF toggle as PostProcessPass (__CM_FX__ === false -> off).
-  renderAtmosphere(timeSec: number, freqs: Float32Array | null, hasExplosionOrHit = false): void {
+  renderAtmosphere(
+    timeSec: number,
+    freqs: Float32Array | null,
+    hasExplosionOrHit = false,
+    scrollX = 0,
+  ): void {
     if ((globalThis as any).__CM_FX__ === false) return;
     this.atmosphericFX.draw({
       logicW: this.logicW,
@@ -1156,6 +1161,7 @@ export class WebGLSceneRenderer {
       timeSec,
       freqs,
       hasExplosionOrHit,
+      scrollX,
     });
   }
 }

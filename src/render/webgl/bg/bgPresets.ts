@@ -23,7 +23,7 @@ export const BG_PRESETS: BgPreset[] = [
     id: "grid.landscape",
     name: "Grid Landscape (synthwave)",
     mode: 7,
-    p1: [6.0, 0.02, 0.6, 8.0],
+    p1: [6.0, 0.035, 0.15, 8.0],
     p2: [0.6, 0.0, 1.0, 0.0],
     cA: [0.02, 0.01, 0.05],
     cB: [0.25, 0.85, 1.00],

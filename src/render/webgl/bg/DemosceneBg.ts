@@ -91,8 +91,8 @@ export class DemosceneBg {
       uniform vec3  uCB;       // line/glow color
 
       float line01(float x, float w) {
-        // crisp-ish line with small AA
-        return 1.0 - smoothstep(w, w + 0.002, abs(x));
+        // smoothstep-based line with wider AA to kill thin-line shimmer
+        return smoothstep(w + 0.006, w - 0.006, abs(x));
       }
 
       float hash21(vec2 p) {
