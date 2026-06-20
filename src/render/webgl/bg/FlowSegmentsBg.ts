@@ -2,6 +2,7 @@ import { FLOW_PRESETS, FlowPreset, FlowLayerId } from "./flowPresets";
 import {
   SegParticle,
   FlowDisturbance,
+  FlowLive,
   stepFlowParticle,
   clamp,
   rand01,
@@ -72,6 +73,7 @@ export class FlowSegmentsBg {
 
   private lastTimeSec = NaN;
   private lastPresetId = "";
+  private lastCountBase = -1;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -163,17 +165,18 @@ export class FlowSegmentsBg {
     return FLOW_PRESETS[ix] || FLOW_PRESETS[0];
   }
 
-  private rebuildIfNeeded(pr: FlowPreset, logicW: number, logicH: number): void {
-    if (this.lastPresetId === pr.id && this.layers.far.length > 0) return;
+  private rebuildIfNeeded(pr: FlowPreset, logicW: number, logicH: number, countBase: number): void {
+    if (this.lastPresetId === pr.id && this.lastCountBase === countBase && this.layers.far.length > 0) return;
 
     this.lastPresetId = pr.id;
+    this.lastCountBase = countBase;
     this.lastTimeSec = NaN;
 
     this.layers.far = [];
     this.layers.mid = [];
     this.layers.near = [];
 
-    const base = pr.spawn.countBase;
+    const base = countBase;
     const pad = pr.spawn.respawnPaddingPx;
 
     const dir = normalize2(pr.direction.x, pr.direction.y);
@@ -245,7 +248,19 @@ export class FlowSegmentsBg {
     const gl = this.gl;
     const pr = this.preset(args.presetIndex);
 
-    this.rebuildIfNeeded(pr, args.logicW, args.logicH);
+    // Live dev-panel overrides (SpaceLabUI -> __CM_SPACE__). Same pattern as
+    // __CM_GRID__ for the grid shader: read here, apply to runtime stepping.
+    const space = (globalThis as any).__CM_SPACE__ ?? {};
+    const live: FlowLive = {
+      speedMul: Number.isFinite(space.flowSpeed) ? Number(space.flowSpeed) : 1.0,
+      meanderMul: Number.isFinite(space.meander) ? Number(space.meander) : 1.0,
+      kickScale: Number.isFinite(space.kickScale) ? Number(space.kickScale) : undefined,
+    };
+    const countBase = Number.isFinite(space.density)
+      ? Math.max(1, Math.round(Number(space.density)))
+      : pr.spawn.countBase;
+
+    this.rebuildIfNeeded(pr, args.logicW, args.logicH, countBase);
 
     const disturbances = args.disturbances ?? NO_DISTURB;
     const t = args.timeSec;
@@ -290,7 +305,7 @@ export class FlowSegmentsBg {
         const p = arr[i];
 
         // update
-        stepFlowParticle(p, pr, dt, t, layerId, args.logicW, args.logicH, disturbances);
+        stepFlowParticle(p, pr, dt, t, layerId, args.logicW, args.logicH, disturbances, live);
 
         // segment endpoints (world -> screen) using scroll (parallax)
         const x = p.x - scrollX;
@@ -301,7 +316,7 @@ export class FlowSegmentsBg {
         if (pr.segments.lengthPx.speedCoupling?.enabled) {
           const g = pr.segments.lengthPx.speedCoupling.gain;
           const cl = pr.segments.lengthPx.speedCoupling.clamp;
-          const sp = pr.motion.speedPxPerSec.base * (pr.motion.speedPxPerSec.layerMul[layerId] ?? 1);
+          const sp = pr.motion.speedPxPerSec.base * (pr.motion.speedPxPerSec.layerMul[layerId] ?? 1) * (live.speedMul ?? 1);
           const add = sp * g;
           L = clamp(L + add * 0.02, cl.min, cl.max);
         }

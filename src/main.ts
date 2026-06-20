@@ -206,12 +206,12 @@ async function main() {
 
   // DevUI disabled (we use minimal DevHotkeys overlay instead)
 
-  // ---- BG Lab UI (F7 toggle) ----
+  // ---- Space Lab UI (L toggle) — FlowSegmentsBg dev panel ----
   try {
-    const mod = await import("./ui/BgLabUI");
-    (globalThis as any).__CM_BG_LAB_UI__ = new mod.BgLabUI();
+    const mod = await import("./ui/SpaceLabUI");
+    (globalThis as any).__CM_SPACE_UI__ = new mod.SpaceLabUI();
   } catch (e) {
-    console.warn("[BG_LAB] init failed", e);
+    console.warn("[SPACE_LAB] init failed", e);
   }
 
   // ---- Grid Lab UI (G toggle) ----
@@ -312,10 +312,12 @@ async function main() {
       return;
     }
 
-    if (e.key === "u" || e.key === "U") {
-      const ui = (globalThis as any).__CM_BG_LAB_UI__;
+    // Space Lab toggle (L): live FlowSegmentsBg params
+    if (e.code === "KeyL") {
+      const ui = (globalThis as any).__CM_SPACE_UI__;
       if (ui && typeof ui.toggle === "function") ui.toggle();
-      else console.log("[BG_LAB] UI not ready");
+      else console.log("[SPACE_LAB] UI not ready");
+      return;
     }
 // Game over keys (Y/N)
     if (!session?.gameOver) return;

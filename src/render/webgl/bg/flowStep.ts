@@ -64,6 +64,15 @@ export function normalize2(x: number, y: number): [number, number] {
   return [x / l, y / l];
 }
 
+// Live (runtime, dev-panel) overrides read from __CM_SPACE__ and threaded in by
+// FlowSegmentsBg.draw(). Kept as an explicit param so this stepper stays pure /
+// GL-free / globals-free (the smoke test calls it with no `live` -> defaults).
+export type FlowLive = {
+  speedMul?: number;
+  meanderMul?: number;
+  kickScale?: number;
+};
+
 export function stepFlowParticle(
   p: SegParticle,
   pr: FlowPreset,
@@ -73,13 +82,14 @@ export function stepFlowParticle(
   logicW: number,
   logicH: number,
   disturbances: readonly FlowDisturbance[],
+  live?: FlowLive,
 ): void {
   const pad = pr.spawn.respawnPaddingPx;
   const accelLim = pr.motion.accelLimitPxPerSec2;
   const damp = pr.motion.dampingPerSec;
 
   const layerMul = pr.motion.speedPxPerSec.layerMul[layerId] ?? 1.0;
-  const baseSpeed = pr.motion.speedPxPerSec.base * layerMul;
+  const baseSpeed = pr.motion.speedPxPerSec.base * layerMul * (live?.speedMul ?? 1.0);
 
   // low-frequency speed drift (global-ish but per particle; smoothed)
   if (pr.rng.lowFreq.enabled) {
@@ -122,7 +132,7 @@ export function stepFlowParticle(
     const coup = pr.motion.yMeander.xPhaseCoupling;
     const w = Math.PI * 2 * p.meanderHz;
     const wave = Math.sin((t * w) + p.meanderPhase + p.x * coup);
-    p.vy += (wave * p.meanderAmp) * 0.12 * dt;
+    p.vy += (wave * p.meanderAmp * (live?.meanderMul ?? 1.0)) * 0.12 * dt;
   }
 
   // shear (y speed depends on y position) ✅ scale by dt
@@ -166,7 +176,7 @@ export function stepFlowParticle(
   // vertical nudge. With an empty list this whole block is skipped and the
   // particle steps byte-for-byte as before — fully backward compatible.
   if (disturbances.length > 0) {
-    const kickScale = pr.disturbance?.kickScale ?? 1.0;
+    const kickScale = live?.kickScale ?? pr.disturbance?.kickScale ?? 1.0;
     let accumVx = 0;
     let accumVy = 0;
     for (let i = 0; i < disturbances.length; i++) {
