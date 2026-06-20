@@ -350,7 +350,7 @@ export async function createGame(
 
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
           onSpawnProjectile: (p: any) => { audio?.noteFire(); },
-          onTracer: (p: any) => vfx.onTracer(p), // tracer
+          onTracer: (_p: any) => {},
           onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);

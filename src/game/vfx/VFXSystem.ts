@@ -88,7 +88,7 @@ export class VFXSystem {
     hitTTL: 0.30,
     hitCount: 6,
     hitStep: 2,
-    hitSpread: 6.28318,
+    hitSpread: 1.2,
     hitSize: 2.5,
 
     // explosion: expanding AoE ring (longer than a hit spark)

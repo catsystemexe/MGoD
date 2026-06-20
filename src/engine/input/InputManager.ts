@@ -230,7 +230,7 @@ export class InputManager {
     let outMy = my;
 
     // mouse drag => analog move (dx/dy in client px)
-    if (this.mouseMoveActive && !this.mouseDownR) {
+    if (this.mouseMoveActive) {
       const dx = this.mouseClientX - this.mousePrevX;
       const dy = this.mouseClientY - this.mousePrevY;
 
