@@ -1,6 +1,7 @@
 {
   "enemyTypes": [
     {
+      "_comment": "shape options: arrow|triangle|orb|crown|mandala|sigil|bolt — see SdfPass.ts SHAPE_CATALOG",
       "id": "red",
       "hp": 6,
       "radius": 4,

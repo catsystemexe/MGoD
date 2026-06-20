@@ -109,9 +109,12 @@ export async function createGame(
       ent.deadT = 0;
       ent.hitFlashT = 0;
 
-      // --- Player render: SDF vector shape (arrow). Energy drives deformation.
-      // size:3.5 -> visible core ~21px (slightly larger than old proc-parts ship).
-      ent.render = { sdf: { shape: "arrow", color: "#00ffee", size: 3.5 } };
+      // ── PLAYER VISUAL CONFIG ─────────────────
+      // shape: see SHAPE_CATALOG in SdfPass.ts
+      // color: hex string
+      // size:  visual scale multiplier (default 1.0)
+      // ─────────────────────────────────────────
+      ent.render = { sdf: { shape: "triangle", color: "#00ffee", size: 3.5 } };
 
       playerEnt = ent;
 });
