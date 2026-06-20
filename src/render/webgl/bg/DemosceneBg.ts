@@ -62,6 +62,12 @@ export class DemosceneBg {
   private uCA: WebGLUniformLocation;
   private uCB: WebGLUniformLocation;
 
+  private uWaveHeight: WebGLUniformLocation | null = null;
+  private uWaveSpeed: WebGLUniformLocation | null = null;
+  private uGridDensity: WebGLUniformLocation | null = null;
+  private uHorizon: WebGLUniformLocation | null = null;
+  private uGlowIntensity: WebGLUniformLocation | null = null;
+
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
 
@@ -90,16 +96,41 @@ export class DemosceneBg {
       uniform vec3  uCA;       // base color
       uniform vec3  uCB;       // line/glow color
 
+      // grid landscape (mode 7) live-tunable params
+      uniform float uWaveHeight;
+      uniform float uWaveSpeed;
+      uniform float uGridDensity;
+      uniform float uHorizon;
+      uniform float uGlowIntensity;
+
       float line01(float x, float w) {
-        // crisp-ish line with small AA
-        return 1.0 - smoothstep(w, w + 0.002, abs(x));
+        // smoothstep-based line with wider AA to kill thin-line shimmer
+        return smoothstep(w + 0.006, w - 0.006, abs(x));
       }
 
       float hash21(vec2 p) {
-        // cheap hash
         p = fract(p * vec2(123.34, 345.45));
         p += dot(p, p + 34.345);
         return fract(p.x * p.y);
+      }
+
+      float starLayer(vec2 uv, float cells, float scroll, float t) {
+        vec2 g = uv * cells;
+        g.x += scroll * cells;
+        vec2 cell = floor(g);
+        vec2 f = fract(g) - 0.5;
+        float h = hash21(cell);
+        if (h < 0.72) return 0.0;
+        vec2 sp = (vec2(hash21(cell + 1.7), hash21(cell + 4.3)) - 0.5) * 0.7;
+        float d = length(f - sp);
+        float tw = 0.55 + 0.45 * sin(t * (2.0 + h * 5.0) + h * 31.0);
+        return smoothstep(0.07, 0.0, d) * tw;
+      }
+
+      float gridLine(float coord, float thickness) {
+        float d = abs(fract(coord) - 0.5);
+        float w = fwidth(coord) * 1.5;
+        return smoothstep(thickness + w, thickness - w, d);
       }
 
       void main() {
@@ -233,19 +264,17 @@ export class DemosceneBg {
 
           col += uCB * glow;
 
-        } else {
+        } else if (uMode == 5) {
           // Hex field (approx lattice)
           float cell = max(10.0, uP1.x);
           float w = uP1.y;
           float sp = uP1.z;
           float wob = uP1.w;
 
-          // skew into axial coords
           vec2 q = p / cell;
           q.x += sin(q.y + t * sp) * wob;
           q.y += cos(q.x - t * sp) * wob;
 
-          // fake hex: combine 3 grids
           float g1 = line01(fract(q.x) - 0.5, w);
           float g2 = line01(fract(q.y) - 0.5, w);
           float g3 = line01(fract((q.x + q.y) * 0.5) - 0.5, w);
@@ -254,6 +283,57 @@ export class DemosceneBg {
           float glow = pow(lines, uP2.z) * 0.85;
 
           col += uCB * glow;
+
+        } else if (uMode == 6) {
+          // Parallax Stars (3-layer)
+          vec2 uv = vUv;
+          uv.x *= uLogic.x / max(1.0, uLogic.y);
+          float s = uScroll.x / max(1.0, uLogic.y);
+
+          float far  = starLayer(uv, uP1.x, s * 0.12 + t * 0.010, t) * 0.40;
+          float mid  = starLayer(uv, uP1.y, s * 0.30 + t * 0.025, t) * 0.70;
+          float near = starLayer(uv, uP1.z, s * 0.65 + t * 0.050, t) * 1.00;
+
+          col = uCA + uCB * (far + mid + near);
+
+        } else if (uMode == 7) {
+          // Grid Landscape (synthwave) — fwidth AA, wave heightmap
+          vec2 uv = vUv;
+          float aspect = uLogic.x / max(1.0, uLogic.y);
+          float horizon = uHorizon;
+
+          vec3 skyTop     = vec3(0.02, 0.01, 0.05);
+          vec3 skyHorizon = vec3(0.35, 0.05, 0.35);
+          vec3 gridNear   = vec3(1.00, 0.15, 0.70);
+          vec3 gridFar    = vec3(0.20, 0.85, 1.00);
+
+          if (uv.y > horizon) {
+            float below = uv.y - horizon;
+            float depth = 1.0 / max(below, 0.0015);
+
+            float wx = (uv.x - 0.5) * aspect * depth;
+            wx += uScroll.x * 0.02;
+            float wz = depth - t * uWaveSpeed;
+
+            float wave = sin(wx * 0.6 + t * uWaveSpeed) * uWaveHeight;
+
+            float rows = (wz + wave) * (uGridDensity * 0.25);
+            float cols = wx * (uGridDensity * 0.25);
+
+            float g = max(gridLine(rows, 0.04), gridLine(cols, 0.04));
+
+            float nearF = clamp(below * 2.2, 0.0, 1.0);
+            vec3 gridCol = mix(gridFar, gridNear, nearF);
+            vec3 floorBg = mix(skyHorizon * 0.4, skyTop, nearF);
+
+            col = floorBg + gridCol * g * (0.35 + nearF * 0.65);
+          } else {
+            float up = (horizon - uv.y) / max(horizon, 0.001);
+            col = mix(skyHorizon, skyTop, up);
+
+            float glow = pow(1.0 - up, 3.0) * uGlowIntensity;
+            col += skyHorizon * glow;
+          }
         }
 
         outColor = vec4(col, 1.0);
@@ -286,6 +366,12 @@ export class DemosceneBg {
     this.uCA = uCA;
     this.uCB = uCB;
 
+    this.uWaveHeight = gl.getUniformLocation(this.prog, "uWaveHeight");
+    this.uWaveSpeed = gl.getUniformLocation(this.prog, "uWaveSpeed");
+    this.uGridDensity = gl.getUniformLocation(this.prog, "uGridDensity");
+    this.uHorizon = gl.getUniformLocation(this.prog, "uHorizon");
+    this.uGlowIntensity = gl.getUniformLocation(this.prog, "uGlowIntensity");
+
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
     if (!vao || !vbo) throw new Error("BG: Failed to create VAO/VBO");
@@ -305,9 +391,11 @@ export class DemosceneBg {
   }
 
   private preset(i: number): BgPreset {
-    const n = BG_PRESETS.length;
+    const visible = BG_PRESETS.filter(p => !p.hidden);
+    const list = visible.length > 0 ? visible : BG_PRESETS;
+    const n = list.length;
     const ix = n > 0 ? ((i % n) + n) % n : 0;
-    return BG_PRESETS[ix] || BG_PRESETS[0];
+    return list[ix] || BG_PRESETS[0];
   }
 
   draw(args: DemosceneBgDrawArgs): void {
@@ -328,6 +416,15 @@ export class DemosceneBg {
     gl.uniform4f(this.uP2, pr.p2[0], pr.p2[1], pr.p2[2], pr.p2[3]);
     gl.uniform3f(this.uCA, pr.cA[0], pr.cA[1], pr.cA[2]);
     gl.uniform3f(this.uCB, pr.cB[0], pr.cB[1], pr.cB[2]);
+
+    if (pr.mode === 7) {
+      const G = (globalThis as any).__CM_GRID__ ?? { waveHeight: 0.25, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8 };
+      if (this.uWaveHeight) gl.uniform1f(this.uWaveHeight, G.waveHeight);
+      if (this.uWaveSpeed) gl.uniform1f(this.uWaveSpeed, G.waveSpeed);
+      if (this.uGridDensity) gl.uniform1f(this.uGridDensity, G.gridDensity);
+      if (this.uHorizon) gl.uniform1f(this.uHorizon, G.horizon);
+      if (this.uGlowIntensity) gl.uniform1f(this.uGlowIntensity, G.glowIntensity);
+    }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 

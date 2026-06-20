@@ -41,6 +41,7 @@ out vec4 outColor;
 
 uniform vec2  uResolution;   // (logicW, logicH)
 uniform float uTime;
+uniform vec2  uScroll;       // (world scrollX, 0)
 uniform sampler2D uFreqs;    // 32x1 R8, normalized 0..1 spectrum
 
 // Quilez cosine palette: a + b*cos(2pi*(c*t+d)). cyan->violet rainbow.
@@ -62,6 +63,7 @@ void main(){
   float treb = texture(uFreqs, vec2(0.80, 0.5)).r;
 
   vec2 p = vUv * vec2(uResolution.x / uResolution.y, 1.0) * 3.0;
+  p.x -= uScroll.x / uResolution.x * 0.15; // parallax: slow drift, not 1:1 with world
   float t = uTime * 0.15;
 
   // DOMAIN WARPING — fold the field through itself; bass pumps the warp depth.
@@ -95,6 +97,7 @@ export type AtmosphericFXPass = {
     timeSec: number;
     freqs: Float32Array | null;
     hasExplosionOrHit?: boolean;
+    scrollX?: number;
   }): void;
   dispose(): void;
 };
@@ -138,6 +141,7 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
 
   const uResolution = gl.getUniformLocation(prog, "uResolution");
   const uTime = gl.getUniformLocation(prog, "uTime");
+  const uScroll = gl.getUniformLocation(prog, "uScroll");
   const uFreqs = gl.getUniformLocation(prog, "uFreqs");
 
   // 32x1 R8 spectrum texture (LINEAR -> free smooth interpolation across bins).
@@ -195,6 +199,7 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
       if (uFreqs) gl.uniform1i(uFreqs, 0);
       if (uResolution) gl.uniform2f(uResolution, args.logicW, args.logicH);
       if (uTime) gl.uniform1f(uTime, args.timeSec);
+      if (uScroll) gl.uniform2f(uScroll, args.scrollX ?? 0, 0);
 
       // additive energy glow
       gl.enable(gl.BLEND);

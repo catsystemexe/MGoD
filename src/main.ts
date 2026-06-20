@@ -214,6 +214,14 @@ async function main() {
     console.warn("[BG_LAB] init failed", e);
   }
 
+  // ---- Grid Lab UI (G toggle) ----
+  try {
+    const mod = await import("./ui/GridLabUI");
+    (globalThis as any).__CM_GRID_UI__ = new mod.GridLabUI();
+  } catch (e) {
+    console.warn("[GRID_LAB] init failed", e);
+  }
+
   // (window as any).__CM.devui = new DevUI(() => window.__CM?.dev ?? null);
 
   // --- HUD mode mirror (so we can gate pointer/touch)
@@ -295,8 +303,14 @@ async function main() {
       console.log("[AUDIO]", audioEnabled ? "ON" : "OFF");
       return;
     }
-    
-    
+
+    // Grid Lab toggle (G): live synthwave grid params
+    if (e.code === "KeyG") {
+      const ui = (globalThis as any).__CM_GRID_UI__;
+      if (ui && typeof ui.toggle === "function") ui.toggle();
+      else console.log("[GRID_LAB] UI not ready");
+      return;
+    }
 
     if (e.key === "u" || e.key === "U") {
       const ui = (globalThis as any).__CM_BG_LAB_UI__;
@@ -389,7 +403,8 @@ async function main() {
   
   function frame(now: number) {
     try {
-      const dt = (now - last) / 1000;
+      let dt = (now - last) / 1000;
+      dt = Math.min(dt, 0.05);
       last = now;
 
       // advance simulation (THIS WAS MISSING)
@@ -497,6 +512,7 @@ async function main() {
           now / 1000,
           (game as any).audio?.getFreqs?.() ?? null,
           hasEvent,
+          Number((game as any).world?.scrollX ?? 0),
         );
       });
 

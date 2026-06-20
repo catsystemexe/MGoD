@@ -142,7 +142,18 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
 
 
-      ent.render = { glyphId: "proj.capsule" };
+      // weaponTypeId is the concrete weapon type from the spawn payload:
+      //   "w1.basic" = primary slot, "w2.basic" = secondary slot (w2 prefix).
+      // Secondary bolts are visually distinct (magenta + larger) from primary.
+      const isSecondary = String(weaponTypeId).startsWith("w2");
+      ent.render = {
+        glyphId: "proj.capsule",
+        sdf: {
+          shape: isSecondary ? "orb" : "bolt",
+          color: isSecondary ? "#ff5cc8" : "#aef6ff",
+          size: isSecondary ? 2.0 : 2.5,
+        },
+      };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
       // Later: weapon DB can override this.
       ent.animId = "projectile.w1";

@@ -87,8 +87,11 @@ export class DamageSystem<T extends BaseEntity> {
             }
           }
 
-          // --- actual HP damage to enemy
-          this.applyHpDamage(enemy, this.rules.projectileHitEnemyDamage, "projectile");
+          // --- actual HP damage to enemy (per-projectile if available, else global rule)
+          const projDmg = (projEnt && typeof projEnt.damage === "number" && projEnt.damage > 0)
+            ? projEnt.damage
+            : this.rules.projectileHitEnemyDamage;
+          this.applyHpDamage(enemy, projDmg, "projectile");
           break;
         }
 

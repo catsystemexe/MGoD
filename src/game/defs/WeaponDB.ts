@@ -22,15 +22,15 @@ export const WEAPON_DB: WeaponDB = {
     },
   },
 
-  // Placeholder secondary (you’ll replace later)
+  // W2: heavy secondary — single large orb, high damage, slow cadence.
   "w2.basic": {
     id: "w2.basic",
-    cooldownSec: 0.25,
+    cooldownSec: 0.7,
     projectile: {
-      speed: 200,
-      ttlSec: 0.8,
-      damage: 2,
-      radius: 2,
+      speed: 260,
+      ttlSec: 2.0,
+      damage: 8,
+      radius: 6,
       pellets: 1,
       spreadRad: 0,
       caInteract: false,

@@ -109,9 +109,12 @@ export async function createGame(
       ent.deadT = 0;
       ent.hitFlashT = 0;
 
-      // --- Player render: SDF vector shape (arrow). Energy drives deformation.
-      // size:3.0 -> visible core ~18px (matches the old proc-parts ship footprint).
-      ent.render = { sdf: { shape: "arrow", color: "#00ffee", size: 3.0 } };
+      // ── PLAYER VISUAL CONFIG ─────────────────
+      // shape: see SHAPE_CATALOG in SdfPass.ts
+      // color: hex string
+      // size:  visual scale multiplier (default 1.0)
+      // ─────────────────────────────────────────
+      ent.render = { sdf: { shape: "triangle", color: "#00ffee", size: 3.5 } };
 
       playerEnt = ent;
 });
@@ -346,8 +349,8 @@ export async function createGame(
   }
 
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
-          onSpawnProjectile: (p: any) => { vfx.onSpawnProjectile(p); audio?.noteFire(); }, // muzzle + pew
-          onTracer: (p: any) => vfx.onTracer(p), // tracer
+          onSpawnProjectile: (p: any) => { audio?.noteFire(); },
+          onTracer: (_p: any) => {},
           onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);

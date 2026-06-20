@@ -14,12 +14,20 @@
 // model. State is restored to the main program/VAO/uLogic before returning so
 // the surrounding render loop is undisturbed (same discipline as sprite paths).
 
+// ── SHAPE CATALOG ─────────────────────────
+// Change entity visuals by updating these IDs
+// in createGame.ts (player) or enemyTypes.json
+// (enemies). New shapes: add SHAPE_ID entry +
+// matching branch in the fragment shader.
+// ───────────────────────────────────────────
 const SHAPE_ID: Record<string, number> = {
   arrow: 0,
   orb: 1,
   crown: 2,
   mandala: 3,
   sigil: 4,
+  bolt: 5,
+  triangle: 6,
 };
 
 // Bounded-quad vertex shader: identical world->screen transform to the main
@@ -139,7 +147,7 @@ void main() {
       d = min(d, ring + petals);
     }
     t = r + uTime * 0.05;
-  } else {
+  } else if (uShapeType == 4) {
     // SIGIL: a rotating cross (two thin bars) inscribed in a ring.
     vec2 q = rot(uTime * 0.6) * p;
     float bar1 = sdBox(q, vec2(0.62, 0.06));
@@ -147,6 +155,18 @@ void main() {
     float ring = abs(sdCircle(p, 0.52)) - 0.045;
     d = min(min(bar1, bar2), ring);
     t = atan(q.y, q.x) / TAU + 0.5;
+  } else if (uShapeType == 5) {
+    // BOLT (projectile): horizontal capsule with a sharp core. Points +X.
+    float r = 0.18;
+    float len = 0.45;
+    vec2 q = vec2(abs(p.x) - len, p.y);
+    d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    t = 0.5 + p.x * 0.4;
+  } else {
+    // TRIANGLE — clean equilateral pointing +X
+    vec2 q = vec2(-p.y, p.x);
+    d = sdEquilateral(q, 0.62);
+    t = 0.5 + p.x * 0.4;
   }
 
   // Edge AA fill + soft outer glow halo.
@@ -166,6 +186,10 @@ void main() {
     vec3(0.0, 0.33, 0.67)
   );
   vec3 col = mix(uColor, pal, 0.35);
+
+  // BOLT (projectile): pure tint, no palette mix — keeps #aef6ff cyan / #ff5cc8
+  // magenta exact so primary/secondary read as distinct at a glance.
+  if (uShapeType == 5) col = uColor;
 
   // Low-HP redshift + danger pulse.
   col = mix(vec3(0.9, 0.15, 0.1), col, hp);

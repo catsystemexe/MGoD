@@ -93,6 +93,9 @@ export class WebGLSceneRenderer {
   private atmosphericFX: AtmosphericFXPass;
   private sdfPass: SdfPass | null;
 
+  private accumTime = 0;
+  private lastRenderMs = -1;
+
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
@@ -472,7 +475,12 @@ export class WebGLSceneRenderer {
     const sy = Number(world?.scrollY ?? 0);
 
     // sprite anim time
-    const tSec = performance.now() * 0.001;
+    const nowMs = performance.now();
+    if (this.lastRenderMs < 0) this.lastRenderMs = nowMs;
+    const dt = Math.min((nowMs - this.lastRenderMs) / 1000, 0.05);
+    this.lastRenderMs = nowMs;
+    this.accumTime += dt;
+    const tSec = this.accumTime;
     const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
     const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
 
@@ -1087,7 +1095,8 @@ export class WebGLSceneRenderer {
         const u = Math.sign(u0) * (Math.abs(u0) ** 0.65);
         const ang = baseAng + u * spread;
 
-        const dist = k * step;
+        const outward = 60;
+        const dist = k * step + outward * (fx.age / fx.ttl);
 
         const j = (Math.sin((k + 1) * 12.9898 + fx.age * 60.0) * 43758.5453) % 1;
         const jitter = (j - 0.5) * step * 0.35;
@@ -1147,7 +1156,12 @@ export class WebGLSceneRenderer {
   // --- Atmospheric FX overlay (Visual Layer 2): audio-reactive energy field.
   // Drawn AFTER entities + VFX so it gets the same CRT post-process downstream.
   // Honors the same KeyF toggle as PostProcessPass (__CM_FX__ === false -> off).
-  renderAtmosphere(timeSec: number, freqs: Float32Array | null, hasExplosionOrHit = false): void {
+  renderAtmosphere(
+    timeSec: number,
+    freqs: Float32Array | null,
+    hasExplosionOrHit = false,
+    scrollX = 0,
+  ): void {
     if ((globalThis as any).__CM_FX__ === false) return;
     this.atmosphericFX.draw({
       logicW: this.logicW,
@@ -1155,6 +1169,7 @@ export class WebGLSceneRenderer {
       timeSec,
       freqs,
       hasExplosionOrHit,
+      scrollX,
     });
   }
 }

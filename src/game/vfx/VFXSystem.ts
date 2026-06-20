@@ -84,11 +84,11 @@ export class VFXSystem {
     tracerStep: 3,
     tracerSize: 2.5,
 
-    // hit: krátká “jiskra” vpřed
-    hitTTL: 0.14,
-    hitCount: 8,
+    // hit: radiální burst (tečky letí od zásahu ven)
+    hitTTL: 0.30,
+    hitCount: 6,
     hitStep: 2,
-    hitSpread: 0.85,
+    hitSpread: 1.2,
     hitSize: 2.5,
 
     // explosion: expanding AoE ring (longer than a hit spark)
