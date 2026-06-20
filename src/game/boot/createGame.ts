@@ -110,8 +110,8 @@ export async function createGame(
       ent.hitFlashT = 0;
 
       // --- Player render: SDF vector shape (arrow). Energy drives deformation.
-      // size:3.0 -> visible core ~18px (matches the old proc-parts ship footprint).
-      ent.render = { sdf: { shape: "arrow", color: "#00ffee", size: 3.0 } };
+      // size:3.5 -> visible core ~21px (slightly larger than old proc-parts ship).
+      ent.render = { sdf: { shape: "arrow", color: "#00ffee", size: 3.5 } };
 
       playerEnt = ent;
 });
