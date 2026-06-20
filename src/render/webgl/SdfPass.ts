@@ -175,6 +175,10 @@ void main() {
   );
   vec3 col = mix(uColor, pal, 0.35);
 
+  // BOLT (projectile): pure tint, no palette mix — keeps #aef6ff cyan / #ff5cc8
+  // magenta exact so primary/secondary read as distinct at a glance.
+  if (uShapeType == 5) col = uColor;
+
   // Low-HP redshift + danger pulse.
   col = mix(vec3(0.9, 0.15, 0.1), col, hp);
   float lowPulse = (1.0 - hp) * 0.5 * (0.5 + 0.5 * sin(uTime * 8.0));
