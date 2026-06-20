@@ -96,10 +96,22 @@ export class DemosceneBg {
       }
 
       float hash21(vec2 p) {
-        // cheap hash
         p = fract(p * vec2(123.34, 345.45));
         p += dot(p, p + 34.345);
         return fract(p.x * p.y);
+      }
+
+      float starLayer(vec2 uv, float cells, float scroll, float t) {
+        vec2 g = uv * cells;
+        g.x += scroll * cells;
+        vec2 cell = floor(g);
+        vec2 f = fract(g) - 0.5;
+        float h = hash21(cell);
+        if (h < 0.72) return 0.0;
+        vec2 sp = (vec2(hash21(cell + 1.7), hash21(cell + 4.3)) - 0.5) * 0.7;
+        float d = length(f - sp);
+        float tw = 0.55 + 0.45 * sin(t * (2.0 + h * 5.0) + h * 31.0);
+        return smoothstep(0.07, 0.0, d) * tw;
       }
 
       void main() {
@@ -233,19 +245,17 @@ export class DemosceneBg {
 
           col += uCB * glow;
 
-        } else {
+        } else if (uMode == 5) {
           // Hex field (approx lattice)
           float cell = max(10.0, uP1.x);
           float w = uP1.y;
           float sp = uP1.z;
           float wob = uP1.w;
 
-          // skew into axial coords
           vec2 q = p / cell;
           q.x += sin(q.y + t * sp) * wob;
           q.y += cos(q.x - t * sp) * wob;
 
-          // fake hex: combine 3 grids
           float g1 = line01(fract(q.x) - 0.5, w);
           float g2 = line01(fract(q.y) - 0.5, w);
           float g3 = line01(fract((q.x + q.y) * 0.5) - 0.5, w);
@@ -254,6 +264,45 @@ export class DemosceneBg {
           float glow = pow(lines, uP2.z) * 0.85;
 
           col += uCB * glow;
+
+        } else if (uMode == 6) {
+          // Parallax Stars (3-layer)
+          vec2 uv = vUv;
+          uv.x *= uLogic.x / max(1.0, uLogic.y);
+          float s = uScroll.x / max(1.0, uLogic.y);
+
+          float far  = starLayer(uv, uP1.x, s * 0.12 + t * 0.010, t) * 0.40;
+          float mid  = starLayer(uv, uP1.y, s * 0.30 + t * 0.025, t) * 0.70;
+          float near = starLayer(uv, uP1.z, s * 0.65 + t * 0.050, t) * 1.00;
+
+          col = uCA + uCB * (far + mid + near);
+
+        } else if (uMode == 7) {
+          // Grid Landscape (synthwave)
+          vec2 uv = vUv;
+          float horizon = 0.5;
+          float sx = uScroll.x / max(1.0, uLogic.x);
+
+          if (uv.y > horizon) {
+            float fy = (uv.y - horizon) / (1.0 - horizon);
+            float depth = 1.0 / max(fy, 0.02);
+
+            float rows = depth * uP1.x + t * uP1.z;
+            float gh = line01(fract(rows) - 0.5, uP1.y * depth * 0.5);
+
+            float cx = (uv.x - 0.5) * depth;
+            float cols = cx * uP1.w + sx * 6.0;
+            float gv = line01(fract(cols) - 0.5, uP1.y * depth * 0.5);
+
+            float fade = smoothstep(0.0, 0.35, fy);
+            col = uCA + uCB * max(gh, gv) * fade;
+          } else {
+            float glow = smoothstep(0.18, 0.0, horizon - uv.y);
+            vec2 suv = uv;
+            suv.x *= uLogic.x / max(1.0, uLogic.y);
+            float st = starLayer(suv, 26.0, sx * 0.30 + t * 0.02, t);
+            col = uCA + uCB * (st * 0.5 + glow * uP2.x);
+          }
         }
 
         outColor = vec4(col, 1.0);
@@ -305,9 +354,11 @@ export class DemosceneBg {
   }
 
   private preset(i: number): BgPreset {
-    const n = BG_PRESETS.length;
+    const visible = BG_PRESETS.filter(p => !p.hidden);
+    const list = visible.length > 0 ? visible : BG_PRESETS;
+    const n = list.length;
     const ix = n > 0 ? ((i % n) + n) % n : 0;
-    return BG_PRESETS[ix] || BG_PRESETS[0];
+    return list[ix] || BG_PRESETS[0];
   }
 
   draw(args: DemosceneBgDrawArgs): void {
