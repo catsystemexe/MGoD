@@ -167,6 +167,7 @@ export function stepFlowParticle(
   // particle steps byte-for-byte as before — fully backward compatible.
   if (disturbances.length > 0) {
     const kickScale = pr.disturbance?.kickScale ?? 1.0;
+    let accumVx = 0;
     let accumVy = 0;
     for (let i = 0; i < disturbances.length; i++) {
       const d = disturbances[i];
@@ -176,8 +177,10 @@ export function stepFlowParticle(
       // d.radius already folds in the per-source radiusMul (see renderer).
       const falloff = Math.max(0, 1 - dist / d.radius) * (1 - d.age / d.ttl);
       if (falloff <= 0.01) continue; // skip distant / faded sources
+      accumVx += (dxp / dist) * d.kick * kickScale * falloff * 0.3;
       accumVy += (dyp / dist) * d.kick * kickScale * falloff;
     }
+    p.vx += accumVx * dt;
     p.vy += accumVy * dt;
   }
 

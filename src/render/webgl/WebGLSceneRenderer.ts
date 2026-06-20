@@ -481,12 +481,12 @@ export class WebGLSceneRenderer {
     this.lastRenderMs = nowMs;
     this.accumTime += dt;
     const tSec = this.accumTime;
-    const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
+    const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "flow");
     const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
 
     // BG pass (shader or flow)
     if (bgKind === "flow") {
-      const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowRibbon");
+      const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowSegments");
 
       if (labKind === "flowSegments") {
         this.bgFlowSegments.draw({

@@ -192,7 +192,7 @@ export const FLOW_PRESETS: FlowPreset[] = [
       near: [0.85, 0.95, 1.00, 0.18],
     },
 
-    disturbance: { kickScale: 0.25 },
+    disturbance: { kickScale: 1.2 },
   },
 
   {
@@ -280,6 +280,6 @@ export const FLOW_PRESETS: FlowPreset[] = [
       near: [0.90, 1.00, 0.95, 0.28],
     },
 
-    disturbance: { kickScale: 0.25 },
+    disturbance: { kickScale: 1.2 },
   },
 ];
