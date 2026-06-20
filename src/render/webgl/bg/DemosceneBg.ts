@@ -67,6 +67,9 @@ export class DemosceneBg {
   private uGridDensity: WebGLUniformLocation | null = null;
   private uHorizon: WebGLUniformLocation | null = null;
   private uGlowIntensity: WebGLUniformLocation | null = null;
+  private uWaveComplexity: WebGLUniformLocation | null = null;
+  private uWaveVertical: WebGLUniformLocation | null = null;
+  private uWaveFreq: WebGLUniformLocation | null = null;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -102,6 +105,9 @@ export class DemosceneBg {
       uniform float uGridDensity;
       uniform float uHorizon;
       uniform float uGlowIntensity;
+      uniform float uWaveComplexity;   // 1..6 oktav
+      uniform float uWaveVertical;     // 0..3 asymetrie Y
+      uniform float uWaveFreq;         // 0.1..2.0 frekvence terenu
 
       float line01(float x, float w) {
         // smoothstep-based line with wider AA to kill thin-line shimmer
@@ -131,6 +137,50 @@ export class DemosceneBg {
         float d = abs(fract(coord) - 0.5);
         float w = fwidth(coord) * 1.5;
         return smoothstep(thickness + w, thickness - w, d);
+      }
+
+      // spojity value-noise nad existujicim hash21 (smoothstep interpolace)
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);                 // C1 smoothstep
+        float a = hash21(i + vec2(0.0, 0.0));
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);   // [0,1]
+      }
+
+      // fbm se SIGNED vystupem (~[-1,1]), dynamicky pocet oktav 1..6
+      float fbm(vec2 p, int oct) {
+        float sum  = 0.0;
+        float amp  = 0.5;
+        float norm = 0.0;
+        // rotace+scale mezi oktavami potlaci axis-aligned artefakty
+        const mat2 M = mat2(1.6, 1.2, -1.2, 1.6);
+        for (int i = 0; i < 6; i++) {
+          if (i >= oct) break;                       // fixni bound + dynamicky break = bezpecne v ES 3.00
+          sum  += amp * (vnoise(p) * 2.0 - 1.0);
+          norm += amp;
+          p = M * p;
+          amp *= 0.5;
+        }
+        return sum / max(norm, 1e-4);                // normalizace -> ~[-1,1]
+      }
+
+      // Quilez vektorovy domain warp: f(p + 4*f(p + 4*f(p)))
+      float terrain(vec2 p, int oct) {
+        vec2 q = vec2(fbm(p + vec2(0.0, 0.0), oct),
+                      fbm(p + vec2(5.2, 1.3), oct));
+        vec2 r = vec2(fbm(p + 4.0 * q + vec2(1.7, 9.2), oct),
+                      fbm(p + 4.0 * q + vec2(8.3, 2.8), oct));
+        return fbm(p + 4.0 * r, oct);                // ~[-1,1]
+      }
+
+      // LITE varianta: 2 fbm volani misto 5
+      float terrainLite(vec2 p, int oct) {
+        float w = fbm(p, oct);
+        return fbm(p + 2.0 * vec2(w, w * 0.7), oct);
       }
 
       void main() {
@@ -316,12 +366,24 @@ export class DemosceneBg {
 
             float wx = (uv.x - 0.5) * aspect * depth;
             wx += uScroll.x * 0.02;
-            float wz = depth - t * uWaveSpeed;
+            float wz = depth - t * uWaveSpeed;     // pohyb terenu vpred nese wz
 
-            float wave = sin(wx * 0.6 + t * uWaveSpeed) * uWaveHeight;
+            // --- fbm heightmap ve world prostoru ---
+            int   oct = int(uWaveComplexity + 0.5);    // 1..6
+            vec2  tp  = vec2(wx, wz) * uWaveFreq;       // frekvence ODDELENA od density
+            float h   = (oct >= 5) ? terrain(tp, oct) : terrainLite(tp, oct);
+
+            // vertikalni asymetrie: kopce vyssi nez udoli (gamma na [0,1])
+            float hn = h * 0.5 + 0.5;
+            hn = pow(hn, mix(1.0, 0.35, clamp(uWaveVertical / 3.0, 0.0, 1.0)));
+            h  = (hn - 0.5) * 2.0;
+
+            // fade u horizontu zabrani aliasingu vysokofrekv. fbm v dalce
+            float fade = smoothstep(0.0, 0.12, below);
+            float wave = h * uWaveHeight * fade;
 
             float rows = (wz + wave) * (uGridDensity * 0.25);
-            float cols = wx * (uGridDensity * 0.25);
+            float cols =  wx          * (uGridDensity * 0.25);
 
             float g = max(gridLine(rows, 0.04), gridLine(cols, 0.04));
 
@@ -374,6 +436,9 @@ export class DemosceneBg {
     this.uGridDensity = gl.getUniformLocation(this.prog, "uGridDensity");
     this.uHorizon = gl.getUniformLocation(this.prog, "uHorizon");
     this.uGlowIntensity = gl.getUniformLocation(this.prog, "uGlowIntensity");
+    this.uWaveComplexity = gl.getUniformLocation(this.prog, "uWaveComplexity");
+    this.uWaveVertical = gl.getUniformLocation(this.prog, "uWaveVertical");
+    this.uWaveFreq = gl.getUniformLocation(this.prog, "uWaveFreq");
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -421,12 +486,18 @@ export class DemosceneBg {
     gl.uniform3f(this.uCB, pr.cB[0], pr.cB[1], pr.cB[2]);
 
     if (pr.mode === 7) {
-      const G = (globalThis as any).__CM_GRID__ ?? { waveHeight: 0.8, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8 };
+      const G = (globalThis as any).__CM_GRID__ ?? {
+        waveHeight: 0.8, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8,
+        waveComplexity: 4, waveVertical: 1.0, waveFreq: 0.5,
+      };
       if (this.uWaveHeight) gl.uniform1f(this.uWaveHeight, G.waveHeight);
       if (this.uWaveSpeed) gl.uniform1f(this.uWaveSpeed, G.waveSpeed);
       if (this.uGridDensity) gl.uniform1f(this.uGridDensity, G.gridDensity);
       if (this.uHorizon) gl.uniform1f(this.uHorizon, G.horizon);
       if (this.uGlowIntensity) gl.uniform1f(this.uGlowIntensity, G.glowIntensity);
+      if (this.uWaveComplexity) gl.uniform1f(this.uWaveComplexity, G.waveComplexity ?? 4);
+      if (this.uWaveVertical) gl.uniform1f(this.uWaveVertical, G.waveVertical ?? 1.0);
+      if (this.uWaveFreq) gl.uniform1f(this.uWaveFreq, G.waveFreq ?? 0.5);
     }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);

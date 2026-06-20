@@ -4,6 +4,9 @@ type GridState = {
   gridDensity: number;
   horizon: number;
   glowIntensity: number;
+  waveComplexity: number;
+  waveVertical: number;
+  waveFreq: number;
 };
 
 const DEFAULTS: GridState = {
@@ -12,6 +15,9 @@ const DEFAULTS: GridState = {
   gridDensity: 8,
   horizon: 0.5,
   glowIntensity: 0.8,
+  waveComplexity: 4,
+  waveVertical: 1.0,
+  waveFreq: 0.5,
 };
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -30,6 +36,7 @@ type SliderDef = {
   min: number;
   max: number;
   step: number;
+  decimals?: number;
 };
 
 const SLIDERS: SliderDef[] = [
@@ -38,6 +45,9 @@ const SLIDERS: SliderDef[] = [
   { key: "gridDensity", label: "Density", min: 2, max: 20, step: 0.5 },
   { key: "horizon", label: "Horizon", min: 0.3, max: 0.7, step: 0.01 },
   { key: "glowIntensity", label: "Glow", min: 0, max: 2, step: 0.05 },
+  { key: "waveComplexity", label: "Complexity", min: 1, max: 6, step: 1, decimals: 0 },
+  { key: "waveVertical", label: "Wave Vert", min: 0, max: 3, step: 0.1 },
+  { key: "waveFreq", label: "Wave Freq", min: 0.1, max: 2.0, step: 0.05 },
 ];
 
 export class GridLabUI {
@@ -93,7 +103,7 @@ export class GridLabUI {
       slider.oninput = () => {
         const v = clamp(Number(slider.value), sd.min, sd.max);
         this.state[sd.key] = v;
-        val.textContent = v.toFixed(2);
+        val.textContent = v.toFixed(sd.decimals ?? 2);
         this.sync();
       };
 
