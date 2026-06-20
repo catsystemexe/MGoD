@@ -356,6 +356,8 @@ async function main() {
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
   (globalThis as any).__CM_BG_PRESET__ ??= 0;
+  (globalThis as any).__CM_BG_KIND__ ??= "flow";
+  (globalThis as any).__CM_BG_LAB__ ??= { kind: "flowSegments" };
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
