@@ -487,6 +487,17 @@ async function main() {
       gfx.renderScene(() => {
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
+        // Atmospheric FX overlay (audio-reactive); after VFX so it gets CRT post.
+        // Bass warp depth is gated to active explosion/hit events so plain
+        // shooting doesn't spasm the background; treble hue still breathes.
+        const hasEvent =
+          ((game as any).vfx?.getExplosions?.()?.length ?? 0) > 0 ||
+          ((game as any).vfx?.getHits?.()?.length ?? 0) > 0;
+        (renderer as any).renderAtmosphere?.(
+          now / 1000,
+          (game as any).audio?.getFreqs?.() ?? null,
+          hasEvent,
+        );
       });
 
       // Event-driven chromatic aberration: peak CA over active VFX, decaying

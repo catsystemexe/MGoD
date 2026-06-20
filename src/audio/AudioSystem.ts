@@ -84,11 +84,13 @@ class ToneAudioSystem implements AudioSystem {
       this.analyser.connect(getDestination());
 
       // FIRE — bright triangle blip; PolySynth so rapid fire overlaps cleanly.
+      // Routed directly to destination (bypasses analyser) so shooting doesn't
+      // spike the FFT that drives atmospheric FX.
       this.fireSynth = new PolySynth(Synth, {
         oscillator: { type: "triangle" },
         envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.03 },
         volume: -10,
-      }).connect(this.master);
+      }).toDestination();
 
       // HIT — short square "tick"; also poly for rapid hits.
       this.hitSynth = new PolySynth(Synth, {
@@ -152,7 +154,10 @@ class ToneAudioSystem implements AudioSystem {
 
   getFreqs(): Float32Array {
     if (!this.ready || !this.analyser) {
-      this.freqBuf.fill(0);
+      // SILENCE sentinel: -140 dB (not 0!). 0 dB is MAX loudness, which would
+      // make audio-reactive consumers blast at full when audio is inactive.
+      // Normalization (db+100)/100 clamps -140 -> 0 = silence.
+      this.freqBuf.fill(-140);
       return this.freqBuf;
     }
     const v = this.analyser.getValue() as Float32Array;

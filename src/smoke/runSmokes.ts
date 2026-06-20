@@ -21,6 +21,7 @@ const SMOKES = [
   "../game/systems/WeaponVFXEmit.smoke",
   "../render/webgl/bg/FlowDisturbanceKick.smoke",
   "../graphics/PostProcessPass.smoke",
+  "../render/webgl/AtmosphericFXPass.smoke",
   "../game/systems/Flow.smoke",
   "../game/systems/StartToSpawn.integration.smoke",
   "../game/systems/SpawnOwnership.contract.smoke",

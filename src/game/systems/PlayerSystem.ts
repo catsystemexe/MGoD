@@ -31,6 +31,9 @@ function readAimTarget(actions: PlayerActions, fallback: { x: number; y: number 
 }
 
 export class PlayerSystem {
+  private prevScrollX: number | undefined;
+  private prevScrollY: number | undefined;
+
   constructor(
     private readonly bus: EventBus<CMEventMap>,
     private readonly player: PlayerData,
@@ -41,6 +44,14 @@ export class PlayerSystem {
     // Phase check je OK jen pokud EventBus getCurrentPhase skutečně existuje:
     // const ph = (this.bus as any).getCurrentPhase?.();
     // if (ph && ph !== Phase.Simulation) throw new Error("[PlayerSystem] update() must run in Phase.Simulation");
+
+    // --- scroll delta: carry player with autoscroll so world position tracks
+    const curSX = Number(this.cfg.world?.scrollX ?? 0);
+    const curSY = Number(this.cfg.world?.scrollY ?? 0);
+    const dsx = curSX - (this.prevScrollX ?? curSX);
+    const dsy = curSY - (this.prevScrollY ?? curSY);
+    this.prevScrollX = curSX;
+    this.prevScrollY = curSY;
 
     // --- timers
     this.player.invulnT = Math.max(0, Number(this.player.invulnT ?? 0) - dtSec);
@@ -124,7 +135,7 @@ export class PlayerSystem {
     const csx = clamp(nsx, this.cfg.bounds.minX + r, this.cfg.bounds.maxX - r);
     const csy = clamp(nsy, this.cfg.bounds.minY + r, this.cfg.bounds.maxY - r);
 
-    this.player.pos.x = csx + sx;
-    this.player.pos.y = csy + sy;
+    this.player.pos.x = csx + sx + dsx;
+    this.player.pos.y = csy + sy + dsy;
   }
 }

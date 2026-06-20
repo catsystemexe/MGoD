@@ -264,6 +264,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
 
             ent.vel = { x: 0, y: 0 };
             ent.hp = def.hp;
+            ent.maxHp = def.hp;
             ent.radius = r;
             const dr: any = def.render;
             ent.render = dr
@@ -274,6 +275,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
                   ...(dr.proc ? { proc: (dr.proc && typeof dr.proc === "object"
                       ? { ...dr.proc, parts: Array.isArray(dr.proc.parts) ? dr.proc.parts.map((p: any) => ({ ...p })) : dr.proc.parts }
                       : dr.proc) } : {}),
+                  ...(dr.sdf ? { sdf: { ...dr.sdf } } : {}),
                 }
               : {};
       if (ent.render) {

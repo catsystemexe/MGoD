@@ -8,8 +8,14 @@ import { DemosceneBg } from "./bg/DemosceneBg";
 import { FlowRibbonBg } from "./bg/FlowRibbonBg";
 import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
 import type { FlowDisturbance } from "./bg/flowStep";
+import { createAtmosphericFXPass, type AtmosphericFXPass } from "./AtmosphericFXPass";
+import { createSdfPass, type SdfPass } from "./SdfPass";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
+
+function safeNum(x: unknown, fallback: number): number {
+  return typeof x === "number" && Number.isFinite(x) ? x : fallback;
+}
 
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
@@ -84,6 +90,8 @@ export class WebGLSceneRenderer {
   private bg: DemosceneBg;
   private bgFlowRibbon: FlowRibbonBg;
   private bgFlowSegments: FlowSegmentsBg;
+  private atmosphericFX: AtmosphericFXPass;
+  private sdfPass: SdfPass | null;
 
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
@@ -162,6 +170,21 @@ export class WebGLSceneRenderer {
        this.bg = new DemosceneBg(gl);
     this.bgFlowRibbon = new FlowRibbonBg(gl);
     this.bgFlowSegments = new FlowSegmentsBg(gl);
+    this.atmosphericFX = createAtmosphericFXPass(gl);
+    // SDF vector pass — restores to the main program/VAO/uLogic after each draw.
+    // Defensive: a shader compile/link failure must NOT blank the whole scene —
+    // degrade to null so entities fall through to the glyph/proc/quad paths.
+    try {
+      this.sdfPass = createSdfPass(gl, this.logicW, this.logicH, {
+        prog: this.prog,
+        vao: this.vao,
+        uLogic: this.uLogic,
+        uColor: this.uColor,
+      });
+    } catch (e) {
+      console.warn("[SdfPass] failed to compile, SDF rendering disabled:", e);
+      this.sdfPass = null;
+    }
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -598,6 +621,28 @@ export class WebGLSceneRenderer {
         (typeof (e as any).spawnOrdinal === "number" && Number.isFinite((e as any).spawnOrdinal))
           ? (e as any).spawnOrdinal
           : ((e as any).id ?? 0);
+
+      // 0) SDF vector shape (highest priority — short-circuits all other paths).
+      // Skipped entirely if the pass failed to compile (this.sdfPass === null).
+      const sdf = (e as any).render?.sdf;
+      if (this.sdfPass && sdf && typeof sdf.shape === "string") {
+        // HP ratio drives deformation; fall back to player energy when no hp.
+        const hpNow = safeNum((e as any).hp ?? (e as any).energy, 1);
+        const hpMax = safeNum((e as any).maxHp ?? (e as any).energyMax, 1);
+        const hpRatio = hpMax > 0 ? Math.max(0, Math.min(1, hpNow / hpMax)) : 1;
+        const sizeMult = safeNum(sdf.size, 1);
+        this.sdfPass.draw({
+          ix,
+          iy,
+          radius: safeNum((e as any).radius, 10) * sizeMult,
+          shape: sdf.shape,
+          color: typeof sdf.color === "string" ? sdf.color : (baseCol ?? "#ffffff"),
+          hpRatio,
+          time: tSec,
+          hitFlash: safeNum((e as any).hitFlashT, 0),
+        });
+        return;
+      }
 
       // 1) procedural parts
       const proc = (e as any).render?.proc ?? (e as any).proc;
@@ -1098,7 +1143,18 @@ export class WebGLSceneRenderer {
 
   gl.bindVertexArray(null);
 }
-  
-                                 }
-  
-  
+
+  // --- Atmospheric FX overlay (Visual Layer 2): audio-reactive energy field.
+  // Drawn AFTER entities + VFX so it gets the same CRT post-process downstream.
+  // Honors the same KeyF toggle as PostProcessPass (__CM_FX__ === false -> off).
+  renderAtmosphere(timeSec: number, freqs: Float32Array | null, hasExplosionOrHit = false): void {
+    if ((globalThis as any).__CM_FX__ === false) return;
+    this.atmosphericFX.draw({
+      logicW: this.logicW,
+      logicH: this.logicH,
+      timeSec,
+      freqs,
+      hasExplosionOrHit,
+    });
+  }
+}
