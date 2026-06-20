@@ -93,6 +93,9 @@ export class WebGLSceneRenderer {
   private atmosphericFX: AtmosphericFXPass;
   private sdfPass: SdfPass | null;
 
+  private accumTime = 0;
+  private lastRenderMs = -1;
+
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
@@ -472,7 +475,12 @@ export class WebGLSceneRenderer {
     const sy = Number(world?.scrollY ?? 0);
 
     // sprite anim time
-    const tSec = performance.now() * 0.001;
+    const nowMs = performance.now();
+    if (this.lastRenderMs < 0) this.lastRenderMs = nowMs;
+    const dt = Math.min((nowMs - this.lastRenderMs) / 1000, 0.05);
+    this.lastRenderMs = nowMs;
+    this.accumTime += dt;
+    const tSec = this.accumTime;
     const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
     const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
 
