@@ -349,7 +349,7 @@ export async function createGame(
   }
 
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
-          onSpawnProjectile: (p: any) => { vfx.onSpawnProjectile(p); audio?.noteFire(); }, // muzzle + pew
+          onSpawnProjectile: (p: any) => { audio?.noteFire(); },
           onTracer: (p: any) => vfx.onTracer(p), // tracer
           onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
         });

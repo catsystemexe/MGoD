@@ -3,7 +3,7 @@
     {
       "_comment": "shape options: arrow|triangle|orb|crown|mandala|sigil|bolt — see SdfPass.ts SHAPE_CATALOG",
       "id": "red",
-      "hp": 6,
+      "hp": 4,
       "radius": 4,
       "scoreOnKill": 10,
       "behaviorPresetId": "straight.basic",
@@ -22,7 +22,7 @@
     },
     {
       "id": "bug1",
-      "hp": 5,
+      "hp": 3,
       "radius": 4,
       "scoreOnKill": 12,
       "behaviorPresetId": "sine.basic",
@@ -40,7 +40,7 @@
    
     {
       "id": "obelisk",
-      "hp": 10,
+      "hp": 7,
       "radius": 7,
       "scoreOnKill": 30,
       "behaviorPresetId": "straight.basic",
@@ -60,7 +60,7 @@
 
     {
       "id": "sigil",
-      "hp": 8,
+      "hp": 6,
       "radius": 7,
       "scoreOnKill": 22,
       "behaviorPresetId": "sine.basic",
@@ -79,7 +79,7 @@
 
     {
       "id": "crown",
-      "hp": 9,
+      "hp": 6,
       "radius": 6,
       "scoreOnKill": 26,
       "behaviorPresetId": "invaders.basic",
@@ -98,7 +98,7 @@
 
     {
       "id": "orb",
-      "hp": 7,
+      "hp": 5,
       "radius": 7,
       "scoreOnKill": 20,
       "behaviorPresetId": "straight.basic",
@@ -115,7 +115,7 @@
 
     {
       "id": "mandala",
-      "hp": 11,
+      "hp": 8,
       "radius": 7,
       "scoreOnKill": 34,
       "behaviorPresetId": "sine.basic",
@@ -136,7 +136,7 @@
     
     {
       "id": "blue",
-      "hp": 7,
+      "hp": 5,
       "radius": 4,
       "scoreOnKill": 14,
       "behaviorPresetId": "invaders.basic",

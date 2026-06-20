@@ -147,11 +147,11 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
       // Secondary bolts are visually distinct (magenta + larger) from primary.
       const isSecondary = String(weaponTypeId).startsWith("w2");
       ent.render = {
-        glyphId: "proj.capsule", // fallback if the SDF pass failed to compile
+        glyphId: "proj.capsule",
         sdf: {
-          shape: "bolt",
+          shape: isSecondary ? "orb" : "bolt",
           color: isSecondary ? "#ff5cc8" : "#aef6ff",
-          size: isSecondary ? 3.0 : 2.5,
+          size: isSecondary ? 2.0 : 2.5,
         },
       };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)

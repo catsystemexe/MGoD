@@ -1087,7 +1087,8 @@ export class WebGLSceneRenderer {
         const u = Math.sign(u0) * (Math.abs(u0) ** 0.65);
         const ang = baseAng + u * spread;
 
-        const dist = k * step;
+        const outward = 60;
+        const dist = k * step + outward * (fx.age / fx.ttl);
 
         const j = (Math.sin((k + 1) * 12.9898 + fx.age * 60.0) * 43758.5453) % 1;
         const jitter = (j - 0.5) * step * 0.35;
