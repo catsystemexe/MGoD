@@ -483,9 +483,10 @@ export class WebGLSceneRenderer {
     const tSec = this.accumTime;
     const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "flow");
     const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
+    const bgVisible = (globalThis as any).__CM_BG_VISIBLE__ !== false;
 
-    // BG pass (shader or flow)
-    if (bgKind === "flow") {
+    // BG pass (shader or flow) — skipped when toggled off via KeyB
+    if (bgVisible && bgKind === "flow") {
       const labKind = String((globalThis as any).__CM_BG_LAB__?.kind ?? "flowSegments");
 
       if (labKind === "flowSegments") {
@@ -509,7 +510,7 @@ export class WebGLSceneRenderer {
           presetIndex,
         });
       }
-    } else {
+    } else if (bgVisible) {
       this.bg.draw({
         logicW: this.logicW,
         logicH: this.logicH,

@@ -268,24 +268,23 @@ async function main() {
       return;
     }
 
-    // BG preset hotswap ([ / ])
+    // BG mode cycle ([ / ])
     if (e.key === "[" || e.code === "BracketLeft") {
-      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) - 1;
-      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
+      bgModeIdx = (bgModeIdx - 1 + BG_MODES.length) % BG_MODES.length;
+      applyBgMode(bgModeIdx);
       return;
     }
     if (e.key === "]" || e.code === "BracketRight") {
-      (globalThis as any).__CM_BG_PRESET__ = ((globalThis as any).__CM_BG_PRESET__ ?? 0) + 1;
-      console.log("[BG] preset", (globalThis as any).__CM_BG_PRESET__);
+      bgModeIdx = (bgModeIdx + 1) % BG_MODES.length;
+      applyBgMode(bgModeIdx);
       return;
     }
 
-    // BG kind toggle (B): shader <-> flow
+    // BG visibility toggle (B)
     if (e.code === "KeyB") {
-      const cur = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
-      const next = cur === "flow" ? "shader" : "flow";
-      (globalThis as any).__CM_BG_KIND__ = next;
-      console.log("[BG] kind", next);
+      const vis = !(globalThis as any).__CM_BG_VISIBLE__;
+      (globalThis as any).__CM_BG_VISIBLE__ = vis;
+      console.log("[BG] visible", vis);
       return;
     }
 
@@ -312,11 +311,20 @@ async function main() {
       return;
     }
 
-    // Space Lab toggle (L): live FlowSegmentsBg params
+    // Context-sensitive dev panel toggle (L)
     if (e.code === "KeyL") {
-      const ui = (globalThis as any).__CM_SPACE_UI__;
-      if (ui && typeof ui.toggle === "function") ui.toggle();
-      else console.log("[SPACE_LAB] UI not ready");
+      const mode = BG_MODES[bgModeIdx];
+      if (mode.kind === "flow") {
+        const ui = (globalThis as any).__CM_SPACE_UI__;
+        if (ui && typeof ui.toggle === "function") ui.toggle();
+        else console.log("[SPACE_LAB] UI not ready");
+      } else if (mode.lab && (mode.lab as any).mode === 7) {
+        const ui = (globalThis as any).__CM_GRID_UI__;
+        if (ui && typeof ui.toggle === "function") ui.toggle();
+        else console.log("[GRID_LAB] UI not ready");
+      } else {
+        console.log("[BG] no dev panel for", mode.label);
+      }
       return;
     }
 // Game over keys (Y/N)
@@ -357,9 +365,24 @@ async function main() {
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
-  (globalThis as any).__CM_BG_PRESET__ ??= 0;
-  (globalThis as any).__CM_BG_KIND__ ??= "flow";
-  (globalThis as any).__CM_BG_LAB__ ??= { kind: "flowSegments" };
+
+  const BG_MODES = [
+    { kind: "flow",   lab: { kind: "flowSegments" }, preset: 0, label: "Flow" },
+    { kind: "shader", lab: { mode: 7 },              preset: 1, label: "Landscape" },
+    { kind: "shader", lab: { mode: 6 },              preset: 0, label: "Stars" },
+  ];
+  let bgModeIdx = 0;
+
+  function applyBgMode(i: number) {
+    const m = BG_MODES[((i % BG_MODES.length) + BG_MODES.length) % BG_MODES.length];
+    (globalThis as any).__CM_BG_KIND__ = m.kind;
+    (globalThis as any).__CM_BG_LAB__ = { ...m.lab };
+    (globalThis as any).__CM_BG_PRESET__ = m.preset;
+    console.log("[BG] mode", m.label, `(${m.kind}, preset=${m.preset})`);
+  }
+
+  (globalThis as any).__CM_BG_VISIBLE__ = true;
+  applyBgMode(bgModeIdx);
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     const cssW = vv?.width ?? window.innerWidth;
