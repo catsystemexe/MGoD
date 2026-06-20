@@ -147,16 +147,25 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
 
   // reusable upload buffer: dB -> (db+100)/100 clamped 0..1 -> 0..255
   const u8 = new Uint8Array(FREQ_BINS);
+  const smoothFreqs = new Float32Array(FREQ_BINS);
+  let smoothInited = false;
 
   function uploadFreqs(freqs: Float32Array | null): void {
     if (freqs && freqs.length >= FREQ_BINS) {
+      const alpha = 0.15;
       for (let i = 0; i < FREQ_BINS; i++) {
-        let n = (freqs[i] + 100) / 100; // normalize dB
+        let n = (freqs[i] + 100) / 100;
         if (n < 0) n = 0; else if (n > 1) n = 1;
-        u8[i] = (n * 255) | 0;
+        if (!smoothInited) {
+          smoothFreqs[i] = n;
+        } else {
+          smoothFreqs[i] = smoothFreqs[i] * (1 - alpha) + n * alpha;
+        }
+        u8[i] = (smoothFreqs[i] * 255) | 0;
       }
+      smoothInited = true;
     } else {
-      u8.fill(0); // null/short -> silence
+      u8.fill(0);
     }
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, FREQ_BINS, 1, gl.RED, gl.UNSIGNED_BYTE, u8);
