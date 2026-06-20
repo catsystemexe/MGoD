@@ -62,6 +62,12 @@ export class DemosceneBg {
   private uCA: WebGLUniformLocation;
   private uCB: WebGLUniformLocation;
 
+  private uWaveHeight: WebGLUniformLocation | null = null;
+  private uWaveSpeed: WebGLUniformLocation | null = null;
+  private uGridDensity: WebGLUniformLocation | null = null;
+  private uHorizon: WebGLUniformLocation | null = null;
+  private uGlowIntensity: WebGLUniformLocation | null = null;
+
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
 
@@ -90,6 +96,13 @@ export class DemosceneBg {
       uniform vec3  uCA;       // base color
       uniform vec3  uCB;       // line/glow color
 
+      // grid landscape (mode 7) live-tunable params
+      uniform float uWaveHeight;
+      uniform float uWaveSpeed;
+      uniform float uGridDensity;
+      uniform float uHorizon;
+      uniform float uGlowIntensity;
+
       float line01(float x, float w) {
         // smoothstep-based line with wider AA to kill thin-line shimmer
         return smoothstep(w + 0.006, w - 0.006, abs(x));
@@ -112,6 +125,12 @@ export class DemosceneBg {
         float d = length(f - sp);
         float tw = 0.55 + 0.45 * sin(t * (2.0 + h * 5.0) + h * 31.0);
         return smoothstep(0.07, 0.0, d) * tw;
+      }
+
+      float gridLine(float coord, float thickness) {
+        float d = abs(fract(coord) - 0.5);
+        float w = fwidth(coord) * 1.5;
+        return smoothstep(thickness + w, thickness - w, d);
       }
 
       void main() {
@@ -278,30 +297,42 @@ export class DemosceneBg {
           col = uCA + uCB * (far + mid + near);
 
         } else if (uMode == 7) {
-          // Grid Landscape (synthwave)
+          // Grid Landscape (synthwave) — fwidth AA, wave heightmap
           vec2 uv = vUv;
-          float horizon = 0.5;
-          float sx = uScroll.x / max(1.0, uLogic.x);
+          float aspect = uLogic.x / max(1.0, uLogic.y);
+          float horizon = uHorizon;
+
+          vec3 skyTop     = vec3(0.02, 0.01, 0.05);
+          vec3 skyHorizon = vec3(0.35, 0.05, 0.35);
+          vec3 gridNear   = vec3(1.00, 0.15, 0.70);
+          vec3 gridFar    = vec3(0.20, 0.85, 1.00);
 
           if (uv.y > horizon) {
-            float fy = (uv.y - horizon) / (1.0 - horizon);
-            float depth = 1.0 / max(fy, 0.02);
+            float below = uv.y - horizon;
+            float depth = 1.0 / max(below, 0.0015);
 
-            float rows = depth * uP1.x + t * uP1.z;
-            float gh = line01(fract(rows) - 0.5, uP1.y * depth * 0.5);
+            float wx = (uv.x - 0.5) * aspect * depth;
+            wx += uScroll.x * 0.02;
+            float wz = depth - t * uWaveSpeed;
 
-            float cx = (uv.x - 0.5) * depth;
-            float cols = cx * uP1.w + sx * 6.0;
-            float gv = line01(fract(cols) - 0.5, uP1.y * depth * 0.5);
+            float wave = sin(wx * 0.6 + t * uWaveSpeed) * uWaveHeight;
 
-            float fade = smoothstep(0.0, 0.35, fy);
-            col = uCA + uCB * max(gh, gv) * fade;
+            float rows = (wz + wave) * (uGridDensity * 0.25);
+            float cols = wx * (uGridDensity * 0.25);
+
+            float g = max(gridLine(rows, 0.04), gridLine(cols, 0.04));
+
+            float nearF = clamp(below * 2.2, 0.0, 1.0);
+            vec3 gridCol = mix(gridFar, gridNear, nearF);
+            vec3 floorBg = mix(skyHorizon * 0.4, skyTop, nearF);
+
+            col = floorBg + gridCol * g * (0.35 + nearF * 0.65);
           } else {
-            float glow = smoothstep(0.18, 0.0, horizon - uv.y);
-            vec2 suv = uv;
-            suv.x *= uLogic.x / max(1.0, uLogic.y);
-            float st = starLayer(suv, 26.0, sx * 0.30 + t * 0.02, t);
-            col = uCA + uCB * (st * 0.5 + glow * uP2.x);
+            float up = (horizon - uv.y) / max(horizon, 0.001);
+            col = mix(skyHorizon, skyTop, up);
+
+            float glow = pow(1.0 - up, 3.0) * uGlowIntensity;
+            col += skyHorizon * glow;
           }
         }
 
@@ -334,6 +365,12 @@ export class DemosceneBg {
     this.uP2 = uP2;
     this.uCA = uCA;
     this.uCB = uCB;
+
+    this.uWaveHeight = gl.getUniformLocation(this.prog, "uWaveHeight");
+    this.uWaveSpeed = gl.getUniformLocation(this.prog, "uWaveSpeed");
+    this.uGridDensity = gl.getUniformLocation(this.prog, "uGridDensity");
+    this.uHorizon = gl.getUniformLocation(this.prog, "uHorizon");
+    this.uGlowIntensity = gl.getUniformLocation(this.prog, "uGlowIntensity");
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -379,6 +416,15 @@ export class DemosceneBg {
     gl.uniform4f(this.uP2, pr.p2[0], pr.p2[1], pr.p2[2], pr.p2[3]);
     gl.uniform3f(this.uCA, pr.cA[0], pr.cA[1], pr.cA[2]);
     gl.uniform3f(this.uCB, pr.cB[0], pr.cB[1], pr.cB[2]);
+
+    if (pr.mode === 7) {
+      const G = (globalThis as any).__CM_GRID__ ?? { waveHeight: 0.25, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8 };
+      if (this.uWaveHeight) gl.uniform1f(this.uWaveHeight, G.waveHeight);
+      if (this.uWaveSpeed) gl.uniform1f(this.uWaveSpeed, G.waveSpeed);
+      if (this.uGridDensity) gl.uniform1f(this.uGridDensity, G.gridDensity);
+      if (this.uHorizon) gl.uniform1f(this.uHorizon, G.horizon);
+      if (this.uGlowIntensity) gl.uniform1f(this.uGlowIntensity, G.glowIntensity);
+    }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
