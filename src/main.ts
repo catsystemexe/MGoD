@@ -403,7 +403,8 @@ async function main() {
   
   function frame(now: number) {
     try {
-      const dt = (now - last) / 1000;
+      let dt = (now - last) / 1000;
+      dt = Math.min(dt, 0.05);
       last = now;
 
       // advance simulation (THIS WAS MISSING)
