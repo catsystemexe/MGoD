@@ -7,7 +7,7 @@ type GridState = {
 };
 
 const DEFAULTS: GridState = {
-  waveHeight: 0.25,
+  waveHeight: 0.8,
   waveSpeed: 0.15,
   gridDensity: 8,
   horizon: 0.5,
@@ -33,7 +33,7 @@ type SliderDef = {
 };
 
 const SLIDERS: SliderDef[] = [
-  { key: "waveHeight", label: "Wave H", min: 0, max: 1, step: 0.01 },
+  { key: "waveHeight", label: "Wave H", min: 0, max: 3, step: 0.01 },
   { key: "waveSpeed", label: "Wave Spd", min: 0, max: 3, step: 0.05 },
   { key: "gridDensity", label: "Density", min: 2, max: 20, step: 0.5 },
   { key: "horizon", label: "Horizon", min: 0.3, max: 0.7, step: 0.01 },

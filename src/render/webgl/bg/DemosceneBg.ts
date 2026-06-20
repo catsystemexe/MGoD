@@ -289,6 +289,8 @@ export class DemosceneBg {
           vec2 uv = vUv;
           uv.x *= uLogic.x / max(1.0, uLogic.y);
           float s = uScroll.x / max(1.0, uLogic.y);
+          float sy = uScroll.y / max(1.0, uLogic.y);
+          uv.y += sy * 0.08;
 
           float far  = starLayer(uv, uP1.x, s * 0.12 + t * 0.010, t) * 0.40;
           float mid  = starLayer(uv, uP1.y, s * 0.30 + t * 0.025, t) * 0.70;
@@ -300,7 +302,8 @@ export class DemosceneBg {
           // Grid Landscape (synthwave) — fwidth AA, wave heightmap
           vec2 uv = vUv;
           float aspect = uLogic.x / max(1.0, uLogic.y);
-          float horizon = uHorizon;
+          float horizon = uHorizon + (uScroll.y / uLogic.y - 0.5) * 0.15;
+          horizon = clamp(horizon, 0.2, 0.8);
 
           vec3 skyTop     = vec3(0.02, 0.01, 0.05);
           vec3 skyHorizon = vec3(0.35, 0.05, 0.35);
@@ -418,7 +421,7 @@ export class DemosceneBg {
     gl.uniform3f(this.uCB, pr.cB[0], pr.cB[1], pr.cB[2]);
 
     if (pr.mode === 7) {
-      const G = (globalThis as any).__CM_GRID__ ?? { waveHeight: 0.25, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8 };
+      const G = (globalThis as any).__CM_GRID__ ?? { waveHeight: 0.8, waveSpeed: 0.15, gridDensity: 8, horizon: 0.5, glowIntensity: 0.8 };
       if (this.uWaveHeight) gl.uniform1f(this.uWaveHeight, G.waveHeight);
       if (this.uWaveSpeed) gl.uniform1f(this.uWaveSpeed, G.waveSpeed);
       if (this.uGridDensity) gl.uniform1f(this.uGridDensity, G.gridDensity);
