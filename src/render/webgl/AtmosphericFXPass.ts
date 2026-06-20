@@ -89,7 +89,13 @@ void main(){
 `;
 
 export type AtmosphericFXPass = {
-  draw(args: { logicW: number; logicH: number; timeSec: number; freqs: Float32Array | null }): void;
+  draw(args: {
+    logicW: number;
+    logicH: number;
+    timeSec: number;
+    freqs: Float32Array | null;
+    hasExplosionOrHit?: boolean;
+  }): void;
   dispose(): void;
 };
 
@@ -150,9 +156,15 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
   const smoothFreqs = new Float32Array(FREQ_BINS);
   let smoothInited = false;
 
-  function uploadFreqs(freqs: Float32Array | null): void {
+  // Event gate: without an active explosion/hit, bass warp depth is fully damped
+  // (no "spasm" from shooting) while treble (color hue) keeps breathing at 30%.
+  //   bass   = bins 0..4    (drives warp depth + intensity)
+  //   treble = bins 20..31  (drives palette hue)
+  function uploadFreqs(freqs: Float32Array | null, hasExplosionOrHit: boolean): void {
     if (freqs && freqs.length >= FREQ_BINS) {
       const alpha = 0.15;
+      const bassScale = hasExplosionOrHit ? 1.0 : 0.0;
+      const trebScale = hasExplosionOrHit ? 1.0 : 0.3;
       for (let i = 0; i < FREQ_BINS; i++) {
         let n = (freqs[i] + 100) / 100;
         if (n < 0) n = 0; else if (n > 1) n = 1;
@@ -161,7 +173,8 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
         } else {
           smoothFreqs[i] = smoothFreqs[i] * (1 - alpha) + n * alpha;
         }
-        u8[i] = (smoothFreqs[i] * 255) | 0;
+        const scale = i <= 4 ? bassScale : i >= 20 ? trebScale : 1.0;
+        u8[i] = ((smoothFreqs[i] * scale) * 255) | 0;
       }
       smoothInited = true;
     } else {
@@ -176,7 +189,7 @@ export function createAtmosphericFXPass(gl: WebGL2RenderingContext): Atmospheric
       gl.useProgram(prog);
       gl.bindVertexArray(vao);
 
-      uploadFreqs(args.freqs);
+      uploadFreqs(args.freqs, args.hasExplosionOrHit === true);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       if (uFreqs) gl.uniform1i(uFreqs, 0);
