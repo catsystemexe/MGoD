@@ -362,11 +362,11 @@ export class DemosceneBg {
 
           if (uv.y > horizon) {
             float below = uv.y - horizon;
-            float depth = 1.0 / max(below, 0.0015);
+            float depth0 = 1.0 / max(below, 0.0015);   // preview depth (bez wave)
 
-            float wx = (uv.x - 0.5) * aspect * depth;
+            float wx = (uv.x - 0.5) * aspect * depth0;
             wx += uScroll.x * 0.02;
-            float wz = depth - t * uWaveSpeed;     // pohyb terenu vpred nese wz
+            float wz = depth0 - t * uWaveSpeed;     // pohyb terenu vpred nese wz
 
             // --- fbm heightmap ve world prostoru ---
             int   oct = int(uWaveComplexity + 0.5);    // 1..6
@@ -382,8 +382,13 @@ export class DemosceneBg {
             float fade = smoothstep(0.0, 0.12, below);
             float wave = h * uWaveHeight * fade;
 
-            float rows = (wz + wave) * (uGridDensity * 0.25);
-            float cols =  wx          * (uGridDensity * 0.25);
+            // aplikuj wave na below -> deformace perspektivni roviny (Z osa) = skutecne kopce
+            float below_w = max(below - wave * 0.08, 0.001);
+            float depth = 1.0 / below_w;
+
+            // grid s finalnim depth (wave uz je v depth, ne v rows)
+            float rows = (depth - t * uWaveSpeed) * (uGridDensity * 0.25);
+            float cols = ((uv.x - 0.5) * aspect * depth + uScroll.x * 0.02) * (uGridDensity * 0.25);
 
             float g = max(gridLine(rows, 0.04), gridLine(cols, 0.04));
 
