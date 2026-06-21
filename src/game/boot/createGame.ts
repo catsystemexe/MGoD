@@ -114,7 +114,7 @@ export async function createGame(
       // color: hex string
       // size:  visual scale multiplier (default 1.0)
       // ─────────────────────────────────────────
-      ent.render = { sdf: { shape: "triangle", color: "#00ffee", size: 3.5 } };
+      ent.render = { sdf: { shape: "chevron", color: "#00ffee", size: 3.5 } };
 
       playerEnt = ent;
 });
