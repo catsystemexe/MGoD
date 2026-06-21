@@ -120,7 +120,7 @@ export async function createGame(
           color:   '#00ffee',
           scale:   40,
           rotX:    0,
-          rotY:    0,
+          rotY:    Math.PI / 2,
           rotZ:    0,
         },
       };

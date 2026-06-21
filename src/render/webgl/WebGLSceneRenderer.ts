@@ -668,6 +668,9 @@ export class WebGLSceneRenderer {
         const g = parseInt(hex.slice(3, 5), 16) / 255;
         const b = parseInt(hex.slice(5, 7), 16) / 255;
 
+        const velY = safeNum((e as any).vel?.y, 0);
+        const tilt = Math.max(-0.35, Math.min(0.35, velY * 0.004));
+
         this.meshPass.draw({
           mesh:  gpuMesh,
           x:     ix,
@@ -675,7 +678,7 @@ export class WebGLSceneRenderer {
           scale: rm.scale ?? 1.0,
           rotX:  rm.rotX   ?? 0,
           rotY:  rm.rotY   ?? 0,
-          rotZ:  rm.rotZ   ?? 0,
+          rotZ:  (rm.rotZ ?? 0) + tilt,
           color: [r, g, b],
         });
 
