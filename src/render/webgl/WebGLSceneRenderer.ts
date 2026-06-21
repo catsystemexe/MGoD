@@ -226,6 +226,7 @@ export class WebGLSceneRenderer {
 
   
   private async loadModel(id: string, url: string): Promise<void> {
+    console.log('[MeshPass] loadModel START:', id, url);
     try {
       const loaded = await loadGLB(url);
       if (loaded.meshes.length === 0) {
@@ -234,9 +235,9 @@ export class WebGLSceneRenderer {
       }
       const gpuMesh = uploadMesh(this.gl, loaded.meshes[0]);
       this.modelCache.set(id, gpuMesh);
-      console.log(`[MeshPass] loaded: ${id}`);
+      console.log('[MeshPass] loadModel OK:', id, 'meshes:', loaded.meshes.length);
     } catch (e) {
-      console.warn(`[MeshPass] failed to load ${id}:`, e);
+      console.error('[MeshPass] loadModel FAIL:', id, e);
     }
   }
 
@@ -659,6 +660,8 @@ export class WebGLSceneRenderer {
 
       // ── Mesh rendering (low-poly 3D) ──
       const rm = (e as any).render?.mesh;
+      if (rm) console.log('[MeshPass] entity mesh:', rm.modelId,
+        'inCache:', this.modelCache.has(rm.modelId));
       if (rm && this.meshPass && this.modelCache.has(rm.modelId)) {
         const gpuMesh = this.modelCache.get(rm.modelId)!;
 
