@@ -355,6 +355,7 @@ async function main() {
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
+  (window as any).__CM.renderer = renderer;
   (globalThis as any).__CM_BG_PRESET__ ??= 0;
   function resize() {
     const vv = (window as any).visualViewport as VisualViewport | undefined;

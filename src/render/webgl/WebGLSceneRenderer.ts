@@ -199,6 +199,7 @@ export class WebGLSceneRenderer {
       console.warn('[MeshPass] shader compile failed:', e);
       this.meshPass = null;
     }
+    console.log('[MeshPass] instance:', this.meshPass ? 'OK' : 'NULL');
     this.loadModel('player_ship_1', '/models/player_ship_1.glb');
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
