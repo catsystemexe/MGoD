@@ -93,6 +93,41 @@ function computeFlatNormals(
   return normals;
 }
 
+function normalizeMesh(positions: Float32Array): void {
+  // 1. Najdi bounding box
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+  for (let i = 0; i < positions.length; i += 3) {
+    minX = Math.min(minX, positions[i]);     maxX = Math.max(maxX, positions[i]);
+    minY = Math.min(minY, positions[i + 1]); maxY = Math.max(maxY, positions[i + 1]);
+    minZ = Math.min(minZ, positions[i + 2]); maxZ = Math.max(maxZ, positions[i + 2]);
+  }
+
+  // 2. Střed bounding boxu
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const cz = (minZ + maxZ) / 2;
+
+  // 3. Největší extent → normalizační faktor
+  const extX = (maxX - minX) / 2;
+  const extY = (maxY - minY) / 2;
+  const extZ = (maxZ - minZ) / 2;
+  const maxExt = Math.max(extX, extY, extZ);
+  const scale = maxExt > 0 ? 1.0 / maxExt : 1.0;
+
+  // 4. Aplikuj: center na origin, scale na jednotkovou velikost
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i]     = (positions[i]     - cx) * scale;
+    positions[i + 1] = (positions[i + 1] - cy) * scale;
+    positions[i + 2] = (positions[i + 2] - cz) * scale;
+  }
+
+  console.log('[MeshLoader] normalized: center(',
+    cx.toFixed(4), cy.toFixed(4), cz.toFixed(4),
+    ') maxExt:', maxExt.toFixed(6), '→ scale:', scale.toFixed(2));
+}
+
 export async function loadGLB(url: string): Promise<LoadedModel> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`MeshLoader: fetch failed ${resp.status} ${url}`);
@@ -149,6 +184,7 @@ export async function loadGLB(url: string): Promise<LoadedModel> {
     }
 
     const positions = readAccessor(gltf, binChunk, prim.attributes.POSITION) as Float32Array;
+    normalizeMesh(positions);
 
     let normals: Float32Array;
     if (prim.attributes.NORMAL !== undefined) {

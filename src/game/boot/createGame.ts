@@ -118,7 +118,7 @@ export async function createGame(
         mesh: {
           modelId: 'player_ship_1',
           color:   '#00ffee',
-          scale:   3.5,
+          scale:   40,
           rotX:    0,
           rotY:    0,
           rotZ:    0,
