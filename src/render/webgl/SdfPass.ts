@@ -30,6 +30,7 @@ const SHAPE_ID: Record<string, number> = {
   bolt: 5,
   triangle: 6,
   chevron: 7,
+  thruster: 8,
 };
 
 // Bounded-quad vertex shader: identical world->screen transform to the main
@@ -269,6 +270,12 @@ void main() {
 
     outColor = vec4(col, bodyMask + tAlpha * (1.0 - bodyMask));
     return;
+  } else if (uShapeType == 8) {
+    // THRUSTER — standalone flame
+    vec4 thr = thrusterEffect(vec2(vLocal.y * 0.13, vLocal.x * 0.5));
+    float tAlpha = clamp(thr.a * uThrust, 0.0, 2.0);
+    outColor = vec4(thr.rgb, tAlpha);
+    return;
   } else {
     // TRIANGLE — clean equilateral pointing +X
     vec2 q = vec2(-p.y, p.x);
@@ -406,6 +413,7 @@ export function createSdfPass(
     draw(args) {
       let sizePx = Math.max(1, args.radius) * 4.0;
       if (args.shape === "chevron") sizePx = Math.max(1, args.radius) * 6.0;
+      if (args.shape === "thruster") sizePx = Math.max(1, args.radius) * 5.0;
 
       gl.useProgram(prog);
       gl.bindVertexArray(vao);

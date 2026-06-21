@@ -88,6 +88,7 @@ export class WebGLSceneRenderer {
   private meshPass: MeshPass | null = null;
   private modelCache: Map<string, GpuMesh> = new Map();
   private playerTilt: number = 0;
+  private playerThrust: number = 0;
 
   private accumTime = 0;
   private lastRenderMs = -1;
@@ -674,6 +675,61 @@ export class WebGLSceneRenderer {
           rotZ:  (rm.rotZ ?? 0) - this.playerTilt,
           paletteId: rm.paletteId ?? 'player',
         });
+
+        // ── Thrusters ──────────────────────────────────────────
+        if (this.sdfPass) {
+          // Thrust z velocity
+          const mVelX = safeNum((e as any).vel?.x, 0);
+          const mVelY = safeNum((e as any).vel?.y, 0);
+          const mSpeed = Math.sqrt(mVelX * mVelX + mVelY * mVelY);
+          const tTarget = mSpeed < 1.0 ? 0.1
+            : mVelX >= 0
+              ? Math.min(1.0, mSpeed / 150.0)
+              : Math.max(0.1, mSpeed / 300.0);
+          this.playerThrust += (tTarget - this.playerThrust) * 0.05;
+
+          const sc   = rm.scale ?? 1.0;
+          const thrR = sc * 0.35;      // radius thrustu
+          const thrX = ix - sc * 0.28; // pozice za lodí
+
+          // Hlavní thruster
+          this.sdfPass.draw({
+            ix: thrX,
+            iy: iy,
+            radius:   thrR,
+            shape:    'thruster',
+            color:    '#ff6600',
+            hpRatio:  1.0,
+            time:     this.accumTime,
+            hitFlash: 0,
+            thrust:   this.playerThrust,
+          });
+
+          // Wingtip thrusters — aktivní při tiltu
+          const tiltMag = Math.abs(this.playerTilt);
+          if (tiltMag > 0.05) {
+            const wingY    = sc * 0.22;
+            const wingR    = thrR * 0.45;
+            const wingThr  = Math.min(1.0, tiltMag * 2.5);
+            const wingX    = ix - sc * 0.20;
+
+            this.sdfPass.draw({
+              ix: wingX, iy: iy - wingY,
+              radius: wingR, shape: 'thruster',
+              color: '#ff9900', hpRatio: 1.0,
+              time: this.accumTime, hitFlash: 0,
+              thrust: wingThr,
+            });
+
+            this.sdfPass.draw({
+              ix: wingX, iy: iy + wingY,
+              radius: wingR, shape: 'thruster',
+              color: '#ff9900', hpRatio: 1.0,
+              time: this.accumTime, hitFlash: 0,
+              thrust: wingThr,
+            });
+          }
+        }
 
         gl.useProgram(this.prog);
         gl.bindVertexArray(this.vao);
