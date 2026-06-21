@@ -107,14 +107,18 @@ export class PlayerSystem {
     if (!pAny.posPrev) pAny.posPrev = { x: this.player.pos.x, y: this.player.pos.y };
     else { pAny.posPrev.x = this.player.pos.x; pAny.posPrev.y = this.player.pos.y; }
 
+    // Dead zone — filtruje micro-jitter myši
+    const moveX = Math.abs(actions.move.x) > 0.06 ? actions.move.x : 0;
+    const moveY = Math.abs(actions.move.y) > 0.06 ? actions.move.y : 0;
+
     // target velocity (arcade)
-    const tvx = actions.move.x * this.player.speed;
-    const tvy = actions.move.y * this.player.speed;
+    const tvx = moveX * this.player.speed;
+    const tvy = moveY * this.player.speed;
 
     // smoothing: faster stop than start (feels tight)
-    const accel = 300; // 1/s
+    const accel = 20; // 1/s
     const decel = 300; // 1/s
-    const hasInput = (actions.move.x !== 0 || actions.move.y !== 0);
+    const hasInput = (moveX !== 0 || moveY !== 0);
     const k = hasInput ? accel : decel;
 
     // exp smoothing stable across dt jitter
