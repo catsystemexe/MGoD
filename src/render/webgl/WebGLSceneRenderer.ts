@@ -87,6 +87,7 @@ export class WebGLSceneRenderer {
   private sdfPass: SdfPass | null;
   private meshPass: MeshPass | null = null;
   private modelCache: Map<string, GpuMesh> = new Map();
+  private playerTilt: number = 0;
 
   private accumTime = 0;
   private lastRenderMs = -1;
@@ -660,7 +661,8 @@ export class WebGLSceneRenderer {
         const gpuMesh = this.modelCache.get(rm.modelId)!;
 
         const velY = safeNum((e as any).vel?.y, 0);
-        const tilt = Math.max(-0.35, Math.min(0.35, velY * 0.004));
+        const targetTilt = Math.max(-0.25, Math.min(0.25, velY * 0.002));
+        this.playerTilt += (targetTilt - this.playerTilt) * 0.04;
 
         this.meshPass.draw({
           mesh:  gpuMesh,
@@ -669,7 +671,7 @@ export class WebGLSceneRenderer {
           scale: rm.scale ?? 1.0,
           rotX:  rm.rotX   ?? 0,
           rotY:  rm.rotY   ?? 0,
-          rotZ:  (rm.rotZ ?? 0) + tilt,
+          rotZ:  (rm.rotZ ?? 0) - this.playerTilt,
           paletteId: rm.paletteId ?? 'player',
         });
 
