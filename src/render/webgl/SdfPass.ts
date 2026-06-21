@@ -113,6 +113,61 @@ float wire2(float d, float th) {
   return smoothstep(th, th * 0.5, abs(d));
 }
 
+float sdSeg(vec2 p, vec2 a, vec2 b) {
+  vec2 s = b - a, o = p - a;
+  return length(o - s * clamp(dot(o, s) / dot(s, s), 0.0, 1.0));
+}
+
+float sdChevronBody(vec2 p) {
+  vec2 bTop  = vec2(-0.92,  0.66);
+  vec2 fTip  = vec2( 1.10,  0.00);
+  vec2 bBot  = vec2(-0.92, -0.66);
+  vec2 notch = vec2(-0.36,  0.00);
+  float d = min(min(sdSeg(p, bTop, fTip), sdSeg(p, fTip, bBot)),
+                min(sdSeg(p, bBot, notch), sdSeg(p, notch, bTop)));
+  bool inside = false;
+  vec2 vs[4];
+  vs[0] = bTop; vs[1] = fTip; vs[2] = bBot; vs[3] = notch;
+  for (int i = 0; i < 4; i++) {
+    vec2 a = vs[i], b = vs[(i + 1) % 4];
+    if (((a.y > p.y) != (b.y > p.y)) &&
+        (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x))
+      inside = !inside;
+  }
+  return inside ? -d : d;
+}
+
+vec4 thrusterEffect(vec2 pos) {
+  const float PI2 = 6.28318530718;
+  vec4 col = vec4(0.0);
+  float d = 0.0;
+  pos.y += 0.08;
+  if (pos.y > 0.0) return col;
+  pos.x += 0.003 * cos(20.0 * pos.y + 4.0 * uTime * PI2);
+  float dd = length(pos);
+  if (dd > 1.0) pos *= 2.2 * pow(1.0 - dd, 2.0);
+  pos *= 1.9;
+  d += cos(pos.x * 10.0);
+  d += cos(pos.x * 20.0);
+  d += cos(pos.x * 40.0);
+  d += 0.3 * cos(pos.y * 6.0 + 8.0 * uTime * PI2) - 1.4;
+  d += 0.3 * cos(pos.y * 50.0 + 4.0 * uTime * PI2);
+  d += 0.3 * cos(pos.y * 10.0 + 2.0 * uTime * PI2);
+  float dx = abs(pos.x);
+  d *= (dx < 0.05) ? (0.2 - dx) : 0.0;
+  d = max(d, 0.0);
+  float dy = abs(pos.y);
+  if (dy < 0.3) {
+    float fac = dy / 0.3;
+    col.r += 50.0 * pow(1.0 - fac, 2.0) * d;
+    col.g += 10.0 * pow(1.0 - fac, 4.0) * d;
+    col.a += 20.0 * (1.0 - fac) * d;
+  }
+  col.rgb += d * 10.0;
+  col.a += d;
+  return col;
+}
+
 void main() {
   float hp = clamp(uHpRatio, 0.0, 1.0);
 
@@ -168,42 +223,53 @@ void main() {
     d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     t = 0.5 + p.x * 0.4;
   } else if (uShapeType == 7) {
-    // ROCKET — wireframe style, points +X
-    float body = sdBox(p - vec2(0.1, 0.0), vec2(0.45, 0.12));
-    vec2 np = p - vec2(0.55, 0.0);
-    float nose = sdEquilateral(vec2(np.y, -np.x), 0.13);
-    float wing1 = sdBox(p - vec2(-0.1, 0.28), vec2(0.25, 0.06));
-    float wing2 = sdBox(p - vec2(-0.1, -0.28), vec2(0.25, 0.06));
-    float eng = abs(length(p - vec2(-0.55, 0.0)) - 0.10) - 0.015;
-    float det1 = sdBox(p - vec2(0.05, 0.0), vec2(0.018, 0.10));
-    float det2 = sdBox(p - vec2(0.25, 0.0), vec2(0.018, 0.10));
+    // CHEVRON + thruster, points +X
+    vec2 lp = vLocal;
 
-    float w = 0.0;
-    w = max(w, wire2(min(body, nose), 0.012));
-    w = max(w, wire2(min(wing1, wing2), 0.012));
-    w = max(w, wire2(eng, 0.008));
-    w = max(w, wire2(det1, 0.006));
-    w = max(w, wire2(det2, 0.006));
+    float deform = (1.0 - hp) * 0.08 * sin(uTime * 11.0 + lp.y * 8.0);
+    lp.x += deform;
 
-    float allP = min(min(min(body, nose), min(wing1, wing2)), eng);
-    float glowR = exp(-max(allP, 0.0) * 12.0) * 0.4;
+    float aa = 0.015;
 
-    float fillW = max(0.0, min(1.0, -allP / 0.02 + 0.5));
-    float aOut = clamp(fillW * 0.15 + w + glowR, 0.0, 1.0);
-    if (aOut < 0.003) discard;
+    float bodyDist = sdChevronBody(lp);
+    float bodyMask = 1.0 - smoothstep(0.0, aa, bodyDist);
+    float outerEdgeMask = 1.0 - smoothstep(0.0, aa, abs(bodyDist) - 0.010);
 
-    vec3 wCol = uColor * (w + glowR);
+    float darkMask = (1.0 - smoothstep(0.0, aa,
+      min(sdSeg(lp, vec2(-0.66, 0.48), vec2(0.88, 0.00)),
+          sdSeg(lp, vec2(-0.66, -0.48), vec2(0.88, 0.00))) - 0.045
+    )) * bodyMask;
 
-    // low-HP redshift (wireframe friendly)
-    wCol = mix(vec3(0.9, 0.15, 0.1) * (w + glowR),
-               wCol, hp);
-    wCol += (1.0 - hp) * 0.4 *
-            (0.5 + 0.5 * sin(uTime * 8.0)) *
-            vec3(0.5, 0.0, 0.0);
+    float whiteMask = (1.0 - smoothstep(0.0, aa,
+      min(sdSeg(lp, vec2(-0.42, 0.34), vec2(0.76, 0.00)),
+          sdSeg(lp, vec2(-0.42, -0.34), vec2(0.76, 0.00))) - 0.040
+    )) * bodyMask;
 
-    // hit flash overrides toward white (last)
-    wCol = mix(wCol, vec3(1.0), clamp(uHitFlash, 0.0, 1.0));
-    outColor = vec4(wCol, aOut);
+    float centerMask = (1.0 - smoothstep(0.0, aa,
+      sdSeg(lp, vec2(-0.36, 0.0), vec2(0.58, 0.0)) - 0.004
+    )) * bodyMask;
+
+    vec2 tOffset = lp - vec2(-0.36, 0.0);
+    vec4 thr = thrusterEffect(vec2(tOffset.y * 0.13, tOffset.x * 0.3));
+    float tAlpha = clamp(thr.a, 0.0, 2.0);
+
+    vec3 CYAN      = uColor;
+    vec3 WHITE     = vec3(0.95, 0.98, 1.00);
+    vec3 DARK_TEAL = vec3(0.02, 0.40, 0.52);
+
+    CYAN = mix(CYAN, vec3(1.0, 0.1, 0.0), (1.0 - hp) * 0.6);
+
+    vec3 col = vec3(0.0);
+    col = mix(col, thr.rgb, tAlpha * (1.0 - bodyMask));
+    col = mix(col, CYAN, bodyMask);
+    col = mix(col, WHITE, outerEdgeMask);
+    col = mix(col, DARK_TEAL, darkMask);
+    col = mix(col, WHITE, whiteMask);
+    col = mix(col, WHITE, centerMask);
+
+    col = mix(col, vec3(1.0), uHitFlash);
+
+    outColor = vec4(col, bodyMask + tAlpha * (1.0 - bodyMask));
     return;
   } else {
     // TRIANGLE — clean equilateral pointing +X
