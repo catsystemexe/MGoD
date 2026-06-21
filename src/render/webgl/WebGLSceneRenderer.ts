@@ -670,21 +670,17 @@ export class WebGLSceneRenderer {
         const g = parseInt(hex.slice(3, 5), 16) / 255;
         const b = parseInt(hex.slice(5, 7), 16) / 255;
 
-        gl.enable(gl.DEPTH_TEST);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-
+        // DEPTH TEST DISABLED FOR DEBUG
         this.meshPass.draw({
           mesh:  gpuMesh,
           x:     ix,
           y:     iy,
-          scale: rm.scale  ?? 1.0,
+          scale: (rm.scale ?? 1.0) * 15.0,
           rotX:  rm.rotX   ?? 0,
           rotY:  rm.rotY   ?? 0,
           rotZ:  rm.rotZ   ?? 0,
           color: [r, g, b],
         });
-
-        gl.disable(gl.DEPTH_TEST);
 
         gl.useProgram(this.prog);
         gl.bindVertexArray(this.vao);
