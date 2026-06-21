@@ -92,6 +92,8 @@ export class WebGLSceneRenderer {
   private bgFlowSegments: FlowSegmentsBg;
   private atmosphericFX: AtmosphericFXPass;
   private sdfPass: SdfPass | null;
+  private playerTilt: number = 0;
+  private playerThrust: number = 0;
 
   private accumTime = 0;
   private lastRenderMs = -1;
@@ -640,6 +642,16 @@ export class WebGLSceneRenderer {
         const hpMax = safeNum((e as any).maxHp ?? (e as any).energyMax, 1);
         const hpRatio = hpMax > 0 ? Math.max(0, Math.min(1, hpNow / hpMax)) : 1;
         const sizeMult = safeNum(sdf.size, 1);
+
+        const mVelX = safeNum((e as any).vel?.x, 0);
+        const mVelY = safeNum((e as any).vel?.y, 0);
+        const mSpeed = Math.sqrt(mVelX * mVelX + mVelY * mVelY);
+        const tTarget = mSpeed < 1.0 ? 0.1
+          : mVelX >= 0
+            ? Math.min(1.0, mSpeed / 150.0)
+            : Math.max(0.1, mSpeed / 300.0);
+        this.playerThrust += (tTarget - this.playerThrust) * 0.05;
+
         this.sdfPass.draw({
           ix,
           iy,
@@ -649,7 +661,55 @@ export class WebGLSceneRenderer {
           hpRatio,
           time: tSec,
           hitFlash: safeNum((e as any).hitFlashT, 0),
+          thrust: this.playerThrust,
         });
+
+        // ── Standalone thrusters (behind the ship) ──
+        if (sdf.shape === "chevron" || sdf.shape === "rocket") {
+          const sc = safeNum((e as any).radius, 10) * sizeMult;
+          const thrR = sc * 0.35;
+          const thrX = ix - sc * 0.28;
+
+          this.sdfPass.draw({
+            ix: thrX,
+            iy: iy,
+            radius:   thrR,
+            shape:    'thruster',
+            color:    '#ff6600',
+            hpRatio:  1.0,
+            time:     tSec,
+            hitFlash: 0,
+            thrust:   this.playerThrust,
+          });
+
+          const velY = safeNum((e as any).vel?.y, 0);
+          const targetTilt = Math.max(-0.45, Math.min(0.45, velY * 0.004));
+          this.playerTilt += (targetTilt - this.playerTilt) * 0.04;
+          const tiltMag = Math.abs(this.playerTilt);
+          if (tiltMag > 0.05) {
+            const wingY    = sc * 0.22;
+            const wingR    = thrR * 0.45;
+            const wingThr  = Math.min(1.0, tiltMag * 2.5);
+            const wingX    = ix - sc * 0.20;
+
+            this.sdfPass.draw({
+              ix: wingX, iy: iy - wingY,
+              radius: wingR, shape: 'thruster',
+              color: '#ff9900', hpRatio: 1.0,
+              time: tSec, hitFlash: 0,
+              thrust: wingThr,
+            });
+
+            this.sdfPass.draw({
+              ix: wingX, iy: iy + wingY,
+              radius: wingR, shape: 'thruster',
+              color: '#ff9900', hpRatio: 1.0,
+              time: tSec, hitFlash: 0,
+              thrust: wingThr,
+            });
+          }
+        }
+
         return;
       }
 
