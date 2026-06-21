@@ -13,6 +13,7 @@ import { createSdfPass, type SdfPass } from "./SdfPass";
 import { createMeshPass, type MeshPass } from "../../rendering/MeshPass";
 import { loadGLB } from "../../rendering/MeshLoader";
 import { uploadMesh, type GpuMesh } from "../../rendering/GpuMesh";
+import { hexToRgb } from "../../rendering/ColorPalette";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
@@ -32,17 +33,6 @@ function readKind(e: any): string | null {
 }
 
   
-function hexToRgb01(hex: string): [number, number, number] | null {
-  const h = String(hex).trim();
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(h);
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 255) / 255;
-  const g = ((n >> 8) & 255) / 255;
-  const b = (n & 255) / 255;
-  return [r, g, b];
-}
-
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type);
   if (!sh) throw new Error("createShader failed");
@@ -588,9 +578,12 @@ export class WebGLSceneRenderer {
           gl.uniform4f(this.uColor, 1, 1, 1, 1);
         } else {
           const col = (e as HasRender).render?.color;
-          const rgb = typeof col === "string" ? hexToRgb01(col) : null;
-          if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
-          else gl.uniform4f(this.uColor, 1, 0, 0, 1);
+          if (typeof col === "string") {
+            const [cr, cg, cb] = hexToRgb(col);
+            gl.uniform4f(this.uColor, cr, cg, cb, 1);
+          } else {
+            gl.uniform4f(this.uColor, 1, 0, 0, 1);
+          }
         }
       } else if (kind === "projectile") {
         gl.uniform4f(this.uColor, 0, 1, 0, 1);
@@ -608,9 +601,12 @@ export class WebGLSceneRenderer {
         h = sz;
 
         const col = (e as HasRender).render?.color;
-        const rgb = typeof col === "string" ? hexToRgb01(col) : null;
-        if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
-        else gl.uniform4f(this.uColor, 1, 1, 1, 1);
+        if (typeof col === "string") {
+          const [cr, cg, cb] = hexToRgb(col);
+          gl.uniform4f(this.uColor, cr, cg, cb, 1);
+        } else {
+          gl.uniform4f(this.uColor, 1, 1, 1, 1);
+        }
       } else {
         w = 4;
         h = 4;

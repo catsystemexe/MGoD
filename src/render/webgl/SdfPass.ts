@@ -3,6 +3,7 @@
 // SDF render pass — a new per-entity vector path alongside glyph/proc/sprite.
 //
 // Each entity is drawn as ONE bounded quad (reusing the same uPos/uSize/uLogic
+import { hexToRgb } from "../../rendering/ColorPalette";
 // transform as the main renderer program). The fragment shader evaluates a
 // signed-distance-field shape over the quad's local -1..1 space (vLocal),
 // alpha-masks the edge with smoothstep AA, and adds a soft outer glow. A single
@@ -366,13 +367,6 @@ function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string)
   return prog;
 }
 
-function hexToRgb01(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex).trim());
-  if (!m) return [1, 1, 1];
-  const n = parseInt(m[1], 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
-
 export function createSdfPass(
   gl: WebGL2RenderingContext,
   logicW: number,
@@ -421,7 +415,7 @@ export function createSdfPass(
       if (uSize) gl.uniform2f(uSize, sizePx, sizePx);
       if (uShapeType) gl.uniform1i(uShapeType, SHAPE_ID[args.shape] ?? 0);
       if (uColor) {
-        const [r, g, b] = hexToRgb01(args.color);
+        const [r, g, b] = hexToRgb(args.color);
         gl.uniform3f(uColor, r, g, b);
       }
       if (uHpRatio) gl.uniform1f(uHpRatio, Number.isFinite(args.hpRatio) ? args.hpRatio : 1);
