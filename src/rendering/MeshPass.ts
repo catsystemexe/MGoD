@@ -1,4 +1,5 @@
 import { GpuMesh } from "./GpuMesh";
+import { PALETTES, paletteToFloat32 } from "./ColorPalette";
 
 // ─── types ───────────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ export type MeshDrawArgs = {
   rotX: number;
   rotY: number;
   rotZ: number;
-  color: [number, number, number];
+  paletteId: string;   // klíč do PALETTES z ColorPalette.ts
 };
 
 export type MeshPass = {
@@ -47,16 +48,31 @@ precision highp float;
 in vec3 vNormal;
 in vec3 vWorldPos;
 
-uniform vec3  uColor;
+uniform vec3  uPalette[8];   // max 8 barev (shadow → specular)
+uniform int   uPaletteSize;  // skutečný počet barev v paletě
 uniform vec3  uLightDir;
 uniform float uAmbient;
 
 out vec4 outColor;
 
 void main() {
-  float diff    = max(dot(normalize(vNormal), uLightDir), 0.0);
-  vec3  shaded  = uColor * (uAmbient + (1.0 - uAmbient) * diff);
-  outColor      = vec4(shaded, 1.0);
+  float diff  = max(dot(normalize(vNormal), uLightDir), 0.0);
+  float light = uAmbient + (1.0 - uAmbient) * diff;
+
+  // Posterizace — quantize light na palette band
+  int band = clamp(
+    int(light * float(uPaletteSize)),
+    0,
+    uPaletteSize - 1
+  );
+
+  // Výběr barvy z palety
+  vec3 color = uPalette[0]; // fallback
+  for (int i = 0; i < 8; i++) {
+    if (i == band) color = uPalette[i];
+  }
+
+  outColor = vec4(color, 1.0);
 }
 `;
 
@@ -180,11 +196,12 @@ export function createMeshPass(
   const prog = buildProgram(gl, VS_SRC, FS_SRC);
 
   // 2. Uniform locations
-  const uModel    = gl.getUniformLocation(prog, "uModel");
-  const uProj     = gl.getUniformLocation(prog, "uProj");
-  const uColor    = gl.getUniformLocation(prog, "uColor");
-  const uLightDir = gl.getUniformLocation(prog, "uLightDir");
-  const uAmbient  = gl.getUniformLocation(prog, "uAmbient");
+  const uModel        = gl.getUniformLocation(prog, "uModel");
+  const uProj         = gl.getUniformLocation(prog, "uProj");
+  const uPalette      = gl.getUniformLocation(prog, "uPalette");
+  const uPaletteSize  = gl.getUniformLocation(prog, "uPaletteSize");
+  const uLightDir     = gl.getUniformLocation(prog, "uLightDir");
+  const uAmbient      = gl.getUniformLocation(prog, "uAmbient");
 
   // 3. Orthographic projection (screen-pixel space, Y-flip)
   let projMatrix = mat4Ortho(0, logicW, logicH, 0, -1000, 1000);
@@ -212,9 +229,13 @@ export function createMeshPass(
       mat4Scale(args.scale, args.scale, args.scale),
     );
 
+    const palette = PALETTES[args.paletteId] ?? PALETTES['player'];
+    const paletteData = paletteToFloat32(palette);
+
     gl.uniformMatrix4fv(uModel, false, model);
     gl.uniformMatrix4fv(uProj, false, projMatrix);
-    gl.uniform3fv(uColor, args.color);
+    gl.uniform3fv(uPalette, paletteData);
+    gl.uniform1i(uPaletteSize, palette.colors.length);
     gl.uniform3fv(uLightDir, lightDir);
     gl.uniform1f(uAmbient, ambient);
 

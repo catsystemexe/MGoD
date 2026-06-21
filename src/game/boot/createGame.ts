@@ -116,9 +116,9 @@ export async function createGame(
       // ─────────────────────────────────────────
       ent.render = {
         mesh: {
-          modelId: 'player_ship_1',
-          color:   '#00ffee',
-          scale:   40,
+          modelId:   'player_ship_1',
+          paletteId: 'player',
+          scale:     40,
           rotX:    0,
           rotY:    Math.PI / 2,
           rotZ:    0,

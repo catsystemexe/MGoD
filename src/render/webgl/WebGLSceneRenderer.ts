@@ -663,11 +663,6 @@ export class WebGLSceneRenderer {
       if (rm && this.meshPass && this.modelCache.has(rm.modelId)) {
         const gpuMesh = this.modelCache.get(rm.modelId)!;
 
-        const hex = rm.color ?? '#ffffff';
-        const r = parseInt(hex.slice(1, 3), 16) / 255;
-        const g = parseInt(hex.slice(3, 5), 16) / 255;
-        const b = parseInt(hex.slice(5, 7), 16) / 255;
-
         const velY = safeNum((e as any).vel?.y, 0);
         const tilt = Math.max(-0.35, Math.min(0.35, velY * 0.004));
 
@@ -679,7 +674,7 @@ export class WebGLSceneRenderer {
           rotX:  rm.rotX   ?? 0,
           rotY:  rm.rotY   ?? 0,
           rotZ:  (rm.rotZ ?? 0) + tilt,
-          color: [r, g, b],
+          paletteId: rm.paletteId ?? 'player',
         });
 
         gl.useProgram(this.prog);
