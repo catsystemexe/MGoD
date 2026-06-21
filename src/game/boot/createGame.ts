@@ -114,7 +114,16 @@ export async function createGame(
       // color: hex string
       // size:  visual scale multiplier (default 1.0)
       // ─────────────────────────────────────────
-      ent.render = { sdf: { shape: "chevron", color: "#00ffee", size: 3.5 } };
+      ent.render = {
+        mesh: {
+          modelId: 'player_ship_1',
+          color:   '#00ffee',
+          scale:   3.5,
+          rotX:    0,
+          rotY:    0,
+          rotZ:    0,
+        },
+      };
 
       playerEnt = ent;
 });

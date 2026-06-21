@@ -10,6 +10,9 @@ import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
 import type { FlowDisturbance } from "./bg/flowStep";
 import { createAtmosphericFXPass, type AtmosphericFXPass } from "./AtmosphericFXPass";
 import { createSdfPass, type SdfPass } from "./SdfPass";
+import { createMeshPass, type MeshPass } from "../../rendering/MeshPass";
+import { loadGLB } from "../../rendering/MeshLoader";
+import { uploadMesh, type GpuMesh } from "../../rendering/GpuMesh";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
@@ -92,6 +95,8 @@ export class WebGLSceneRenderer {
   private bgFlowSegments: FlowSegmentsBg;
   private atmosphericFX: AtmosphericFXPass;
   private sdfPass: SdfPass | null;
+  private meshPass: MeshPass | null = null;
+  private modelCache: Map<string, GpuMesh> = new Map();
 
   private accumTime = 0;
   private lastRenderMs = -1;
@@ -188,6 +193,13 @@ export class WebGLSceneRenderer {
       console.warn("[SdfPass] failed to compile, SDF rendering disabled:", e);
       this.sdfPass = null;
     }
+    try {
+      this.meshPass = createMeshPass(gl, logicW, logicH);
+    } catch (e) {
+      console.warn('[MeshPass] shader compile failed:', e);
+      this.meshPass = null;
+    }
+    this.loadModel('player_ship_1', '/models/player_ship_1.glb');
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -213,6 +225,21 @@ export class WebGLSceneRenderer {
 
 
   
+  private async loadModel(id: string, url: string): Promise<void> {
+    try {
+      const loaded = await loadGLB(url);
+      if (loaded.meshes.length === 0) {
+        console.warn(`[MeshPass] no meshes in ${url}`);
+        return;
+      }
+      const gpuMesh = uploadMesh(this.gl, loaded.meshes[0]);
+      this.modelCache.set(id, gpuMesh);
+      console.log(`[MeshPass] loaded: ${id}`);
+    } catch (e) {
+      console.warn(`[MeshPass] failed to load ${id}:`, e);
+    }
+  }
+
   private drawDebugBackground(sx: number, sy: number): void {
     const gl = this.gl;
 
@@ -629,6 +656,38 @@ export class WebGLSceneRenderer {
         (typeof (e as any).spawnOrdinal === "number" && Number.isFinite((e as any).spawnOrdinal))
           ? (e as any).spawnOrdinal
           : ((e as any).id ?? 0);
+
+      // ── Mesh rendering (low-poly 3D) ──
+      const rm = (e as any).render?.mesh;
+      if (rm && this.meshPass && this.modelCache.has(rm.modelId)) {
+        const gpuMesh = this.modelCache.get(rm.modelId)!;
+
+        const hex = rm.color ?? '#ffffff';
+        const r = parseInt(hex.slice(1, 3), 16) / 255;
+        const g = parseInt(hex.slice(3, 5), 16) / 255;
+        const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+        gl.enable(gl.DEPTH_TEST);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+
+        this.meshPass.draw({
+          mesh:  gpuMesh,
+          x:     ix,
+          y:     iy,
+          scale: rm.scale  ?? 1.0,
+          rotX:  rm.rotX   ?? 0,
+          rotY:  rm.rotY   ?? 0,
+          rotZ:  rm.rotZ   ?? 0,
+          color: [r, g, b],
+        });
+
+        gl.disable(gl.DEPTH_TEST);
+
+        gl.useProgram(this.prog);
+        gl.bindVertexArray(this.vao);
+
+        return;
+      }
 
       // 0) SDF vector shape (highest priority — short-circuits all other paths).
       // Skipped entirely if the pass failed to compile (this.sdfPass === null).

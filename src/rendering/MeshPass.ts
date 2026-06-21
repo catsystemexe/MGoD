@@ -186,12 +186,8 @@ export function createMeshPass(
   const uLightDir = gl.getUniformLocation(prog, "uLightDir");
   const uAmbient  = gl.getUniformLocation(prog, "uAmbient");
 
-  // 3. Orthographic projection
-  let projMatrix = mat4Ortho(
-    -logicW / 2, logicW / 2,
-    -logicH / 2, logicH / 2,
-    -1000, 1000,
-  );
+  // 3. Orthographic projection (screen-pixel space, Y-flip)
+  let projMatrix = mat4Ortho(0, logicW, logicH, 0, -1000, 1000);
 
   // 4. Fixed lighting
   const len = Math.hypot(0.5, 0.8, 1.0);
@@ -229,7 +225,7 @@ export function createMeshPass(
 
   // 6. resize
   function resize(w: number, h: number): void {
-    projMatrix = mat4Ortho(-w / 2, w / 2, -h / 2, h / 2, -1000, 1000);
+    projMatrix = mat4Ortho(0, w, h, 0, -1000, 1000);
   }
 
   // 7. dispose
