@@ -639,6 +639,14 @@ export class WebGLSceneRenderer {
         const hpMax = safeNum((e as any).maxHp ?? (e as any).energyMax, 1);
         const hpRatio = hpMax > 0 ? Math.max(0, Math.min(1, hpNow / hpMax)) : 1;
         const sizeMult = safeNum(sdf.size, 1);
+        const velX = safeNum((e as any).vel?.x, 0);
+        const velY = safeNum((e as any).vel?.y, 0);
+        const speed = Math.sqrt(velX * velX + velY * velY);
+        const thrust = speed < 1.0
+          ? 0.0
+          : velX >= 0
+            ? Math.min(1.0, speed / 150.0)
+            : Math.max(0.1, speed / 300.0);
         this.sdfPass.draw({
           ix,
           iy,
@@ -648,7 +656,7 @@ export class WebGLSceneRenderer {
           hpRatio,
           time: tSec,
           hitFlash: safeNum((e as any).hitFlashT, 0),
-          thrust: safeNum((e as any).thrust, 0),
+          thrust: thrust,
         });
         return;
       }
