@@ -272,7 +272,7 @@ void main() {
     return;
   } else if (uShapeType == 8) {
     // THRUSTER — standalone flame
-    vec4 thr = thrusterEffect(vec2(vLocal.y * 0.13, vLocal.x * 0.5));
+    vec4 thr = thrusterEffect(vec2(vLocal.y * 0.09, vLocal.x * 0.32));
     float tAlpha = clamp(thr.a * uThrust, 0.0, 2.0);
     outColor = vec4(thr.rgb, tAlpha);
     return;

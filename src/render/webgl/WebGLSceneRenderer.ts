@@ -685,7 +685,7 @@ export class WebGLSceneRenderer {
           const tTarget = mSpeed < 1.0 ? 0.1
             : mVelX >= 0
               ? Math.min(1.0, mSpeed / 150.0)
-              : Math.max(0.1, mSpeed / 300.0);
+              : 0.1;   // vzad = idle thruster
           this.playerThrust += (tTarget - this.playerThrust) * 0.05;
 
           const sc   = rm.scale ?? 1.0;
