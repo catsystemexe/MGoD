@@ -60,6 +60,7 @@ uniform vec3  uColor;        // base tint
 uniform float uHpRatio;      // 0..1 (drives deform + low-hp redshift)
 uniform float uTime;         // seconds (idle/rotation animation)
 uniform float uHitFlash;     // 0..1 (white pop on hit)
+uniform float uThrust;       // 0..1 (thruster intensity)
 
 const float TAU = 6.28318530718;
 
@@ -246,8 +247,8 @@ void main() {
     )) * bodyMask;
 
     vec2 tOffset = lp - vec2(-0.36, 0.0);
-    vec4 thr = thrusterEffect(vec2(tOffset.y * 0.13, tOffset.x * 0.3));
-    float tAlpha = clamp(thr.a, 0.0, 2.0);
+    vec4 thr = thrusterEffect(vec2(tOffset.y * 0.13, tOffset.x * 0.5));
+    float tAlpha = clamp(thr.a * uThrust, 0.0, 2.0);
 
     vec3 CYAN      = uColor;
     vec3 WHITE     = vec3(0.95, 0.98, 1.00);
@@ -318,6 +319,7 @@ export type SdfPass = {
     hpRatio: number;
     time: number;
     hitFlash: number;
+    thrust: number;
   }): void;
   dispose(): void;
 };
@@ -390,6 +392,7 @@ export function createSdfPass(
   const uHpRatio = gl.getUniformLocation(prog, "uHpRatio");
   const uTime = gl.getUniformLocation(prog, "uTime");
   const uHitFlash = gl.getUniformLocation(prog, "uHitFlash");
+  const uThrust = gl.getUniformLocation(prog, "uThrust");
 
   // Own unit-quad geometry (self-contained: a different program may bind aPos to
   // a different attrib slot than the main renderer, so we don't borrow its VAO).
@@ -407,9 +410,8 @@ export function createSdfPass(
 
   return {
     draw(args) {
-      // Quad is 4x the visible core so the SDF (core radius ~0.5 of half-extent)
-      // has generous room for its outer glow.
-      const sizePx = Math.max(1, args.radius) * 4.0;
+      let sizePx = Math.max(1, args.radius) * 4.0;
+      if (args.shape === "chevron") sizePx = Math.max(1, args.radius) * 6.0;
 
       gl.useProgram(prog);
       gl.bindVertexArray(vao);
@@ -425,6 +427,7 @@ export function createSdfPass(
       if (uHpRatio) gl.uniform1f(uHpRatio, Number.isFinite(args.hpRatio) ? args.hpRatio : 1);
       if (uTime) gl.uniform1f(uTime, args.time);
       if (uHitFlash) gl.uniform1f(uHitFlash, Number.isFinite(args.hitFlash) ? args.hitFlash : 0);
+      if (uThrust) gl.uniform1f(uThrust, Number.isFinite(args.thrust) ? args.thrust : 0);
 
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

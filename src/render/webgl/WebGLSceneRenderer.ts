@@ -648,6 +648,7 @@ export class WebGLSceneRenderer {
           hpRatio,
           time: tSec,
           hitFlash: safeNum((e as any).hitFlashT, 0),
+          thrust: safeNum((e as any).thrust, 0),
         });
         return;
       }
