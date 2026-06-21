@@ -8,6 +8,7 @@ import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 
 import type { EnemyBehaviorId, EnemyBehaviorParams, EnemyBehaviorRuntime } from "../enemies/EnemyBehaviorTypes";
 import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
+import { COLORS } from "../../rendering/ColorPalette";
 import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/EnemyBehaviorPresets";
 
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
@@ -150,7 +151,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
         glyphId: "proj.capsule",
         sdf: {
           shape: isSecondary ? "orb" : "bolt",
-          color: isSecondary ? "#ff5cc8" : "#aef6ff",
+          color: isSecondary ? COLORS.ORB : COLORS.BOLT,
           size: isSecondary ? 2.0 : 2.5,
         },
       };
