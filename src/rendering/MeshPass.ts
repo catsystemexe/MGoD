@@ -54,9 +54,7 @@ uniform float uAmbient;
 out vec4 outColor;
 
 void main() {
-  float diff    = max(dot(normalize(vNormal), uLightDir), 0.0);
-  vec3  shaded  = uColor * (uAmbient + (1.0 - uAmbient) * diff);
-  outColor      = vec4(shaded, 1.0);
+  outColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
 `;
 
