@@ -10,6 +10,10 @@ import { FlowSegmentsBg } from "./bg/FlowSegmentsBg";
 import type { FlowDisturbance } from "./bg/flowStep";
 import { createAtmosphericFXPass, type AtmosphericFXPass } from "./AtmosphericFXPass";
 import { createSdfPass, type SdfPass } from "./SdfPass";
+import { createMeshPass, type MeshPass } from "../../rendering/MeshPass";
+import { loadGLB } from "../../rendering/MeshLoader";
+import { uploadMesh, type GpuMesh } from "../../rendering/GpuMesh";
+import { hexToRgb } from "../../rendering/ColorPalette";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
@@ -29,17 +33,6 @@ function readKind(e: any): string | null {
 }
 
   
-function hexToRgb01(hex: string): [number, number, number] | null {
-  const h = String(hex).trim();
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(h);
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 255) / 255;
-  const g = ((n >> 8) & 255) / 255;
-  const b = (n & 255) / 255;
-  return [r, g, b];
-}
-
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type);
   if (!sh) throw new Error("createShader failed");
@@ -92,6 +85,8 @@ export class WebGLSceneRenderer {
   private bgFlowSegments: FlowSegmentsBg;
   private atmosphericFX: AtmosphericFXPass;
   private sdfPass: SdfPass | null;
+  private meshPass: MeshPass | null = null;
+  private modelCache: Map<string, GpuMesh> = new Map();
 
   private accumTime = 0;
   private lastRenderMs = -1;
@@ -188,6 +183,13 @@ export class WebGLSceneRenderer {
       console.warn("[SdfPass] failed to compile, SDF rendering disabled:", e);
       this.sdfPass = null;
     }
+    try {
+      this.meshPass = createMeshPass(gl, logicW, logicH);
+    } catch (e) {
+      console.warn('[MeshPass] shader compile failed:', e);
+      this.meshPass = null;
+    }
+    this.loadModel('player_ship_1', '/models/player_ship_1.glb');
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
@@ -213,6 +215,22 @@ export class WebGLSceneRenderer {
 
 
   
+  private async loadModel(id: string, url: string): Promise<void> {
+    console.log('[MeshPass] loadModel START:', id, url);
+    try {
+      const loaded = await loadGLB(url);
+      if (loaded.meshes.length === 0) {
+        console.warn(`[MeshPass] no meshes in ${url}`);
+        return;
+      }
+      const gpuMesh = uploadMesh(this.gl, loaded.meshes[0]);
+      this.modelCache.set(id, gpuMesh);
+      console.log('[MeshPass] loadModel OK:', id, 'meshes:', loaded.meshes.length);
+    } catch (e) {
+      console.error('[MeshPass] loadModel FAIL:', id, e);
+    }
+  }
+
   private drawDebugBackground(sx: number, sy: number): void {
     const gl = this.gl;
 
@@ -560,9 +578,12 @@ export class WebGLSceneRenderer {
           gl.uniform4f(this.uColor, 1, 1, 1, 1);
         } else {
           const col = (e as HasRender).render?.color;
-          const rgb = typeof col === "string" ? hexToRgb01(col) : null;
-          if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
-          else gl.uniform4f(this.uColor, 1, 0, 0, 1);
+          if (typeof col === "string") {
+            const [cr, cg, cb] = hexToRgb(col);
+            gl.uniform4f(this.uColor, cr, cg, cb, 1);
+          } else {
+            gl.uniform4f(this.uColor, 1, 0, 0, 1);
+          }
         }
       } else if (kind === "projectile") {
         gl.uniform4f(this.uColor, 0, 1, 0, 1);
@@ -580,9 +601,12 @@ export class WebGLSceneRenderer {
         h = sz;
 
         const col = (e as HasRender).render?.color;
-        const rgb = typeof col === "string" ? hexToRgb01(col) : null;
-        if (rgb) gl.uniform4f(this.uColor, rgb[0], rgb[1], rgb[2], 1);
-        else gl.uniform4f(this.uColor, 1, 1, 1, 1);
+        if (typeof col === "string") {
+          const [cr, cg, cb] = hexToRgb(col);
+          gl.uniform4f(this.uColor, cr, cg, cb, 1);
+        } else {
+          gl.uniform4f(this.uColor, 1, 1, 1, 1);
+        }
       } else {
         w = 4;
         h = 4;
@@ -629,6 +653,31 @@ export class WebGLSceneRenderer {
         (typeof (e as any).spawnOrdinal === "number" && Number.isFinite((e as any).spawnOrdinal))
           ? (e as any).spawnOrdinal
           : ((e as any).id ?? 0);
+
+      // ── Mesh rendering (low-poly 3D) ──
+      const rm = (e as any).render?.mesh;
+      if (rm && this.meshPass && this.modelCache.has(rm.modelId)) {
+        const gpuMesh = this.modelCache.get(rm.modelId)!;
+
+        const velY = safeNum((e as any).vel?.y, 0);
+        const tilt = Math.max(-0.35, Math.min(0.35, velY * 0.004));
+
+        this.meshPass.draw({
+          mesh:  gpuMesh,
+          x:     ix,
+          y:     iy,
+          scale: rm.scale ?? 1.0,
+          rotX:  rm.rotX   ?? 0,
+          rotY:  rm.rotY   ?? 0,
+          rotZ:  (rm.rotZ ?? 0) + tilt,
+          paletteId: rm.paletteId ?? 'player',
+        });
+
+        gl.useProgram(this.prog);
+        gl.bindVertexArray(this.vao);
+
+        return;
+      }
 
       // 0) SDF vector shape (highest priority — short-circuits all other paths).
       // Skipped entirely if the pass failed to compile (this.sdfPass === null).
