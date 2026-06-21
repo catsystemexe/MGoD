@@ -671,6 +671,12 @@ export class WebGLSceneRenderer {
         const b = parseInt(hex.slice(5, 7), 16) / 255;
 
         // DEPTH TEST DISABLED FOR DEBUG
+        console.log('[MeshPass] DRAW CALL', {
+          x: ix, y: iy,
+          scale: (rm.scale ?? 1.0) * 15.0,
+          meshPass: !!this.meshPass,
+          inCache: this.modelCache.has(rm.modelId),
+        });
         this.meshPass.draw({
           mesh:  gpuMesh,
           x:     ix,
@@ -681,6 +687,8 @@ export class WebGLSceneRenderer {
           rotZ:  rm.rotZ   ?? 0,
           color: [r, g, b],
         });
+        const glErr = gl.getError();
+        if (glErr !== gl.NO_ERROR) console.error('[MeshPass] GL ERROR:', glErr);
 
         gl.useProgram(this.prog);
         gl.bindVertexArray(this.vao);

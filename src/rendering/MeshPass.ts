@@ -196,6 +196,8 @@ export function createMeshPass(
 
   // 5. draw
   function draw(args: MeshDrawArgs): void {
+    console.log('[MeshPass] draw() called, vao:', !!args.mesh.vao,
+      'indexCount:', args.mesh.indexCount);
     gl.useProgram(prog);
 
     const model = mat4Multiply(
