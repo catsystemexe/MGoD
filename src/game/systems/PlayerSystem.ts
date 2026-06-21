@@ -117,7 +117,7 @@ export class PlayerSystem {
 
     // smoothing: faster stop than start (feels tight)
     const accel = 20; // 1/s
-    const decel = 300; // 1/s
+    const decel = 12; // 1/s
     const hasInput = (moveX !== 0 || moveY !== 0);
     const k = hasInput ? accel : decel;
 

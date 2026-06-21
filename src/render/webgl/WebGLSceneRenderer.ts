@@ -661,7 +661,7 @@ export class WebGLSceneRenderer {
         const gpuMesh = this.modelCache.get(rm.modelId)!;
 
         const velY = safeNum((e as any).vel?.y, 0);
-        const targetTilt = Math.max(-0.25, Math.min(0.25, velY * 0.002));
+        const targetTilt = Math.max(-0.45, Math.min(0.45, velY * 0.004));
         this.playerTilt += (targetTilt - this.playerTilt) * 0.04;
 
         this.meshPass.draw({
