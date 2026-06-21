@@ -199,7 +199,6 @@ export class WebGLSceneRenderer {
       console.warn('[MeshPass] shader compile failed:', e);
       this.meshPass = null;
     }
-    console.log('[MeshPass] instance:', this.meshPass ? 'OK' : 'NULL');
     this.loadModel('player_ship_1', '/models/player_ship_1.glb');
       // Sprite MVP (async load; safe fallback when missing)
       this.sprites = new SpriteSystem(gl);
@@ -661,8 +660,6 @@ export class WebGLSceneRenderer {
 
       // ── Mesh rendering (low-poly 3D) ──
       const rm = (e as any).render?.mesh;
-      if (rm) console.log('[MeshPass] entity mesh:', rm.modelId,
-        'inCache:', this.modelCache.has(rm.modelId));
       if (rm && this.meshPass && this.modelCache.has(rm.modelId)) {
         const gpuMesh = this.modelCache.get(rm.modelId)!;
 
@@ -671,25 +668,16 @@ export class WebGLSceneRenderer {
         const g = parseInt(hex.slice(3, 5), 16) / 255;
         const b = parseInt(hex.slice(5, 7), 16) / 255;
 
-        // DEPTH TEST DISABLED FOR DEBUG
-        console.log('[MeshPass] DRAW CALL', {
-          x: ix, y: iy,
-          scale: (rm.scale ?? 1.0) * 15.0,
-          meshPass: !!this.meshPass,
-          inCache: this.modelCache.has(rm.modelId),
-        });
         this.meshPass.draw({
           mesh:  gpuMesh,
           x:     ix,
           y:     iy,
-          scale: (rm.scale ?? 1.0) * 15.0,
+          scale: rm.scale ?? 1.0,
           rotX:  rm.rotX   ?? 0,
           rotY:  rm.rotY   ?? 0,
           rotZ:  rm.rotZ   ?? 0,
           color: [r, g, b],
         });
-        const glErr = gl.getError();
-        if (glErr !== gl.NO_ERROR) console.error('[MeshPass] GL ERROR:', glErr);
 
         gl.useProgram(this.prog);
         gl.bindVertexArray(this.vao);

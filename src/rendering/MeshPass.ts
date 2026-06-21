@@ -54,7 +54,9 @@ uniform float uAmbient;
 out vec4 outColor;
 
 void main() {
-  outColor = vec4(1.0, 0.0, 0.0, 1.0);
+  float diff    = max(dot(normalize(vNormal), uLightDir), 0.0);
+  vec3  shaded  = uColor * (uAmbient + (1.0 - uAmbient) * diff);
+  outColor      = vec4(shaded, 1.0);
 }
 `;
 
@@ -194,8 +196,6 @@ export function createMeshPass(
 
   // 5. draw
   function draw(args: MeshDrawArgs): void {
-    console.log('[MeshPass] draw() called, vao:', !!args.mesh.vao,
-      'indexCount:', args.mesh.indexCount);
     gl.useProgram(prog);
 
     const model = mat4Multiply(
