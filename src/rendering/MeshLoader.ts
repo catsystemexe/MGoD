@@ -181,7 +181,18 @@ export async function loadGLB(url: string): Promise<LoadedModel> {
     meshes.push({ positions, normals, indices, color });
   }
 
-  return { id: url, meshes };
+  const result = { id: url, meshes };
+  for (const mesh of result.meshes) {
+    const pos = mesh.positions;
+    console.log('[MeshLoader] first 3 vertices:',
+      `v0(${pos[0].toFixed(4)}, ${pos[1].toFixed(4)}, ${pos[2].toFixed(4)})`,
+      `v1(${pos[3].toFixed(4)}, ${pos[4].toFixed(4)}, ${pos[5].toFixed(4)})`,
+      `v2(${pos[6].toFixed(4)}, ${pos[7].toFixed(4)}, ${pos[8].toFixed(4)})`
+    );
+    console.log('[MeshLoader] indexCount:', mesh.indices.length,
+      'vertexCount:', pos.length / 3);
+  }
+  return result;
 }
 
 function generateSequentialIndices(vertexCount: number): Uint16Array | Uint32Array {
