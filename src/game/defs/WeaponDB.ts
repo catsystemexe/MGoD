@@ -11,7 +11,7 @@ export const WEAPON_DB: WeaponDB = {
       speed: 1100,
       ttlSec: 3,
       damage: 3,
-      radius: 2,
+      radius: 5,
 
       knockback: 0,
       freezeSec: 0,

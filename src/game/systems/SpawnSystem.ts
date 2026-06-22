@@ -152,7 +152,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
         sdf: {
           shape: isSecondary ? "orb" : "bolt",
           color: isSecondary ? COLORS.ORB : COLORS.BOLT,
-          size: isSecondary ? 2.0 : 3.5,
+          size: isSecondary ? 2.0 : 5.0,
         },
       };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)

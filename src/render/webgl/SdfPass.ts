@@ -215,12 +215,18 @@ void main() {
     d = min(min(bar1, bar2), ring);
     t = atan(q.y, q.x) / TAU + 0.5;
   } else if (uShapeType == 5) {
-    // BOLT (projectile): horizontal capsule with a sharp core. Points +X.
-    float r = 0.09;     // tenčí
-    float len = 0.68;   // delší → špičatý laser bolt
-    vec2 q = vec2(abs(p.x) - len, p.y);
-    d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-    t = 0.5 + p.x * 0.4;
+    // LASER BEAM — asymmetric cyan/white beam
+    float beam = 1.0 / (abs(p.y) * 80.0 + 1.0);
+    float taper = smoothstep(-0.8, 0.6, p.x);
+    float core = smoothstep(0.0, 0.15, p.x);
+
+    vec3 cyan = vec3(0.0, 0.85, 1.0);
+    vec3 white = vec3(1.0, 1.0, 1.0);
+    vec3 beamCol = mix(cyan, white, core);
+
+    float alpha = beam * taper * 2.5;
+    outColor = vec4(beamCol * alpha, alpha);
+    return;
   } else if (uShapeType == 7) {
     // CHEVRON + thruster, points +X
     vec2 lp = vLocal;
