@@ -742,8 +742,8 @@ export class WebGLSceneRenderer {
         if (this.sdfPass) {
           const laserStartX = ix;
           const laserEndX   = this.logicW + 50.0;
-          const laserMidX   = (laserStartX + laserEndX) * 0.5;
-          const laserRadius = (laserEndX - laserStartX) * 0.5;
+          const laserRadius = (this.logicW + 50.0) * 0.5;
+          const laserMidX   = laserStartX + laserRadius;
 
           this.sdfPass.draw({
             ix:       laserMidX,

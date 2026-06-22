@@ -516,7 +516,7 @@ export async function createGame(
     collision: {
       update: (_ctx, _events) => {
         if (session.gameOver) return;
-        collision.update();
+        collision.update(_ctx.dt);
       },
     },
 

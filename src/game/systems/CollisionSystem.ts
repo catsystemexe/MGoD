@@ -88,7 +88,7 @@ export class CollisionSystem {
   ) {}
 
   /** Phase.Collision only: detect collisions and emit events. */
-  update(): void {
+  update(dtSec: number = 0.016): void {
     // silence unused cfg warning (CA collision later)
     void this.cfg;
     // Unified contract: every entity (player, enemy, projectile, pickup) lives in
@@ -132,6 +132,41 @@ export class CollisionSystem {
           (proj as any).consumed = true; // one-hit
           break;
         }
+      }
+    });
+
+    // 2.25) LASER damage
+    const laserEnts: Array<{pos:{x:number,y:number}, damage:number}> = [];
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (e.kind === 'laser') laserEnts.push(e);
+    });
+
+    if (laserEnts.length > 0) {
+      for (const { ref: eRef, e: enemy } of enemies) {
+        for (const laser of laserEnts) {
+          const dy = Math.abs(enemy.pos.y - laser.pos.y);
+          const hitRadius = enemy.radius + 8;
+          if (dy < hitRadius && enemy.pos.x > laser.pos.x) {
+            if (!(enemy as any).laserHitTimer || (enemy as any).laserHitTimer <= 0) {
+              (enemy as any).laserHitTimer = 0.08;
+              this.bus.emitNext(EventType.PROJECTILE_HIT_ENEMY, {
+                projectile: {
+                  damage: 15,
+                  consumed: false,
+                  pendingKill: false,
+                } as any,
+                enemy: eRef,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Tick laser hit timers
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (e.kind === 'enemy' && (e as any).laserHitTimer > 0) {
+        (e as any).laserHitTimer -= dtSec;
       }
     });
 

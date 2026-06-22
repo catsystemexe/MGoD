@@ -143,9 +143,9 @@ vec3 strandBeam(vec2 lp, vec3 color, float hoffset, float hscale,
     // lp.x: -1..1 → mapuj na fake pixel prostor
     float fx = lp.x * 500.0;
     float waveY = sin(mod(fx * hscale / 100.0 + uTime * timescale
-                         + hoffset, PI2)) * 0.25 * vscale;
+                         + hoffset, PI2)) * 0.10 * vscale;
     // Beam je tenký — škáluj Y prostor
-    float curve = 1.0 - abs(lp.y - waveY) * 32.0;
+    float curve = 1.0 - abs(lp.y - waveY) * 55.0;
     float i = clamp(curve, 0.0, 1.0);
     i += clamp((glowSize + curve) / glowSize, 0.0, 1.0) * 0.4;
     return i * color;
@@ -316,7 +316,7 @@ void main() {
     return;
   } else if (uShapeType == 9) {
     float ts  = 3.0;
-    float gl  = 0.12;
+    float gl  = 0.06;
     vec3  c   = vec3(0.0);
 
     c += strandBeam(vLocal, vec3(1.0,0.0,0.0),
