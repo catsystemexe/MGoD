@@ -438,7 +438,7 @@ export function createSdfPass(
       let sizePx = Math.max(1, args.radius) * 4.0;
       if (args.shape === "chevron") sizePx = Math.max(1, args.radius) * 6.0;
       if (args.shape === "thruster") sizePx = Math.max(1, args.radius) * 5.0;
-      if (args.shape === "laser") sizePx = Math.max(1, args.radius) * 1.0;
+      if (args.shape === "laser") sizePx = args.radius * 2.0;
 
       gl.useProgram(prog);
       gl.bindVertexArray(vao);
