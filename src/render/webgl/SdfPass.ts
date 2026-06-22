@@ -333,9 +333,18 @@ void main() {
          0.8452+1.0+sin(uTime)*30.0, 1.2, 0.18,  9.0*ts, gl);
 
     c = clamp(c * 0.25, 0.0, 1.0);  // normalizuj před muzzle
+
+    // Cyan aura — střední vrstva
+    float aura = exp(-abs(vLocal.y) * 35.0);
+    c += vec3(0.2, 0.6, 1.0) * aura * 0.6;
+
+    // Bílé jádro — ostrý střed
+    float core = exp(-abs(vLocal.y) * 120.0);
+    c += vec3(1.0, 1.0, 1.0) * core * 2.5;
+
     c += clamp(muzzleFlash(vLocal), 0.0, 1.0) * 0.5;
 
-    float alpha = clamp(length(c), 0.0, 1.0);
+    float alpha = clamp(length(c) * 0.8, 0.0, 1.0);
     outColor = vec4(clamp(c, vec3(0.0), vec3(1.0)), alpha);
     return;
   } else {
