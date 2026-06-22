@@ -493,6 +493,11 @@ export async function createGame(
           });
         }
 
+        // Mirror W2 (laser) state onto the player entity so the DOM HUD can read it.
+        const w2 = weaponSystem.getW2State();
+        (playerEnt as any).w2 = w2;
+        (playerEnt as any).weapon = w2.active ? "W2" : "W1";
+
         // Laser sleduje pozici lodi
         if (laserEnt) {
           const le = store.get(laserEnt);

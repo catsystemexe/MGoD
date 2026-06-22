@@ -79,6 +79,28 @@ export class WeaponSystem {
   private laserCooldown: number = 0;
   private laserActive: boolean = false;
 
+  // W2 laser timing (single source of truth — also used by getW2State for HUD)
+  private readonly LASER_DURATION = 5.0;
+  private readonly LASER_COOLDOWN = 10.0;
+
+  /**
+   * W2 (laser) state for HUD rendering.
+   * - active:   laser currently firing
+   * - charge01: 0..1 fill fraction. While firing it drains (duration→0);
+   *             while cooling it refills over LASER_COOLDOWN; 1 when ready.
+   */
+  public getW2State(): { active: boolean; charge01: number } {
+    if (this.laserActive) {
+      const f = this.laserDuration / this.LASER_DURATION;
+      return { active: true, charge01: Math.max(0, Math.min(1, f)) };
+    }
+    if (this.laserCooldown > 0) {
+      const f = 1 - this.laserCooldown / this.LASER_COOLDOWN;
+      return { active: false, charge01: Math.max(0, Math.min(1, f)) };
+    }
+    return { active: false, charge01: 1 };
+  }
+
   private emitProjectile(
     weaponTypeId: WeaponTypeId,
     owner: EntityRef,
@@ -133,8 +155,8 @@ export class WeaponSystem {
      );
 
      // W2 LASER — hold mechanic
-     const LASER_DURATION = 5.0;
-     const LASER_COOLDOWN = 10.0;
+     const LASER_DURATION = this.LASER_DURATION;
+     const LASER_COOLDOWN = this.LASER_COOLDOWN;
 
      if (this.laserCooldown > 0) {
        this.laserCooldown -= dtSec;
