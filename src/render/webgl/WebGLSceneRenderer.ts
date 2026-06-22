@@ -737,15 +737,18 @@ export class WebGLSceneRenderer {
         return;
       }
 
-      // Laser — fullscreen horizontal beam
+      // Laser — beam from ship to right edge
       if (kind === "laser") {
-        const laserIx = safeNum(this.logicW / 2, 448);
-        const laserIy = iy;
         if (this.sdfPass) {
+          const laserStartX = ix;
+          const laserEndX   = this.logicW;
+          const laserMidX   = (laserStartX + laserEndX) / 2.0;
+          const laserRadius = (laserEndX - laserStartX) / 2.0;
+
           this.sdfPass.draw({
-            ix:       laserIx,
-            iy:       laserIy,
-            radius:   this.logicW / 2,
+            ix:       laserMidX,
+            iy:       iy,
+            radius:   laserRadius,
             shape:    'laser',
             color:    '#ffffff',
             hpRatio:  1.0,

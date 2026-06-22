@@ -139,11 +139,18 @@ export class WeaponSystem {
      if (this.laserCooldown > 0) {
        this.laserCooldown -= dtSec;
      } else if (this.laserActive) {
-       this.laserDuration -= dtSec;
-       if (this.laserDuration <= 0) {
+       // RMB release → okamžité ukončení
+       if (!actions.fireSecondary) {
          this.laserActive = false;
          this.laserCooldown = LASER_COOLDOWN;
          this.opts?.onLaserEnd?.();
+       } else {
+         this.laserDuration -= dtSec;
+         if (this.laserDuration <= 0) {
+           this.laserActive = false;
+           this.laserCooldown = LASER_COOLDOWN;
+           this.opts?.onLaserEnd?.();
+         }
        }
      } else if (actions.fireSecondary && this.laserCooldown <= 0) {
        this.laserActive = true;

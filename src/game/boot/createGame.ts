@@ -493,6 +493,15 @@ export async function createGame(
           });
         }
 
+        // Laser sleduje pozici lodi
+        if (laserEnt) {
+          const le = store.get(laserEnt);
+          if (le && (le as any).alive) {
+            (le as any).pos.y = playerEnt.pos.y;
+            (le as any).pos.x = playerEnt.pos.x;
+          }
+        }
+
         // â Director must run in Simulation because it emits SPAWN_* (Simulation-owned)
          directorPhase.update(ctx, events as any);
 
