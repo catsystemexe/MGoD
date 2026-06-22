@@ -144,7 +144,8 @@ vec3 strandBeam(vec2 lp, vec3 color, float hoffset, float hscale,
     float fx = lp.x * 500.0;
     float waveY = sin(mod(fx * hscale / 100.0 + uTime * timescale
                          + hoffset, PI2)) * 0.25 * vscale;
-    float curve = 1.0 - abs(lp.y - waveY);
+    // Beam je tenký — škáluj Y prostor
+    float curve = 1.0 - abs(lp.y - waveY) * 8.0;
     float i = clamp(curve, 0.0, 1.0);
     i += clamp((glowSize + curve) / glowSize, 0.0, 1.0) * 0.4;
     return i * color;
@@ -331,9 +332,10 @@ void main() {
     c += strandBeam(vLocal, vec3(1.0,0.0,1.0),
          0.8452+1.0+sin(uTime)*30.0, 1.2, 0.18,  9.0*ts, gl);
 
-    c += clamp(muzzleFlash(vLocal), 0.0, 1.0);
+    c = clamp(c * 0.25, 0.0, 1.0);  // normalizuj před muzzle
+    c += clamp(muzzleFlash(vLocal), 0.0, 1.0) * 0.5;
 
-    float alpha = clamp(length(c) * 0.7, 0.0, 1.0);
+    float alpha = clamp(length(c), 0.0, 1.0);
     outColor = vec4(clamp(c, vec3(0.0), vec3(1.0)), alpha);
     return;
   } else {
