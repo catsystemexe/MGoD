@@ -137,6 +137,36 @@ float sdChevronBody(vec2 p) {
   return inside ? -d : d;
 }
 
+vec3 strandBeam(vec2 lp, vec3 color, float hoffset, float hscale,
+                float vscale, float timescale, float glowSize) {
+    const float PI2 = 6.28318530718;
+    // lp.x: -1..1 → mapuj na fake pixel prostor
+    float fx = lp.x * 500.0;
+    float waveY = sin(mod(fx * hscale / 100.0 + uTime * timescale
+                         + hoffset, PI2)) * 0.25 * vscale;
+    float curve = 1.0 - abs(lp.y - waveY);
+    float i = clamp(curve, 0.0, 1.0);
+    i += clamp((glowSize + curve) / glowSize, 0.0, 1.0) * 0.4;
+    return i * color;
+}
+
+vec3 muzzleFlash(vec2 lp) {
+    // Burst na pravém konci (+X) paprsku
+    vec2 tip = vec2(1.0, 0.0);
+    float theta = atan(tip.y - lp.y, tip.x - lp.x);
+    float len = 0.15 + 0.05 * sin(theta * 20.0
+                + floor(uTime * 20.0) * -35.0);
+    float dx = tip.x - lp.x;
+    float dy = (tip.y - lp.y) * 4.0;
+    float dist = sqrt(dx*dx + dy*dy);
+    float d = max(-0.6, 1.0 - dist / len);
+    return vec3(
+        d * (1.0 + sin(theta*10.0  + floor(uTime*20.0)*10.77)  * 0.5),
+        d * (1.0 - cos(theta*8.0   - floor(uTime*20.0)*8.77)   * 0.5),
+        d * (1.0 - sin(theta*6.0   - floor(uTime*20.0)*134.77) * 0.5)
+    );
+}
+
 vec4 thrusterEffect(vec2 pos) {
   const float PI2 = 6.28318530718;
   vec4 col = vec4(0.0);
@@ -284,21 +314,27 @@ void main() {
     outColor = vec4(thr.rgb, tAlpha);
     return;
   } else if (uShapeType == 9) {
-    // LASER BEAM — fullscreen horizontal rainbow
-    float beam = 1.0 / (abs(vLocal.y) * 60.0 + 0.5);
-    beam = clamp(beam, 0.0, 1.0);
+    float ts  = 3.0;
+    float gl  = 0.12;
+    vec3  c   = vec3(0.0);
 
-    float taper = smoothstep(-1.0, 0.2, vLocal.x);
+    c += strandBeam(vLocal, vec3(1.0,0.0,0.0),
+         0.7934+1.0+sin(uTime)*30.0, 1.0, 0.16, 10.0*ts, gl);
+    c += strandBeam(vLocal, vec3(0.0,1.0,0.0),
+         0.645 +1.0+sin(uTime)*30.0, 1.5, 0.20, 10.3*ts, gl);
+    c += strandBeam(vLocal, vec3(0.0,0.0,1.0),
+         0.735 +1.0+sin(uTime)*30.0, 1.3, 0.19,  8.0*ts, gl);
+    c += strandBeam(vLocal, vec3(1.0,1.0,0.0),
+         0.9245+1.0+sin(uTime)*30.0, 1.6, 0.14, 12.0*ts, gl);
+    c += strandBeam(vLocal, vec3(0.0,1.0,1.0),
+         0.7234+1.0+sin(uTime)*30.0, 1.9, 0.23, 14.0*ts, gl);
+    c += strandBeam(vLocal, vec3(1.0,0.0,1.0),
+         0.8452+1.0+sin(uTime)*30.0, 1.2, 0.18,  9.0*ts, gl);
 
-    const float PI2 = 6.28318530718;
-    float hue = vLocal.x * 0.5 + uTime * 0.3;
-    vec3 rainbow = 0.5 + 0.5 * cos(PI2 * (vec3(hue) + vec3(0.0, 0.33, 0.67)));
+    c += clamp(muzzleFlash(vLocal), 0.0, 1.0);
 
-    float core = smoothstep(0.15, 0.0, abs(vLocal.y));
-    vec3 col = mix(rainbow, vec3(1.0), core * 0.8);
-
-    float alpha = beam * taper;
-    outColor = vec4(col * alpha, alpha);
+    float alpha = clamp(length(c) * 0.7, 0.0, 1.0);
+    outColor = vec4(clamp(c, vec3(0.0), vec3(1.0)), alpha);
     return;
   } else {
     // TRIANGLE — clean equilateral pointing +X
