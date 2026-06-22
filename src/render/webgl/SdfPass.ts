@@ -147,7 +147,7 @@ vec3 strandBeam(vec2 lp, vec3 color, float hoffset, float hscale,
     // Beam je tenký — škáluj Y prostor
     float curve = 1.0 - abs(lp.y - waveY) * 55.0;
     float i = clamp(curve, 0.0, 1.0);
-    i += clamp((glowSize + curve) / glowSize, 0.0, 1.0) * 0.4;
+    i += clamp((glowSize + curve) / glowSize, 0.0, 1.0) * 0.15;
     return i * color;
 }
 
@@ -316,7 +316,7 @@ void main() {
     return;
   } else if (uShapeType == 9) {
     float ts  = 3.0;
-    float gl  = 0.06;
+    float gl  = 0.02;
     vec3  c   = vec3(0.0);
 
     c += strandBeam(vLocal, vec3(1.0,0.0,0.0),
