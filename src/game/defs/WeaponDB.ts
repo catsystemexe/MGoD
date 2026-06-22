@@ -8,7 +8,7 @@ export const WEAPON_DB: WeaponDB = {
     cooldownSec: 0.12,
     spriteAnimId: "projectile.w1",
     projectile: {
-      speed: 700,
+      speed: 1100,
       ttlSec: 3,
       damage: 3,
       radius: 2,

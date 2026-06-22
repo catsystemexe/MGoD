@@ -216,8 +216,8 @@ void main() {
     t = atan(q.y, q.x) / TAU + 0.5;
   } else if (uShapeType == 5) {
     // BOLT (projectile): horizontal capsule with a sharp core. Points +X.
-    float r = 0.18;
-    float len = 0.45;
+    float r = 0.09;     // tenčí
+    float len = 0.68;   // delší → špičatý laser bolt
     vec2 q = vec2(abs(p.x) - len, p.y);
     d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     t = 0.5 + p.x * 0.4;

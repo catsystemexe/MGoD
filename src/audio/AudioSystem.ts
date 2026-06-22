@@ -89,7 +89,7 @@ class ToneAudioSystem implements AudioSystem {
       this.fireSynth = new PolySynth(Synth, {
         oscillator: { type: "triangle" },
         envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.03 },
-        volume: -10,
+        volume: -60,
       }).toDestination();
 
       // HIT — short square "tick"; also poly for rapid hits.
