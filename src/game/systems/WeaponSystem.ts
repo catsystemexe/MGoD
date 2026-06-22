@@ -70,8 +70,14 @@ export class WeaponSystem {
       onSpawnProjectile?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onTracer?: (p: { x: number; y: number; dx: number; dy: number }) => void;
       onConsumeBomb?: () => void; // called when a bomb is actually fired (decrement inventory)
+      onLaserStart?: (args: { originY: number }) => void;
+      onLaserEnd?: () => void;
     },
   ) {}
+
+  private laserDuration: number = 0;
+  private laserCooldown: number = 0;
+  private laserActive: boolean = false;
 
   private emitProjectile(
     weaponTypeId: WeaponTypeId,
@@ -126,12 +132,26 @@ export class WeaponSystem {
        () => this.emitProjectile(primaryId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
      );
 
-     this.st.cdSecondary = tryFire(
-       !!actions.fireSecondary,
-       this.st.cdSecondary,
-       Number(secondary?.cooldownSec ?? 0.25),
-       () => this.emitProjectile(secondaryId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
-     );
+     // W2 LASER — hold mechanic
+     const LASER_DURATION = 5.0;
+     const LASER_COOLDOWN = 10.0;
+
+     if (this.laserCooldown > 0) {
+       this.laserCooldown -= dtSec;
+     } else if (this.laserActive) {
+       this.laserDuration -= dtSec;
+       if (this.laserDuration <= 0) {
+         this.laserActive = false;
+         this.laserCooldown = LASER_COOLDOWN;
+         this.opts?.onLaserEnd?.();
+       }
+     } else if (actions.fireSecondary && this.laserCooldown <= 0) {
+       this.laserActive = true;
+       this.laserDuration = LASER_DURATION;
+       this.opts?.onLaserStart?.({
+         originY: snap.shipPos.y,
+       });
+     }
 
      // Gate bomb on inventory: no bomb -> neither emit NOR burn cooldown.
      const hasBomb = Number(snap.bombs ?? 0) > 0;

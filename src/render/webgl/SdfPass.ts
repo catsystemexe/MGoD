@@ -31,6 +31,7 @@ const SHAPE_ID: Record<string, number> = {
   triangle: 6,
   chevron: 7,
   thruster: 8,
+  laser: 9,
 };
 
 // Bounded-quad vertex shader: identical world->screen transform to the main
@@ -282,6 +283,23 @@ void main() {
     float tAlpha = clamp(thr.a * uThrust, 0.0, 2.0);
     outColor = vec4(thr.rgb, tAlpha);
     return;
+  } else if (uShapeType == 9) {
+    // LASER BEAM — fullscreen horizontal rainbow
+    float beam = 1.0 / (abs(vLocal.y) * 60.0 + 0.5);
+    beam = clamp(beam, 0.0, 1.0);
+
+    float taper = smoothstep(-1.0, 0.2, vLocal.x);
+
+    const float PI2 = 6.28318530718;
+    float hue = vLocal.x * 0.5 + uTime * 0.3;
+    vec3 rainbow = 0.5 + 0.5 * cos(PI2 * (vec3(hue) + vec3(0.0, 0.33, 0.67)));
+
+    float core = smoothstep(0.15, 0.0, abs(vLocal.y));
+    vec3 col = mix(rainbow, vec3(1.0), core * 0.8);
+
+    float alpha = beam * taper;
+    outColor = vec4(col * alpha, alpha);
+    return;
   } else {
     // TRIANGLE — clean equilateral pointing +X
     vec2 q = vec2(-p.y, p.x);
@@ -420,6 +438,7 @@ export function createSdfPass(
       let sizePx = Math.max(1, args.radius) * 4.0;
       if (args.shape === "chevron") sizePx = Math.max(1, args.radius) * 6.0;
       if (args.shape === "thruster") sizePx = Math.max(1, args.radius) * 5.0;
+      if (args.shape === "laser") sizePx = Math.max(1, args.radius) * 1.0;
 
       gl.useProgram(prog);
       gl.bindVertexArray(vao);

@@ -737,6 +737,26 @@ export class WebGLSceneRenderer {
         return;
       }
 
+      // Laser — fullscreen horizontal beam
+      if (kind === "laser") {
+        const laserIx = safeNum(this.logicW / 2, 448);
+        const laserIy = iy;
+        if (this.sdfPass) {
+          this.sdfPass.draw({
+            ix:       laserIx,
+            iy:       laserIy,
+            radius:   this.logicW / 2,
+            shape:    'laser',
+            color:    '#ffffff',
+            hpRatio:  1.0,
+            time:     tSec,
+            hitFlash: 0,
+            thrust:   0,
+          });
+        }
+        return;
+      }
+
       // 0) SDF vector shape (highest priority — short-circuits all other paths).
       // Skipped entirely if the pass failed to compile (this.sdfPass === null).
       const sdf = (e as any).render?.sdf;

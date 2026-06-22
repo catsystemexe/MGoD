@@ -357,10 +357,26 @@ export async function createGame(
     weaponsCfg = WEAPONS_FALLBACK;
   }
 
+        let laserEnt: any = null;
         const weaponSystem = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, world as any, {
           onSpawnProjectile: (p: any) => { audio?.noteFire(); },
           onTracer: (_p: any) => {},
           onConsumeBomb: () => { playerEnt.bombs = Math.max(0, Number(playerEnt.bombs ?? 0) - 1); audio?.noteBomb(); },
+          onLaserStart: (args: { originY: number }) => {
+            laserEnt = store.spawn((e: any) => {
+              e.kind   = 'laser';
+              e.pos    = { x: 0, y: args.originY };
+              e.render = { sdf: { shape: 'laser', color: '#ffffff', size: 1 } };
+              e.radius = LOGIC_W / 2;
+              e.ttl    = 6.0;
+            });
+          },
+          onLaserEnd: () => {
+            if (laserEnt) {
+              store.markKill(laserEnt);
+              laserEnt = null;
+            }
+          },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
