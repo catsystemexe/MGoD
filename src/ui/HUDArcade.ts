@@ -44,12 +44,9 @@ type HudMode = "PLAY" | "TITLE" | "GAME_OVER";
 
 // --- Fonts ----------------------------------------------------------------
 const LABEL_FONT = "'Orbitron', sans-serif";
-// Bitcount for digits when available; Share Tech Mono is the retro fallback.
-const NUM_FONT = "'Bitcount Single', 'Share Tech Mono', monospace";
 
 // --- Palette --------------------------------------------------------------
 const COL_CYAN = "#00ffee";
-const COL_DIM = "#333344";
 const COL_LABEL = "#aaaacc";
 const COL_ORANGE = "#ff6600";
 
@@ -61,35 +58,29 @@ function mkChild(parent: HTMLElement, id: string, css: string): HTMLDivElement {
   return d;
 }
 
-function pad(n: number, len: number): string {
-  return String(Math.max(0, n | 0)).padStart(len, "0");
-}
-
-// Energy as a block bar: filled (█) cyan, empty (░) dim.
-function energyMarkup(n: number, max: number): string {
-  const m = Math.max(1, max | 0);
-  const on = Math.max(0, Math.min(m, n | 0));
-  const filled = "█".repeat(on);
-  const empty = "░".repeat(Math.max(0, m - on));
-  return (
-    `<span style="font-family:${LABEL_FONT};font-size:11px;letter-spacing:1px;color:${COL_LABEL}">ENERGY</span> ` +
-    `<span style="font-family:${NUM_FONT};color:${COL_CYAN}">${filled}</span>` +
-    `<span style="font-family:${NUM_FONT};color:${COL_DIM}">${empty}</span>`
-  );
-}
-
 // --- Weapon icons ---------------------------------------------------------
-// PNG placeholder: returns null until art exists; renderer falls back to canvas.
-function loadWeaponIcon(_name: string): HTMLImageElement | null {
-  return null;
+// PNG loader with cache; returns null until the image has loaded (callers fall
+// back to canvas drawing on the first frame, then use the PNG once cached).
+const _iconCache: Record<string, HTMLImageElement> = {};
+const _iconTried: Record<string, boolean> = {};
+
+function loadWeaponIcon(name: string): HTMLImageElement | null {
+  if (_iconCache[name]) return _iconCache[name];
+  // Only kick off one request per name (avoids per-frame spam on missing PNGs).
+  if (_iconTried[name]) return null;
+  _iconTried[name] = true;
+  const img = new Image();
+  img.src = `/ui/${name}`;
+  img.onload = () => { _iconCache[name] = img; };
+  return null; // první frame = canvas fallback, pak PNG
 }
 
 function drawW1(ctx: CanvasRenderingContext2D, w: number, h: number, active: boolean): void {
   ctx.clearRect(0, 0, w, h);
-  const png = loadWeaponIcon("w1");
-  if (png) {
-    ctx.globalAlpha = active ? 1 : 0.4;
-    ctx.drawImage(png, 0, 0, w, h);
+  const png = loadWeaponIcon("icon-w1.png");
+  if (png && png.complete) {
+    ctx.globalAlpha = active ? 1.0 : 0.35;
+    ctx.drawImage(png, 1, 1, w - 2, h - 2);
     ctx.globalAlpha = 1;
     return;
   }
@@ -116,10 +107,10 @@ function drawW2(
   phase: number,
 ): void {
   ctx.clearRect(0, 0, w, h);
-  const png = loadWeaponIcon("w2");
-  if (png) {
-    ctx.globalAlpha = active ? 1 : 0.4;
-    ctx.drawImage(png, 0, 0, w, h);
+  const png = loadWeaponIcon("icon-w2.png");
+  if (png && png.complete) {
+    ctx.globalAlpha = active ? 1.0 : 0.35;
+    ctx.drawImage(png, 1, 1, w - 2, h - 2);
     ctx.globalAlpha = 1;
     return;
   }
@@ -210,8 +201,22 @@ export function createHUDArcade(root: HTMLElement) {
     "width:180px;height:0;border-top:1px solid rgba(0,255,238,0.25);margin:1px 0;",
   );
 
-  // weapons row: W1 icon | W2 icon | bomb
-  const weapons = mkChild(panel, "hudWeapons", "display:flex;align-items:center;gap:12px;");
+  // weapons row: W1 icon | W2 icon | bomb (relative, so the box frame can overlay)
+  const weapons = mkChild(
+    panel,
+    "hudWeapons",
+    "position:relative;display:flex;align-items:center;gap:12px;padding:6px 10px;",
+  );
+
+  // PNG frame behind the weapon icons
+  const boxFrame = document.createElement("img");
+  boxFrame.id = "hudWBox";
+  boxFrame.src = "/ui/w_icon_box.png";
+  boxFrame.style.cssText =
+    "position:absolute;left:0;top:0;width:100%;height:100%;z-index:0;" +
+    "filter:drop-shadow(0 0 2px #00ffee);opacity:0.6;pointer-events:none;";
+  boxFrame.onerror = () => { boxFrame.style.display = "none"; };
+  weapons.appendChild(boxFrame);
 
   function mkIconCanvas(id: string): HTMLCanvasElement {
     const c = document.createElement("canvas");
@@ -219,7 +224,7 @@ export function createHUDArcade(root: HTMLElement) {
     // 2× backing store for crisp lines; CSS size is 1×.
     c.width = 56;
     c.height = 28;
-    c.style.cssText = "width:28px;height:14px;display:block;";
+    c.style.cssText = "position:relative;z-index:1;width:28px;height:14px;display:block;";
     weapons.appendChild(c);
     const ctx = c.getContext("2d");
     if (ctx) ctx.scale(2, 2);
@@ -230,7 +235,8 @@ export function createHUDArcade(root: HTMLElement) {
   const bomb = mkChild(
     weapons,
     "hudBomb",
-    `font-size:14px;color:${COL_ORANGE};text-shadow:0 0 6px rgba(255,102,0,0.5);`,
+    "position:relative;z-index:1;display:flex;align-items:center;" +
+      `font-size:14px;color:${COL_ORANGE};text-shadow:0 0 6px rgba(255,102,0,0.5);`,
   );
 
   // W2 cooldown bar row
@@ -292,17 +298,21 @@ export function createHUDArcade(root: HTMLElement) {
   }
   applyMode();
 
-  // lives as mini-rocket chevrons (▶); cyan = alive, dim = lost. Max 3 shown.
+  // lives as ship PNG icons; bright+glow = alive, dimmed/grayscale = lost. Max 3.
   function renderLives(n: number) {
-    const total = 3;
-    const alive = Math.max(0, Math.min(total, n | 0));
-    let html = "";
-    for (let i = 0; i < total; i++) {
-      const col = i < alive ? COL_CYAN : COL_DIM;
-      const glow = i < alive ? "text-shadow:0 0 6px rgba(0,255,238,0.6);" : "";
-      html += `<span style="color:${col};${glow}">▶</span>`;
+    const shipSrc = "/ui/ship_icon.png";
+    const lifeCount = Math.max(0, Math.min(3, n | 0));
+    let livesHtml = "";
+    for (let i = 0; i < 3; i++) {
+      const alive = i < lifeCount;
+      livesHtml += `<img src="${shipSrc}"
+        style="width:32px;height:32px;object-fit:contain;
+        filter:${alive
+          ? "brightness(1) drop-shadow(0 0 4px #00ffee)"
+          : "brightness(0.2) grayscale(1)"};
+        margin-right:4px;">`;
     }
-    refs.lives.innerHTML = html;
+    refs.lives.innerHTML = livesHtml;
   }
 
   // W2 cooldown fill color by charge; rainbow while firing.
@@ -341,16 +351,43 @@ export function createHUDArcade(root: HTMLElement) {
     },
 
     update: (p: PlayerLike, s: SessionLike, waveText?: string) => {
-      const e = (p.energy ?? 0) | 0;
-      const em = (p.energyMax ?? 5) | 0;
-
       renderLives((s.lives ?? 0) | 0);
 
-      refs.wave.textContent = `WAVE ${waveText ?? pad((s.wave ?? 0) | 0, 2)}`;
+      // wave: PNG label + zero-padded number
+      const waveStr = waveText ?? String((s.wave ?? 0) | 0).padStart(2, "0");
+      refs.wave.innerHTML =
+        `<img src="/ui/wave_icon.png" onerror="this.style.display='none'"
+          style="height:18px;filter:drop-shadow(0 0 3px #aaaacc);margin-bottom:2px;display:block;">
+        <div style="font-family:'Orbitron',sans-serif;font-size:18px;font-weight:700;` +
+        `letter-spacing:4px;color:#aaaacc;text-shadow:0 0 6px #aaaacc;">${waveStr}</div>`;
+
+      // score: PNG label + zero-padded number
+      const scoreStr = String(Math.floor(s.score ?? 0)).padStart(6, "0");
       refs.score.innerHTML =
-        `<span style="font-family:${LABEL_FONT};font-size:11px;letter-spacing:1px;color:${COL_LABEL}">SCORE</span> ` +
-        `<span style="font-family:${NUM_FONT};color:#ffffff">${pad((s.score ?? 0) | 0, 6)}</span>`;
-      refs.energy.innerHTML = energyMarkup(e, em);
+        `<img src="/ui/score_icon.png" onerror="this.style.display='none'"
+          style="height:18px;filter:drop-shadow(0 0 3px #00ffee);margin-bottom:2px;display:block;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;letter-spacing:3px;` +
+        `color:#ffffff;text-shadow:0 0 8px #00ffee,0 0 2px #ffffff;">${scoreStr}</div>`;
+
+      // energy: PNG label + segmented bar
+      const energyVal = p.energy ?? 0;
+      const energyMax = p.energyMax ?? 5;
+      const energyRatio = energyMax > 0 ? energyVal / energyMax : 0;
+      const totalSegs = 6;
+      const filledSegs = Math.round(energyRatio * totalSegs);
+      let segsHtml = "";
+      for (let i = 0; i < totalSegs; i++) {
+        const filled = i < filledSegs;
+        segsHtml +=
+          `<div style="width:28px;height:14px;` +
+          `background:${filled ? "#00ffee" : "rgba(0,255,238,0.12)"};` +
+          `border:1px solid rgba(0,255,238,0.35);border-radius:2px;` +
+          `box-shadow:${filled ? "0 0 6px #00ffee" : "none"};"></div>`;
+      }
+      refs.energy.innerHTML =
+        `<img src="/ui/energy_icon.png" onerror="this.style.display='none'"
+          style="height:18px;filter:drop-shadow(0 0 3px #00ffee);margin-bottom:2px;display:block;">
+        <div style="display:flex;gap:3px;margin-top:2px;">${segsHtml}</div>`;
 
       // weapon icons (animated)
       iconPhase += 0.15;
@@ -360,10 +397,14 @@ export function createHUDArcade(root: HTMLElement) {
       if (ctx1) drawW1(ctx1, 28, 14, activeW === "W1");
       if (ctx2) drawW2(ctx2, 28, 14, activeW === "W2", iconPhase);
 
-      // bomb count
+      // bomb: PNG icon + count (icon degrades to count-only if PNG missing)
       const b = Math.max(0, (p.bombs ?? 0) | 0);
       refs.bomb.innerHTML =
-        `◆<span style="font-family:${NUM_FONT};">×${b}</span>`;
+        `<img src="/ui/icon-bomb.png" onerror="this.style.display='none'"
+          style="width:24px;height:24px;filter:drop-shadow(0 0 3px #ff6600);` +
+        `opacity:${b > 0 ? 1 : 0.25};vertical-align:middle;">` +
+        `<span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff6600;` +
+        `text-shadow:0 0 6px #ff6600;margin-left:4px;">×${b}</span>`;
 
       // W2 cooldown bar
       const w2s = p.w2 ?? {};
