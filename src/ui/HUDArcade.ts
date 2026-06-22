@@ -168,6 +168,16 @@ export function createHUDArcade(root: HTMLElement) {
     `font-family:${LABEL_FONT};text-shadow:0 0 6px rgba(0,255,238,0.35),0 2px 0 rgba(0,0,0,0.7);`;
   root.appendChild(layer);
 
+  layer.style.transformOrigin = "top left";
+  function scaleHud() {
+    const scaleX = window.innerWidth / 1280;
+    const scaleY = window.innerHeight / 720;
+    const scale = Math.min(scaleX, scaleY, 1.0);
+    layer.style.transform = `scale(${scale})`;
+  }
+  window.addEventListener("resize", scaleHud);
+  scaleHud();
+
   // ---- HUD blocks container (toggled by mode) ----
   // Each block = a PNG frame (defines the box) with dynamic content overlaid
   // absolutely inside it. Pixel offsets below are estimates, tuned to the art.
@@ -188,11 +198,11 @@ export function createHUDArcade(root: HTMLElement) {
 
   // ===== ENERGY block (top-left) =====
   const energyBlock = mkChild(panel, "hudEnergyBlock", "position:absolute;left:10px;top:8px;");
-  const energyFrame = mkFrame(energyBlock, "hudEnergyFrame", "/ui/energy_icon.png", 132);
+  const energyFrame = mkFrame(energyBlock, "hudEnergyFrame", "/ui/energy_icon.png", 66);
   const energy = mkChild(
     energyFrame,
     "hudEnergy",
-    "position:absolute;left:18px;bottom:38px;display:flex;gap:4px;line-height:normal;",
+    "position:absolute;left:9px;bottom:19px;display:flex;gap:2px;line-height:normal;",
   );
   // lives below the energy frame (outside the box)
   const lives = mkChild(
@@ -203,12 +213,12 @@ export function createHUDArcade(root: HTMLElement) {
 
   // ===== SCORE block (top-right) =====
   const scoreBlock = mkChild(panel, "hudScoreBlock", "position:absolute;right:20px;top:8px;");
-  const scoreFrame = mkFrame(scoreBlock, "hudScoreFrame", "/ui/score_icon.png", 132);
+  const scoreFrame = mkFrame(scoreBlock, "hudScoreFrame", "/ui/score_icon.png", 66);
   const score = mkChild(
     scoreFrame,
     "hudScore",
-    "position:absolute;right:24px;bottom:32px;line-height:normal;" +
-      "font-family:'Share Tech Mono',monospace;font-size:32px;letter-spacing:4px;" +
+    "position:absolute;right:12px;bottom:16px;line-height:normal;" +
+      "font-family:'Share Tech Mono',monospace;font-size:16px;letter-spacing:2px;" +
       `color:#ffffff;text-shadow:0 0 8px ${COL_CYAN};`,
   );
 
@@ -218,18 +228,18 @@ export function createHUDArcade(root: HTMLElement) {
     "hudWaveBlock",
     "position:absolute;left:50%;top:8px;transform:translateX(-50%);",
   );
-  const waveFrame = mkFrame(waveBlock, "hudWaveFrame", "/ui/wave_icon.png", 68);
+  const waveFrame = mkFrame(waveBlock, "hudWaveFrame", "/ui/wave_icon.png", 34);
   const wave = mkChild(
     waveFrame,
     "hudWave",
-    "position:absolute;right:28px;top:50%;transform:translateY(-50%);line-height:normal;" +
-      `font-family:${LABEL_FONT};font-size:22px;font-weight:700;` +
+    "position:absolute;right:14px;top:50%;transform:translateY(-50%);line-height:normal;" +
+      `font-family:${LABEL_FONT};font-size:11px;font-weight:700;` +
       `color:#ffffff;text-shadow:0 0 6px ${COL_CYAN};`,
   );
 
   // ===== WEAPON block (bottom-left) =====
   const weaponBlock = mkChild(panel, "hudWeaponBlock", "position:absolute;left:10px;bottom:10px;");
-  const weaponFrame = mkFrame(weaponBlock, "hudWeaponFrame", "/ui/w_icon_box.png", 198);
+  const weaponFrame = mkFrame(weaponBlock, "hudWeaponFrame", "/ui/w_icon_box.png", 99);
 
   // W1/W2 icon canvases positioned to the right of the PNG's W1/W2 labels
   function mkIconCanvas(id: string, leftPx: number, topPx: number): HTMLCanvasElement {
@@ -240,36 +250,33 @@ export function createHUDArcade(root: HTMLElement) {
     );
     const c = document.createElement("canvas");
     c.id = id;
-    // 2× backing store for crisp lines; CSS size is 1×.
-    c.width = 56;
-    c.height = 28;
-    c.style.cssText = "width:28px;height:14px;display:block;";
+    c.width = 28;
+    c.height = 14;
+    c.style.cssText = "width:14px;height:7px;display:block;";
     wrap.appendChild(c);
-    const ctx = c.getContext("2d");
-    if (ctx) ctx.scale(2, 2);
     return c;
   }
-  const w1 = mkIconCanvas("hudW1", 90, 55);
-  const w2 = mkIconCanvas("hudW2", 90, 100);
+  const w1 = mkIconCanvas("hudW1", 45, 28);
+  const w2 = mkIconCanvas("hudW2", 45, 50);
 
   // W2 cooldown bar — overlays the "W2" label inside the PNG frame
   const cdTrack = mkChild(
     weaponFrame,
     "hudCdTrack",
-    "position:absolute;left:28px;top:108px;width:48px;height:6px;" +
-      "background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden;",
+    "position:absolute;left:14px;top:54px;width:24px;height:3px;" +
+      "background:rgba(255,255,255,0.12);border-radius:1px;overflow:hidden;",
   );
   const cdFill = mkChild(
     cdTrack,
     "hudCdFill",
-    `height:100%;width:0%;background:${COL_CYAN};box-shadow:0 0 6px ${COL_CYAN};transition:width 0.1s linear;`,
+    `height:100%;width:0%;background:${COL_CYAN};box-shadow:0 0 4px ${COL_CYAN};transition:width 0.1s linear;`,
   );
 
   // bomb row inside the weapon frame
   const bomb = mkChild(
     weaponFrame,
     "hudBomb",
-    "position:absolute;left:90px;top:145px;display:flex;align-items:center;gap:6px;line-height:normal;",
+    "position:absolute;left:45px;top:73px;display:flex;align-items:center;gap:3px;line-height:normal;",
   );
 
   // ---- CRT scanline overlay over the HUD ----
@@ -321,9 +328,9 @@ export function createHUDArcade(root: HTMLElement) {
     for (let i = 0; i < 3; i++) {
       const alive = i < lifeCount;
       livesHtml += `<img src="${shipSrc}" onerror="this.style.display='none'"
-        style="height:32px;width:auto;display:block;
+        style="height:16px;width:auto;display:block;
         filter:${alive
-          ? "brightness(1) drop-shadow(0 0 4px #00ffee)"
+          ? "brightness(1) drop-shadow(0 0 2px #00ffee)"
           : "brightness(0.2) grayscale(1)"};">`;
     }
     refs.lives.innerHTML = livesHtml;
@@ -381,10 +388,10 @@ export function createHUDArcade(root: HTMLElement) {
       for (let i = 0; i < totalSegs; i++) {
         const filled = i < filledSegs;
         segsHtml +=
-          `<div style="width:24px;height:18px;` +
+          `<div style="width:12px;height:9px;` +
           `background:${filled ? "#00ffee" : "rgba(0,255,238,0.12)"};` +
           `border:1px solid rgba(0,255,238,0.4);` +
-          `box-shadow:${filled ? "0 0 6px #00ffee" : "none"};"></div>`;
+          `box-shadow:${filled ? "0 0 4px #00ffee" : "none"};"></div>`;
       }
       refs.energy.innerHTML = segsHtml;
 
@@ -393,17 +400,17 @@ export function createHUDArcade(root: HTMLElement) {
       const activeW = p.weapon ?? "W1";
       const ctx1 = refs.w1.getContext("2d");
       const ctx2 = refs.w2.getContext("2d");
-      if (ctx1) drawW1(ctx1, 28, 14, activeW === "W1");
-      if (ctx2) drawW2(ctx2, 28, 14, activeW === "W2", iconPhase);
+      if (ctx1) drawW1(ctx1, 14, 7, activeW === "W1");
+      if (ctx2) drawW2(ctx2, 14, 7, activeW === "W2", iconPhase);
 
       // bomb: PNG icon + count (icon degrades to count-only if PNG missing)
       const b = Math.max(0, (p.bombs ?? 0) | 0);
       refs.bomb.innerHTML =
         `<img src="/ui/icon-bomb.png" onerror="this.style.display='none'"
-          style="height:24px;width:auto;display:block;filter:drop-shadow(0 0 3px #ff6600);` +
+          style="height:12px;width:auto;display:block;filter:drop-shadow(0 0 2px #ff6600);` +
         `opacity:${b > 0 ? 1 : 0.25};">` +
-        `<span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff6600;` +
-        `text-shadow:0 0 6px #ff6600;">×${b}</span>`;
+        `<span style="font-family:'Share Tech Mono',monospace;font-size:7px;color:#ff6600;` +
+        `text-shadow:0 0 4px #ff6600;">×${b}</span>`;
 
       // W2 cooldown bar
       const w2s = p.w2 ?? {};
