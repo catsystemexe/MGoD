@@ -5,7 +5,8 @@ export type EnemyTypeId = string;
 
 // OPTIONAL: signed-distance-field shape (vector, GPU-evaluated). New render path
 // alongside glyph/proc/sprite. shape selects a primitive in SdfPass' fragment shader.
-export type SdfShape = "arrow" | "orb" | "crown" | "mandala" | "sigil";
+// Must match SHAPE_ID keys in src/render/webgl/SdfPass.ts
+export type SdfShape = "arrow" | "orb" | "crown" | "mandala" | "sigil" | "bolt" | "triangle" | "chevron" | "thruster" | "laser";
 
 export interface SdfRenderDef {
   shape: SdfShape;
@@ -13,7 +14,11 @@ export interface SdfRenderDef {
   size?: number; // radius multiplier, default 1.0
 }
 
-const SDF_SHAPES: ReadonlySet<string> = new Set(["arrow", "orb", "crown", "mandala", "sigil"]);
+// Must match SHAPE_ID keys in src/render/webgl/SdfPass.ts
+const SDF_SHAPES: ReadonlySet<string> = new Set([
+  "arrow", "orb", "crown", "mandala", "sigil",
+  "bolt", "triangle", "chevron", "thruster", "laser",
+]);
 
 export interface EnemyRenderDef {
   // OPTIONAL: base color (fallback)
@@ -220,7 +225,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
           ...(ssize !== undefined ? { size: ssize } : {}),
         };
       } else {
-        console.warn("[EnemyDefs] Invalid sdf (shape must be one of arrow/orb/crown/mandala/sigil) for", id, "value:", sdfRaw);
+        console.warn("[EnemyDefs] Invalid sdf (shape must be one of arrow/orb/crown/mandala/sigil/bolt/triangle/chevron/thruster/laser) for", id, "value:", sdfRaw);
       }
     }
 
