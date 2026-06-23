@@ -4,6 +4,12 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import { EntityStore } from "../../engine/ecs/EntityStore";
+
+// Capacity guard: cosmetic particles must never push the shared EntityStore to
+// overflow (spawn() throws -> hard crash). At >=85% pool pressure we silently
+// skip particle/fx spawns. Gameplay (HP, kill, score, events) is unaffected.
+const POOL_GUARD = 0.85;
+
 export type DamageRules = {
   projectileHitEnemyDamage: number;
   playerHitEnemyDamage: number;
@@ -17,6 +23,11 @@ export class DamageSystem<T extends BaseEntity> {
     private readonly store: EntityStore<T>,
     private readonly rules: DamageRules,
   ) {}
+
+  /** True while the shared pool has headroom for cosmetic particle/fx spawns. */
+  private canSpawnParticle(): boolean {
+    return this.store.aliveCount() < this.store.getCapacity() * POOL_GUARD;
+  }
 
   update(eventsOverride?: any[]): void {
     const phase = (this.bus as any).getCurrentPhase?.();
@@ -65,6 +76,7 @@ export class DamageSystem<T extends BaseEntity> {
             const spread = 0.45;
 
             for (let i = 0; i < count; i++) {
+              if (!this.canSpawnParticle()) break; // pool hot -> skip remaining shards
               const a = (Math.random() * 2 - 1) * spread;
               const ca = Math.cos(a), sa = Math.sin(a);
 
@@ -234,22 +246,25 @@ if (typeof (this.store as any).spawn === "function" && ent?.pos) {
       : "#ffffff";
 
   // core flash (short)
-  (this.store as any).spawn((p: any) => {
-    p.kind = "particle";
-    p.pos = { x: ex, y: ey };
-    p.posPrev = { x: ex, y: ey };
-    p.vel = { x: 0, y: 0 };
-    p.ttl = 0.10;
-    p.pendingKill = false;
-    p.size = 10;
-    p.render = { color: baseCol };
-  });
+  if (this.canSpawnParticle()) {
+    (this.store as any).spawn((p: any) => {
+      p.kind = "particle";
+      p.pos = { x: ex, y: ey };
+      p.posPrev = { x: ex, y: ey };
+      p.vel = { x: 0, y: 0 };
+      p.ttl = 0.10;
+      p.pendingKill = false;
+      p.size = 10;
+      p.render = { color: baseCol };
+    });
+  }
 
   // burst shards
   const count = 18;
   const baseSpeed = 220;
 
   for (let i = 0; i < count; i++) {
+    if (!this.canSpawnParticle()) break; // pool hot -> skip remaining shards
     const ang = (i / count) * Math.PI * 2;
     const jitter = (Math.random() * 2 - 1) * 0.25;
     const a = ang + jitter;

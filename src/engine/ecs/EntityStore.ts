@@ -96,6 +96,19 @@ export class EntityStore<T extends BaseEntity> {
     return c;
   }
 
+  /**
+   * O(1) occupied-slot count = capacity - free slots.
+   * Counts alive AND marked-for-kill entities (slots not yet released by cleanup),
+   * which is exactly the live pool pressure relevant to spawn capacity guards.
+   */
+  aliveCount(): number {
+    return this.capacity - this.freeList.length;
+  }
+
+  getCapacity(): number {
+    return this.capacity;
+  }
+
   private makeEmptyEntity(): T {
     return {
       id: 0,
