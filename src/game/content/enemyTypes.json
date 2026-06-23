@@ -152,6 +152,19 @@
           { "id": "node.eye", "dx": 0, "dy": 0, "color": "#ffffff", "alpha": 0.75 }
         ]
       }
+    },
+
+    {
+      "id": "sniper_aimed",
+      "hp": 2,
+      "radius": 12,
+      "scoreOnKill": 250,
+      "behaviorPresetId": "sine.sniper",
+      "attackProfileId": "aimed_slow",
+      "render": {
+        "color": "#aa44ff",
+        "sdf": { "shape": "chevron", "size": 1.3 }
+      }
     }
   ]
 }
