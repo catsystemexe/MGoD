@@ -21,6 +21,16 @@
       "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 16, "slopeY": 0 }
     },
     {
+      "id": "wave.sniper",
+      "startSec": 8,
+      "durationSec": 14,
+      "spawnEverySec": 2.0,
+      "maxAlive": 3,
+      "enemyTypeId": "sniper_aimed",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 300, "spacingX": 20, "slopeY": 0 }
+    },
+    {
       "id": "wave.green",
       "startSec": 10,
       "durationSec": 16,

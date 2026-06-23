@@ -6,7 +6,7 @@
     "damage": 1,
     "projectileSpeed": 220,
     "projectileRadius": 4,
-    "windupMs": 300,
+    "windupMs": 500,
     "onlyWhenVisible": true
   },
   "single_basic": {

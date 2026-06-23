@@ -7,7 +7,6 @@
       "radius": 9,
       "scoreOnKill": 10,
       "behaviorPresetId": "straight.basic",
-      "attackProfileId": "aimed_slow",
       "render": {
         "color": "#ff4444",
         "sdf": { "shape": "orb", "color": "#ff4f9d", "size": 0.83 },
@@ -152,6 +151,19 @@
           { "id": "edge.chevron", "dx": 16,  "dy": 0, "color": "#ffffff", "alpha": 0.50 },
           { "id": "node.eye", "dx": 0, "dy": 0, "color": "#ffffff", "alpha": 0.75 }
         ]
+      }
+    },
+
+    {
+      "id": "sniper_aimed",
+      "hp": 2,
+      "radius": 10,
+      "scoreOnKill": 250,
+      "behaviorPresetId": "sine.basic",
+      "attackProfileId": "aimed_slow",
+      "render": {
+        "color": "#aa44ff",
+        "sdf": { "shape": "chevron", "size": 1.1 }
       }
     }
   ]
