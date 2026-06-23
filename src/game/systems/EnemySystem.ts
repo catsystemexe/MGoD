@@ -4,6 +4,8 @@ import type { TickContext } from "../../engine/core/Loop";
 import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
 import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import type { EnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
+import { ENEMY_DEFS } from "../defs/EnemyDefs";
+import { updateAttack } from "../enemies/AttackController";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
@@ -32,6 +34,15 @@ export class EnemySystem {
     if (dt <= 0) return;
     const W = this.logicW;
     const H = this.logicH;
+
+    let playerPos = { x: 0, y: 0 };
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (e?.kind === "player" && !e.pendingKill && e.pos) {
+        playerPos = { x: Number(e.pos.x ?? 0), y: Number(e.pos.y ?? 0) };
+      }
+    });
+
+    const scrollX = safeNum((this.world as any)?.scrollX, 0);
 
     this.store.debugForEachAlive((ref, e: any) => {
       if (!e || e.kind !== "enemy") return;
@@ -128,6 +139,20 @@ export class EnemySystem {
       // integrate movement (single authority)
       e.pos.x += e.vel.x * dt;
       e.pos.y += e.vel.y * dt;
+
+      // attack controller (data-driven enemy shooting)
+      const def = ENEMY_DEFS[e.typeId];
+      if (def?.attackProfile) {
+        updateAttack({
+          ent: e,
+          profile: def.attackProfile,
+          playerPos,
+          store: this.store,
+          scrollX,
+          logicW: W,
+          dt,
+        });
+      }
 
       // offscreen cull
       // offscreen cull

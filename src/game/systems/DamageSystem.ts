@@ -118,6 +118,30 @@ export class DamageSystem<T extends BaseEntity> {
           break;
         }
 
+        case EventType.ENEMY_PROJECTILE_HIT_PLAYER: {
+          const { player, damage: epDmg } = e.payload as CMEventMap[typeof EventType.ENEMY_PROJECTILE_HIT_PLAYER];
+          const hitPlayer: any = this.store.get(player);
+          if (hitPlayer?.pos) {
+            const px = Number(hitPlayer.pos.x ?? 0);
+            const py = Number(hitPlayer.pos.y ?? 0);
+            for (let i = 0; i < 4; i++) {
+              const ang = Math.random() * Math.PI * 2;
+              const sp = 80 + Math.random() * 60;
+              const ttl = 0.12 + Math.random() * 0.08;
+              this.particleStore.emit({
+                x: px, y: py,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                ttl, maxTtl: ttl,
+                r: 1, g: 0.3, b: 0.3,
+                size: 2,
+                kind: "shard",
+              });
+            }
+          }
+          this.applyPlayerContact(player, epDmg);
+          break;
+        }
+
         case EventType.PROJECTILE_HIT_CA:
           // CA handled elsewhere
           break;

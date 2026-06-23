@@ -1,5 +1,7 @@
 // src/game/defs/EnemyDefs.ts
 import { CONTENT } from "../content/CONTENT";
+import attackProfilesJson from "../content/attackProfiles.json";
+import type { AttackProfileDef } from "../enemies/AttackController";
 
 export type EnemyTypeId = string;
 
@@ -68,7 +70,11 @@ export interface EnemyDef {
   ai?: Record<string, unknown>;
   aiWeight?: number; // 0..1 initial blend
   aiEaseSec?: number; // smoothing time constant (sec)
+
+  attackProfile?: AttackProfileDef;
 }
+
+const ATTACK_PROFILES: Record<string, AttackProfileDef> = attackProfilesJson as any;
 
 type GlyphStackItem = {
   id: string;
@@ -152,6 +158,9 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     const aiWeightRaw = t?.aiWeight;
     const aiEaseSecRaw = t?.aiEaseSec;
 
+    // attack profile (optional)
+    const attackProfileIdRaw = t?.attackProfileId;
+
     const hp = numOr(hpRaw, 1);
     const radius = numOr(radiusRaw, 4);
     const scoreOnKill = numOr(scoreRaw, 0);
@@ -233,6 +242,16 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     const aiWeight = typeof aiWeightRaw === "number" && Number.isFinite(aiWeightRaw) ? aiWeightRaw : undefined;
     const aiEaseSec = typeof aiEaseSecRaw === "number" && Number.isFinite(aiEaseSecRaw) ? aiEaseSecRaw : undefined;
 
+    let attackProfile: AttackProfileDef | undefined;
+    if (typeof attackProfileIdRaw === "string" && attackProfileIdRaw.length) {
+      const ap = ATTACK_PROFILES[attackProfileIdRaw];
+      if (ap) {
+        attackProfile = ap;
+      } else {
+        console.warn("[EnemyDefs] Unknown attackProfileId for", id, "value:", attackProfileIdRaw);
+      }
+    }
+
     if (hpRaw === undefined || radiusRaw === undefined || scoreRaw === undefined || presetRaw === undefined) {
       console.warn("[EnemyDefs] Using defaults for", id, {
         hp,
@@ -280,6 +299,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       ...(ai ? { ai } : {}),
       ...(aiWeight !== undefined ? { aiWeight } : {}),
       ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),
+      ...(attackProfile ? { attackProfile } : {}),
     };
   }
 

@@ -65,9 +65,18 @@ export interface PickupEntity {
   pendingKill: boolean;
 }
 
+export interface EnemyProjectileEntity {
+  kind: "enemyProjectile";
+  pos: { x: number; y: number };
+  radius: number;
+  damage: number;
+  pendingKill: boolean;
+  consumed: boolean;
+}
+
 // WorldEntity must satisfy BaseEntity contract used by the store
 export type WorldEntity =
-  BaseEntity & (PlayerEntity | EnemyEntity | ProjectileEntity | BombEntity | PickupEntity);
+  BaseEntity & (PlayerEntity | EnemyEntity | ProjectileEntity | BombEntity | PickupEntity | EnemyProjectileEntity);
 
 export interface CollisionConfig {
   enemyPriorityOverCA: boolean; // MVP: CA collision not implemented
@@ -205,6 +214,24 @@ export class CollisionSystem {
 
     const pr = Number(player.radius ?? 3);
 
+    // 3.5) enemyProjectile -> player
+    this.store.debugForEachAlive((epRef, ep: any) => {
+      if (!ep || ep.pendingKill) return;
+      if (ep.kind !== "enemyProjectile") return;
+      if (ep.consumed) return;
+
+      const rr = pr + Number(ep.radius ?? 4);
+      if (dist2(pwx, pwy, Number(ep.pos?.x ?? 0), Number(ep.pos?.y ?? 0)) <= rr * rr) {
+        ep.consumed = true;
+        this.bus.emit(EventType.ENEMY_PROJECTILE_HIT_PLAYER, {
+          projectile: epRef,
+          player: playerRef,
+          damage: Number(ep.damage ?? 1),
+        });
+      }
+    });
+
+    // 4) player -> enemy (CONTACT)
     for (const { ref: enemyRef, e: enemy } of enemies) {
       const rr = pr + Number(enemy.radius ?? 4);
       if (dist2(pwx, pwy, enemy.pos.x, enemy.pos.y) <= rr * rr) {

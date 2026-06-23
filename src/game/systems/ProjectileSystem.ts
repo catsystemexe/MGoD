@@ -10,7 +10,7 @@ type Vec2 = { x: number; y: number };
 
 // Minimal shape we need from moving ttl entities
 export interface MovingTTL {
-  kind: "projectile" | "particle" | "bomb" | "fx";
+  kind: "projectile" | "particle" | "bomb" | "fx" | "enemyProjectile";
   pos: Vec2;
   vel: Vec2;
   ttl: number;
@@ -55,7 +55,7 @@ export class ProjectileSystem {
 
     this.store.debugForEachAlive((_ref, e: MovingTTL) => {
       if (!e) return;
-      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb" && e.kind !== "fx") return;
+      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb" && e.kind !== "fx" && e.kind !== "enemyProjectile") return;
       if (e.pendingKill) return;
 
       // posPrev snapshot for render interpolation (BEFORE movement)
@@ -100,7 +100,7 @@ export class ProjectileSystem {
       }
 
       // TTL kill conditions
-      if (e.kind === "projectile") {
+      if (e.kind === "projectile" || e.kind === "enemyProjectile") {
         if ((e as any).consumed || e.ttl <= 0) e.pendingKill = true;
       } else if (e.kind !== "bomb") {
         // particle OR fx (bomb handled above)
@@ -108,8 +108,8 @@ export class ProjectileSystem {
       }
       if (e.pendingKill) return;
 
-      // A+ CULL (projectile + bomb only)
-      if (e.kind === "projectile" || e.kind === "bomb") {
+      // A+ CULL (projectile + bomb + enemyProjectile)
+      if (e.kind === "projectile" || e.kind === "bomb" || e.kind === "enemyProjectile") {
         const r = safeNum((e as any).radius, e.kind === "bomb" ? 6 : 1);
 
         // world-space X band around camera
