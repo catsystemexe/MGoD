@@ -25,6 +25,7 @@ import { makeInputRuntime } from "../data/InputRuntime";
 import { CAImpactSystem } from "../impact/CAImpactSystem";
 import { RespawnSystem } from "../systems/RespawnSystem";
 import { DamageSystem } from "../systems/DamageSystem";
+import { ParticleStore } from "../../engine/fx/ParticleStore";
 import { ImpactPhaseSystem } from "../systems/ImpactPhaseSystem";
 import type { WorldEntity } from "../systems/CollisionSystem";
 import { EnemySystem } from "../systems/EnemySystem";
@@ -66,6 +67,7 @@ export async function createGame(
   const store = new EntityStore<any>(256);
 
    const vfx = new VFXSystem(64);
+  const particleStore = new ParticleStore();
 
   // ---- Audio (output concern; synth-only v1). Dynamic import ONLY so the Node
   // smoke runner never transitively pulls Tone.js. No-op until first gesture.
@@ -385,7 +387,7 @@ export async function createGame(
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
   const caImpact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
 
-  const damage = new DamageSystem<WorldEntity>(bus as any, store as any, {
+  const damage = new DamageSystem<WorldEntity>(bus as any, store as any, particleStore, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
     onHitSpark: (p: any) => { vfx.onHitSpark(p); audio?.noteHit(); },
@@ -515,6 +517,7 @@ export async function createGame(
         spawn.update(ctx, events as any);
         projectileSystem.update(ctx.dt);
         enemySystem.update(ctx);
+        particleStore.update(ctx.dt);
       },
     },
 
@@ -550,8 +553,9 @@ return {
   loop,
   store,
   session,
-  director, // devui needs director
+  director,
   vfx,
+  particleStore,
   audio,
   inputRt,
   playerRef,

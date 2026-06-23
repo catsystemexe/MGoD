@@ -4,10 +4,11 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import { EntityStore } from "../../engine/ecs/EntityStore";
+import type { ParticleStore } from "../../engine/fx/ParticleStore";
 
-// Capacity guard: cosmetic particles must never push the shared EntityStore to
-// overflow (spawn() throws -> hard crash). At >=85% pool pressure we silently
-// skip particle/fx spawns. Gameplay (HP, kill, score, events) is unaffected.
+// Capacity guard retained as paranoia layer — particles now go to ParticleStore
+// (ring buffer, never throws), but if a future code path spawns ECS particles
+// this guard still prevents the hard crash.
 const POOL_GUARD = 0.85;
 
 export type DamageRules = {
@@ -17,10 +18,18 @@ export type DamageRules = {
   onExplosion?: (p: { x: number; y: number; radius: number }) => void;
 };
 
+function hexToRgb01(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return [1, 1, 1];
+  const n = parseInt(m[1], 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
 export class DamageSystem<T extends BaseEntity> {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
     private readonly store: EntityStore<T>,
+    private readonly particleStore: ParticleStore,
     private readonly rules: DamageRules,
   ) {}
 
@@ -55,15 +64,14 @@ export class DamageSystem<T extends BaseEntity> {
             }
           }
 
-          // shards particles (optional)
-          if (enemyEnt && projEnt?.vel && typeof (this.store as any).spawn === "function") {
+          // shards particles → ParticleStore ring buffer
+          if (enemyEnt && projEnt?.vel) {
             const vx = Number(projEnt.vel.x ?? 0);
             const vy = Number(projEnt.vel.y ?? -1);
             const len = Math.hypot(vx, vy) || 1;
             const dx = vx / len;
             const dy = vy / len;
 
-            // HIT SPARK uses enemy world-pos; camera subtraction happens in renderVFX()
             this.rules.onHitSpark?.({
               x: Number(enemyEnt.pos?.x ?? 0),
               y: Number(enemyEnt.pos?.y ?? 0),
@@ -71,30 +79,27 @@ export class DamageSystem<T extends BaseEntity> {
               dy,
             });
 
+            const ex = Number(enemyEnt.pos?.x ?? 0);
+            const ey = Number(enemyEnt.pos?.y ?? 0);
             const count = 6;
             const baseSpeed = 120;
             const spread = 0.45;
 
             for (let i = 0; i < count; i++) {
-              if (!this.canSpawnParticle()) break; // pool hot -> skip remaining shards
               const a = (Math.random() * 2 - 1) * spread;
               const ca = Math.cos(a), sa = Math.sin(a);
-
               const sx = dx * ca - dy * sa;
               const sy = dx * sa + dy * ca;
-
               const sp = baseSpeed * (0.7 + Math.random() * 0.6);
               const ttl = 0.18 + Math.random() * 0.12;
 
-              (this.store as any).spawn((p: any) => {
-                p.kind = "particle";
-                p.pos = { x: Number(enemyEnt.pos?.x ?? 0), y: Number(enemyEnt.pos?.y ?? 0) };
-                p.posPrev = { x: p.pos.x, y: p.pos.y };
-                p.vel = { x: sx * sp, y: sy * sp };
-                p.ttl = ttl;
-                p.pendingKill = false;
-                p.size = 2;
-                p.render = { color: "#ffffff" };
+              this.particleStore.emit({
+                x: ex, y: ey,
+                vx: sx * sp, vy: sy * sp,
+                ttl, maxTtl: ttl,
+                r: 1, g: 1, b: 1,
+                size: 2,
+                kind: "shard",
               });
             }
           }
@@ -234,56 +239,46 @@ export class DamageSystem<T extends BaseEntity> {
       source,
       isPlayer: false,
     });
-// explosion FX (particles-driven)
-if (typeof (this.store as any).spawn === "function" && ent?.pos) {
+// explosion FX → ParticleStore ring buffer
+if (ent?.pos) {
   const ex = Number(ent.pos.x ?? 0);
   const ey = Number(ent.pos.y ?? 0);
 
-  // base color: enemy render.color or white
   const baseCol =
     (typeof ent?.render?.color === "string" && ent.render.color.length)
       ? ent.render.color
       : "#ffffff";
+  const [cr, cg, cb] = hexToRgb01(baseCol);
 
-  // core flash (short)
-  if (this.canSpawnParticle()) {
-    (this.store as any).spawn((p: any) => {
-      p.kind = "particle";
-      p.pos = { x: ex, y: ey };
-      p.posPrev = { x: ex, y: ey };
-      p.vel = { x: 0, y: 0 };
-      p.ttl = 0.10;
-      p.pendingKill = false;
-      p.size = 10;
-      p.render = { color: baseCol };
-    });
-  }
+  // core flash
+  this.particleStore.emit({
+    x: ex, y: ey, vx: 0, vy: 0,
+    ttl: 0.10, maxTtl: 0.10,
+    r: cr, g: cg, b: cb,
+    size: 10,
+    kind: "flash",
+  });
 
   // burst shards
   const count = 18;
   const baseSpeed = 220;
 
   for (let i = 0; i < count; i++) {
-    if (!this.canSpawnParticle()) break; // pool hot -> skip remaining shards
     const ang = (i / count) * Math.PI * 2;
     const jitter = (Math.random() * 2 - 1) * 0.25;
     const a = ang + jitter;
-
     const vx = Math.cos(a);
     const vy = Math.sin(a);
-
     const sp = baseSpeed * (0.55 + Math.random() * 0.75);
     const ttl = 0.22 + Math.random() * 0.22;
 
-    (this.store as any).spawn((p: any) => {
-      p.kind = "particle";
-      p.pos = { x: ex, y: ey };
-      p.posPrev = { x: ex, y: ey };
-      p.vel = { x: vx * sp, y: vy * sp };
-      p.ttl = ttl;
-      p.pendingKill = false;
-      p.size = 2 + (Math.random() * 2);
-      p.render = { color: baseCol };
+    this.particleStore.emit({
+      x: ex, y: ey,
+      vx: vx * sp, vy: vy * sp,
+      ttl, maxTtl: ttl,
+      r: cr, g: cg, b: cb,
+      size: 2 + (Math.random() * 2),
+      kind: "shard",
     });
   }
 }

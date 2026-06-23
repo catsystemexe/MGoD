@@ -14,6 +14,7 @@ if ((window as any).__CM.__rafId) {
 import { VFXSystem } from "./game/vfx/VFXSystem";
 
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
+import { ParticlePass } from "./render/webgl/ParticlePass";
 export {};
 
 console.log("[BOOT] main.ts running");
@@ -355,6 +356,12 @@ async function main() {
   );
 
   const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
+  let particlePass: ParticlePass | null = null;
+  try {
+    particlePass = new ParticlePass(gl, LOGIC_W, LOGIC_H);
+  } catch (e) {
+    console.warn("[ParticlePass] failed to compile, particle rendering disabled:", e);
+  }
   (window as any).__CM.renderer = renderer;
   (globalThis as any).__CM_BG_PRESET__ ??= 0;
   function resize() {
@@ -503,6 +510,14 @@ async function main() {
       gfx.renderScene(() => {
         renderer.render(a);
         (renderer as any).renderVFX?.((game as any).vfx);
+
+        // ParticleStore rendering (separate from EntityStore)
+        if (particlePass && (game as any).particleStore) {
+          const wsx = Number((game as any).world?.scrollX ?? 0);
+          const wsy = Number((game as any).world?.scrollY ?? 0);
+          particlePass.draw((game as any).particleStore, wsx, wsy);
+        }
+
         // Atmospheric FX overlay (audio-reactive); after VFX so it gets CRT post.
         // Bass warp depth is gated to active explosion/hit events so plain
         // shooting doesn't spasm the background; treble hue still breathes.
