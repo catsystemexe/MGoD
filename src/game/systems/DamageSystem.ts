@@ -305,6 +305,23 @@ if (ent?.pos) {
       kind: "shard",
     });
   }
+
+  // Sprite explosion fx-entity (Fáze 1 — paralelní s quad ring efektem)
+  if (this.canSpawnParticle()) {
+    const nowSec =
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    this.store.spawn((fx: any) => {
+      fx.kind = "fx";
+      fx.pos = { x: ex, y: ey };
+      fx.posPrev = { x: ex, y: ey };
+      fx.vel = { x: 0, y: 0 };
+      fx.ttl = 0.4;
+      fx.spawnT = nowSec;
+      fx.spriteId = "fx.explosion.bug1.0";
+      fx.radius = 32;
+      fx.render = {};
+    });
+  }
 }
   }
 }
