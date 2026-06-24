@@ -30,6 +30,28 @@
       "behaviorPresetId": "sine.sniper",
       "pattern": { "kind": "line", "originX": 936, "originY": 300, "spacingX": 20, "slopeY": 0 }
     },
+
+    {
+      "id": "wave.scout",
+      "startSec": 5,
+      "durationSec": 20,
+      "spawnEverySec": 1.5,
+      "maxAlive": 4,
+      "enemyTypeId": "scout_sine",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 0, "slopeY": 60 }
+    },
+    {
+      "id": "wave.grunt",
+      "startSec": 15,
+      "durationSec": 20,
+      "spawnEverySec": 2.5,
+      "maxAlive": 3,
+      "enemyTypeId": "grunt_linear",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 360, "spacingX": 0, "slopeY": 0 }
+    },
+
     {
       "id": "wave.green",
       "startSec": 10,

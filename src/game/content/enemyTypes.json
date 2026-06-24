@@ -166,5 +166,32 @@
         "sdf": { "shape": "chevron", "size": 1.3 }
       }
     }
+
+    ,
+    {
+      "id": "scout_sine",
+      "hp": 1,
+      "radius": 7,
+      "scoreOnKill": 50,
+      "behaviorPresetId": "sine.basic",
+      "render": {
+        "color": "#44ffaa",
+        "sdf": { "shape": "arrow", "size": 0.9 }
+      }
+    },
+    {
+      "id": "grunt_linear",
+      "hp": 3,
+      "radius": 9,
+      "scoreOnKill": 75,
+      "behaviorPresetId": "straight.basic",
+      "attackProfileId": "single_basic",
+      "render": {
+        "color": "#ff8844",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    }
+
+    
   ]
 }
