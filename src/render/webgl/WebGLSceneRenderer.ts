@@ -1252,8 +1252,9 @@ export class WebGLSceneRenderer {
     }
   }
 
-  // EXPLOSIONS (expanding AoE ring + core flash). WORLD coords -> subtract camera.
-  if (vfx.getExplosions) {
+  // EXPLOSIONS quad ring — deaktivováno, nahrazeno fx-entity sprite (Fáze 2)
+  // Shockwave efekt se vrátí jako samostatná vrstva pro velké exploze.
+  if (false && vfx.getExplosions) {
     const list = vfx.getExplosions();
     for (let i = 0; i < list.length; i++) {
       const fx = list[i];

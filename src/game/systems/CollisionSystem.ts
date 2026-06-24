@@ -74,9 +74,23 @@ export interface EnemyProjectileEntity {
   consumed: boolean;
 }
 
+export interface FxEntity {
+  kind: "fx";
+  pos: { x: number; y: number };
+  vel: { x: number; y: number };
+  ttl: number;
+  radius: number;
+  pendingKill: boolean;
+  posPrev?: { x: number; y: number };
+  spawnT?: number;
+  spriteId?: string;
+  animId?: string;
+  render?: Record<string, unknown>;
+}
+
 // WorldEntity must satisfy BaseEntity contract used by the store
 export type WorldEntity =
-  BaseEntity & (PlayerEntity | EnemyEntity | ProjectileEntity | BombEntity | PickupEntity | EnemyProjectileEntity);
+  BaseEntity & (PlayerEntity | EnemyEntity | ProjectileEntity | BombEntity | PickupEntity | EnemyProjectileEntity | FxEntity);
 
 export interface CollisionConfig {
   enemyPriorityOverCA: boolean; // MVP: CA collision not implemented

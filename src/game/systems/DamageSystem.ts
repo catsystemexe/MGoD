@@ -81,9 +81,9 @@ export class DamageSystem<T extends BaseEntity> {
 
             const ex = Number(enemyEnt.pos?.x ?? 0);
             const ey = Number(enemyEnt.pos?.y ?? 0);
-            const count = 6;
-            const baseSpeed = 120;
-            const spread = 0.45;
+            const count = 4;
+            const baseSpeed = 80;
+            const spread = 0.3;
 
             for (let i = 0; i < count; i++) {
               const a = (Math.random() * 2 - 1) * spread;
@@ -98,7 +98,7 @@ export class DamageSystem<T extends BaseEntity> {
                 vx: sx * sp, vy: sy * sp,
                 ttl, maxTtl: ttl,
                 r: 1, g: 1, b: 1,
-                size: 2,
+                size: 1,
                 kind: "shard",
               });
             }
@@ -303,6 +303,23 @@ if (ent?.pos) {
       r: cr, g: cg, b: cb,
       size: 2 + (Math.random() * 2),
       kind: "shard",
+    });
+  }
+
+  // Sprite explosion fx-entity (Fáze 1 — paralelní s quad ring efektem)
+  if (this.canSpawnParticle()) {
+    const nowSec =
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    this.store.spawn((fx: any) => {
+      fx.kind = "fx";
+      fx.pos = { x: ex, y: ey };
+      fx.posPrev = { x: ex, y: ey };
+      fx.vel = { x: 0, y: 0 };
+      fx.ttl = 0.4;
+      fx.spawnT = nowSec;
+      fx.spriteId = "fx.explosion.bug1.0";
+      fx.radius = 32;
+      fx.render = {};
     });
   }
 }
