@@ -162,7 +162,17 @@ async function main() {
   window.__CM.loop = loop;
   window.__CM.store = store;
   window.__CM.game = game;
-  
+
+
+  // Dev Summoner
+  try {
+    const { DevSummoner } = await import("./dev/DevSummoner");
+    const summoner = new DevSummoner(game.bus, game.world, LOGIC_W, LOGIC_H);
+    summoner.init();
+  } catch (e) {
+    console.warn("[DevSummoner] init failed", e);
+  }
+
 
   // ---- Dev API bridge
   window.__CM.dev = {

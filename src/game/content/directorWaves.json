@@ -46,7 +46,7 @@
       "startSec": 15,
       "durationSec": 20,
       "spawnEverySec": 2.5,
-      "maxAlive": 3,śouhlas
+      "maxAlive": 3,
       "enemyTypeId": "grunt_linear",
       "behaviorPresetId": "straight.basic",
       "pattern": { "kind": "line", "originX": 936, "originY": 360, "spacingX": 0, "slopeY": 0 }
