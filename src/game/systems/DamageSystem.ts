@@ -81,9 +81,9 @@ export class DamageSystem<T extends BaseEntity> {
 
             const ex = Number(enemyEnt.pos?.x ?? 0);
             const ey = Number(enemyEnt.pos?.y ?? 0);
-            const count = 6;
-            const baseSpeed = 120;
-            const spread = 0.45;
+            const count = 4;
+            const baseSpeed = 80;
+            const spread = 0.3;
 
             for (let i = 0; i < count; i++) {
               const a = (Math.random() * 2 - 1) * spread;
@@ -98,7 +98,7 @@ export class DamageSystem<T extends BaseEntity> {
                 vx: sx * sp, vy: sy * sp,
                 ttl, maxTtl: ttl,
                 r: 1, g: 1, b: 1,
-                size: 2,
+                size: 1,
                 kind: "shard",
               });
             }
