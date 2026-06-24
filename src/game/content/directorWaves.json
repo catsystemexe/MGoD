@@ -25,9 +25,9 @@
       "startSec": 8,
       "durationSec": 14,
       "spawnEverySec": 2.0,
-      "maxAlive": 3,
+      "maxAlive": 2,
       "enemyTypeId": "sniper_aimed",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.sniper",
       "pattern": { "kind": "line", "originX": 936, "originY": 300, "spacingX": 20, "slopeY": 0 }
     },
     {
