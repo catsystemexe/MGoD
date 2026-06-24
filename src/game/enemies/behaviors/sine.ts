@@ -63,7 +63,9 @@ export const sineBehavior: EnemyBehavior = {
     const st = e.bState as any;
 
     const p = (e.behavior ?? {}) as any;
-    const ampX = num(p.ampX, 18);
+    const ampX = num(p.ampX, 0);
+    const ampY = num(p.ampY, 0);
+
     const freq = num(p.freq, 0.8); // Hz
 
     const t = num(st.t, 0);
@@ -83,7 +85,8 @@ export const sineBehavior: EnemyBehavior = {
 
       return {
         x: baseX + Math.sin(a) * ampX + vx * t,
-        y: baseY + speedY * t,
+        y: baseY + Math.sin(a) * ampY + speedY * t,
+
       };
   },
 };
