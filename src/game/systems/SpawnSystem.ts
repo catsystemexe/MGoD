@@ -253,19 +253,10 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.waveId = waveId;
 
 
-            // Sprite keys: keep empty by default (glyph/proc are default MVP)
-            ent.spriteId = def.spriteId ?? "";
+            // Sprite compatibility alias; canonical Phase 2 data lives in render.sprite.
+            ent.spriteId = (def.render as any)?.sprite?.id ?? def.spriteId ?? "";
             ent.animId = "";
 
-            if ((globalThis as any).__DEV__) {
-              if (Math.random() < 0.05) {
-                console.log("[SPAWN_ENEMY_RENDER_KEYS]", { typeId: p.typeId, spriteId: ent.spriteId, animId: ent.animId });
-              }
-            }
-
-
-
-            
             // ✅ BE V1 deterministic index
             ent.spawnOrdinal = spawnOrdinal;
             // ✅ BE V1 deterministic index
@@ -282,6 +273,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.render = dr
               ? {
                   ...(dr.color ? { color: dr.color } : {}),
+                  ...(dr.sprite ? { sprite: { ...dr.sprite } } : {}),
                   ...(dr.glyphId ? { glyphId: dr.glyphId } : {}),
                   ...(dr.glyphs ? { glyphs: (Array.isArray(dr.glyphs) ? dr.glyphs.map((g: any) => ({ ...g })) : undefined) } : {}),
                   ...(dr.proc ? { proc: (dr.proc && typeof dr.proc === "object"

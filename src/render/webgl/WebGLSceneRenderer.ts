@@ -32,6 +32,63 @@ function readKind(e: any): string | null {
   return (k.kind ?? k.type ?? k.tag ?? null) as any;
 }
 
+type EnemySpriteFrame = { x: number; y: number; w: number; h: number; px: number; py: number };
+type EnemySpriteCandidate = {
+  ready?: boolean;
+  atlas?: {
+    frame: (key: string) => EnemySpriteFrame | null;
+    pickAnimFrame: (key: string, tSec: number) => EnemySpriteFrame | null;
+  } | null;
+  tex?: { ready?: boolean };
+};
+
+export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
+  enemy: {
+    typeId?: unknown;
+    spriteId?: unknown;
+    animId?: unknown;
+    render?: { sprite?: { id?: unknown } };
+    bState?: { phase?: unknown };
+  },
+  enemySpriteMap: Pick<Map<string, T>, "get">,
+  tSec: number,
+): { sys: T; frame: EnemySpriteFrame } | null {
+  const typeId = String(enemy.typeId ?? "");
+  const renderSpriteId = enemy.render?.sprite?.id;
+  const spriteId = typeof renderSpriteId === "string" && renderSpriteId.length
+    ? renderSpriteId
+    : String(enemy.spriteId ?? "");
+  const spritePrefix = spriteId.split(".").slice(1, -1).join("_") || typeId;
+  const sys = enemySpriteMap.get(spritePrefix) ?? enemySpriteMap.get(typeId);
+  if (!sys?.ready || !sys.atlas || !sys.tex?.ready) return null;
+
+  const phase = Number(enemy.bState?.phase ?? 0);
+  const animId = String(enemy.animId ?? "");
+  const frame =
+    (animId && sys.atlas.pickAnimFrame(animId, tSec + phase)) ||
+    (spriteId && sys.atlas.frame(spriteId)) ||
+    null;
+
+  return frame ? { sys, frame } : null;
+}
+
+export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unknown): {
+  width: number;
+  height: number;
+  pivotX: number;
+  pivotY: number;
+} {
+  const scale = typeof scaleRaw === "number" && Number.isFinite(scaleRaw) && scaleRaw > 0
+    ? scaleRaw
+    : 1;
+  return {
+    width: frame.w * scale,
+    height: frame.h * scale,
+    pivotX: frame.px * scale,
+    pivotY: frame.py * scale,
+  };
+}
+
   
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type);
@@ -96,7 +153,6 @@ export class WebGLSceneRenderer {
   private fxSprites: SpriteSystem;
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
-  private enemySprites: SpriteSystem;
   private enemySpriteMap: Map<string, SpriteSystem> = new Map();
 
   
@@ -209,11 +265,6 @@ export class WebGLSceneRenderer {
       .load("/assets/sprites/w1_projectiles.atlas.json", "/assets/sprites/w1_projectiles.png")
       .catch((err) => console.warn("[SPRITES] projSprites load failed", err));
 
-
-    this.enemySprites = new SpriteSystem(gl);
-    void this.enemySprites
-      .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
-      .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
 
     // Enemy sprite map — per-typeId sprite systems
     const enemySpriteAssets: Array<{ typeId: string; atlas: string; png: string }> = [
@@ -661,25 +712,6 @@ export class WebGLSceneRenderer {
       // so every entity converts world -> screen the same way.
       ix -= sx;
       iy -= sy;
-      
-      if (kind === "enemy") {
-        const typeId = String((e as any).typeId ?? "");
-        const spriteIdRaw = String((e as any).spriteId ?? "");
-        const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
-        const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
-
-        console.log("[EARLY_ENEMY_SPRITE]", {
-          typeId,
-          spriteIdRaw,
-          spritePrefix,
-          sys: !!sys,
-          ready: sys?.ready,
-          atlas: !!sys?.atlas,
-          tex: sys?.tex?.ready,
-          frameKeys: sys?.atlas ? Object.keys((sys.atlas as any).json?.frames ?? {}) : [],
-        });
-      }
-      
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
       const baseColStr = (e as any).render?.color;
       const baseCol = (typeof baseColStr === "string" && baseColStr.length) ? baseColStr : null;
@@ -794,95 +826,40 @@ export class WebGLSceneRenderer {
         return;
       }
 
-          // 0) Enemy sprite path — must run before SDF/proc/glyph fallback.
+      // 0) Enemy sprite path — must run before SDF/proc/glyph fallback.
+      if (kind === "enemy") {
+        const selected = selectEnemySpriteFrame(e as any, this.enemySpriteMap, tSec);
+        if (selected) {
+          const { sys, frame: fr } = selected;
+          const geom = computeSpriteDrawGeometry(fr, (e as any).render?.sprite?.scale);
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-              if (kind === "enemy") {
+          sys.prog.begin(
+            this.logicW,
+            this.logicH,
+            sys.tex.tex,
+            sys.tex.w,
+            sys.tex.h,
+          );
+          sys.prog.draw(
+            ix, iy,
+            geom.width, geom.height,
+            geom.pivotX, geom.pivotY,
+            0,
+            fr.x, fr.y, fr.w, fr.h,
+            1, 1, 1, 1,
+          );
+          sys.prog.end();
+          gl.disable(gl.BLEND);
 
-                const typeId = String((e as any).typeId ?? "");
+          gl.useProgram(this.prog);
+          gl.bindVertexArray(this.vao);
+          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+          return;
+        }
+      }
 
-                const spriteIdRaw = String((e as any).spriteId ?? "");
-
-                const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
-
-                const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
-
-                if (sys?.ready && sys.atlas && sys.tex.ready) {
-
-                  const atlas = sys.atlas;
-
-                  const phase = Number((e as any).bState?.phase ?? 0);
-
-                  const spriteId = String((e as any).spriteId ?? "");
-
-                  const animId = String((e as any).animId ?? "");
-
-                  const fr =
-
-                    (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-
-                    (spriteId && atlas.frame(spriteId)) ||
-
-                    atlas.frame("enemy." + typeId + ".idle") ||
-
-                    atlas.frame(typeId + ".idle") ||
-
-                    atlas.frame(Object.keys((atlas as any).json?.frames ?? {})[0] ?? "");
-
-                  if (fr) {
-
-                    gl.enable(gl.BLEND);
-
-                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-                    sys.prog.begin(
-
-                      this.logicW,
-
-                      this.logicH,
-
-                      sys.tex.tex,
-
-                      sys.tex.w,
-
-                      sys.tex.h,
-
-                    );
-
-                    sys.prog.draw(
-
-                      ix, iy,
-
-                      fr.w, fr.h,
-
-                      fr.px, fr.py,
-
-                      0,
-
-                      fr.x, fr.y, fr.w, fr.h,
-
-                      1, 1, 1, 1,
-
-                    );
-
-                    sys.prog.end();
-
-                    gl.disable(gl.BLEND);
-
-                    gl.useProgram(this.prog);
-
-                    gl.bindVertexArray(this.vao);
-
-                    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-
-                    return;
-
-                  }
-
-                }
-
-              }
-
-      
       // 0) SDF vector shape (highest priority — short-circuits all other paths).
       // Skipped entirely if the pass failed to compile (this.sdfPass === null).
       const sdf = (e as any).render?.sdf;
@@ -901,15 +878,6 @@ export class WebGLSceneRenderer {
             ? Math.min(1.0, speed / 150.0)
             : Math.max(0.1, speed / 300.0);
 
-        if (kind === "enemy") {
-          console.log("[SDF_FALLBACK]", {
-            typeId: (e as any).typeId,
-            spriteId: (e as any).spriteId,
-            sdf
-          });
-        }
-
-        
         this.sdfPass.draw({
           ix,
           iy,
@@ -1120,110 +1088,6 @@ export class WebGLSceneRenderer {
         }
       }
 
-      // --- SPRITE DRAW (enemy MVP) ---
-      if (kind === "enemy" && this.enemySprites?.ready && this.enemySprites.atlas && this.enemySprites.tex.ready) {
-        const atlas = this.enemySprites.atlas;
-
-        const refStr = String(_ref ?? "");
-        let hsh = 0;
-        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
-        const phase = ((hsh >>> 0) % 1000) / 1000;
-
-        const animId = String((e as any).animId ?? (e as any).spriteId ?? "");
-        const spriteId = String((e as any).spriteId ?? "");
-
-        const fr =
-          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-          (spriteId && atlas.frame(spriteId)) ||
-          (spriteId && atlas.frame(spriteId + ".0")) ||
-          null;
-
-        if (fr) {
-
-          console.log("[SPRITE_DRAW_EXECUTED]", {
-            typeId: (e as any).typeId,
-            spriteId,
-            frame: fr
-          });
-          
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-          this.enemySprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.enemySprites.tex.tex,
-            this.enemySprites.tex.w,
-            this.enemySprites.tex.h,
-          );
-
-          this.enemySprites.prog.draw(
-            ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
-            0,
-            fr.x, fr.y, fr.w, fr.h,
-            1, 1, 1, 1,
-          );
-
-          this.enemySprites.prog.end();
-          gl.disable(gl.BLEND);
-
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-          return;
-        }
-      }
-
-      // Per-typeId sprite rendering
-      if (kind === "enemy") {
-        const typeId = String((e as any).typeId ?? "");
-        const spriteIdRaw = String((e as any).spriteId ?? "");
-        const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
-        const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
-        console.log("[SPR]", { spritePrefix, typeId, sysExists: !!sys, ready: sys?.ready, atlasOk: !!sys?.atlas, texOk: sys?.tex?.ready });
-        if (sys?.ready && sys.atlas && sys.tex.ready) {
-          const atlas = sys.atlas;
-          const phase = Number((e as any).bState?.phase ?? 0);
-          const spriteId = String((e as any).spriteId ?? "");
-          const animId = String((e as any).animId ?? "");
-          const fr =
-            (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-            (spriteId && atlas.frame(spriteId)) ||
-            atlas.frame(typeId + ".idle") ||
-            atlas.frame(Object.keys((atlas as any).json?.frames ?? {})[0] ?? "");
-          if (fr) {
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-            sys.prog.begin(
-              this.logicW,
-              this.logicH,
-              sys.tex.tex,
-              sys.tex.w,
-              sys.tex.h,
-            );
-            sys.prog.draw(
-              ix, iy,
-              fr.w, fr.h,
-              fr.px, fr.py,
-              0,
-              fr.x, fr.y, fr.w, fr.h,
-              1, 1, 1, 1,
-            );
-            sys.prog.end();
-            console.log("[SPRITE_DRAW_DONE]");
-            
-            gl.disable(gl.BLEND);
-
-            gl.useProgram(this.prog);
-            gl.bindVertexArray(this.vao);
-            gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-            return;
-          }
-        }
-      }
       // --- SPRITE DRAW (fx MVP: explosions) ---
       if (kind === "fx" && this.fxSprites?.ready && this.fxSprites.atlas && this.fxSprites.tex.ready) {
         const atlas = this.fxSprites.atlas;

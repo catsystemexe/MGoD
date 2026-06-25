@@ -181,78 +181,96 @@
     },
     {
       "id": "basic_1",
-      "spriteId": "enemy.basic_1.idle",
       "hp": 3,
       "radius": 9,
       "scoreOnKill": 75,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.basic_1.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     },
      {
     "id": "basic_2",
-      "spriteId": "enemy.basic_2.idle",
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.basic_2.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     },
      {
     "id": "shooter_1",
-      "spriteId": "enemy.shooter_1.idle",
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     },
      {
     "id": "void_1",
-      "spriteId": "enemy.void_1.idle",
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.void_1.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     },
      {
     "id": "crawler_1",
-      "spriteId": "enemy.crawler_1.idle",
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.crawler_1.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     },
      {
     "id": "mine_1",
-      "spriteId": "enemy.mine_1.idle",
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
       "render": {
+        "sprite": {
+          "id": "enemy.mine_1.idle",
+          "scale": 1.0
+        },
         "color": "#ff8844",
         "sdf": { "shape": "triangle", "size": 0.7 }
       }
