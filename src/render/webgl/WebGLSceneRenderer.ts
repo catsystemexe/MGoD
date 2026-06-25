@@ -97,6 +97,7 @@ export class WebGLSceneRenderer {
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
   private enemySprites: SpriteSystem;
+  private enemySpriteMap: Map<string, SpriteSystem> = new Map();
 
   
   constructor(
@@ -213,6 +214,22 @@ export class WebGLSceneRenderer {
     void this.enemySprites
       .load("/assets/sprites/enemy_bug1.atlas.json", "/assets/sprites/enemy_bug1.png")
       .catch((err) => console.warn("[SPRITES] enemySprites load failed", err));
+
+    // Enemy sprite map — per-typeId sprite systems
+    const enemySpriteAssets: Array<{ typeId: string; atlas: string; png: string }> = [
+      { typeId: "mine_1",     atlas: "/assets/sprites/mine_1.atlas.json",     png: "/assets/sprites/mine_1.png" },
+      { typeId: "crawler_1",  atlas: "/assets/sprites/crawler_1.atlas.json",  png: "/assets/sprites/crawler_1.png" },
+      { typeId: "basic_1",    atlas: "/assets/sprites/basic_1.atlas.json",    png: "/assets/sprites/basic_1.png" },
+      { typeId: "basic_2",    atlas: "/assets/sprites/basic_2.atlas.json",    png: "/assets/sprites/basic_2.png" },
+      { typeId: "shooter_1",  atlas: "/assets/sprites/shooter_1.atlas.json",  png: "/assets/sprites/shooter_1.png" },
+      { typeId: "void_1",     atlas: "/assets/sprites/void_1.atlas.json",     png: "/assets/sprites/void_1.png" },
+    ];
+    for (const asset of enemySpriteAssets) {
+      const sys = new SpriteSystem(gl);
+      void sys.load(asset.atlas, asset.png)
+        .catch((err) => console.warn(`[SPRITES] enemySpriteMap ${asset.typeId} failed`, err));
+      this.enemySpriteMap.set(asset.typeId, sys);
+    }
     }
 
 
@@ -1033,6 +1050,50 @@ export class WebGLSceneRenderer {
           gl.bindVertexArray(this.vao);
           gl.uniform2f(this.uLogic, this.logicW, this.logicH);
           return;
+        }
+      }
+
+      // Per-typeId sprite rendering
+      if (kind === "enemy") {
+        const typeId = String((e as any).typeId ?? "");
+        const sys = typeId ? this.enemySpriteMap.get(typeId) : undefined;
+        if (sys?.ready && sys.atlas && sys.tex.ready) {
+          const atlas = sys.atlas;
+          const phase = Number((e as any).bState?.phase ?? 0);
+          const spriteId = String((e as any).spriteId ?? "");
+          const animId = String((e as any).animId ?? "");
+          const fr =
+            (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
+            (spriteId && atlas.frame(spriteId)) ||
+            atlas.frame(typeId + ".idle") ||
+            atlas.frame(Object.keys((atlas as any).frames ?? {})[0] ?? "");
+          if (fr) {
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+            sys.prog.begin(
+              this.logicW,
+              this.logicH,
+              sys.tex.tex,
+              sys.tex.w,
+              sys.tex.h,
+            );
+            sys.prog.draw(
+              ix, iy,
+              fr.w, fr.h,
+              fr.px, fr.py,
+              0,
+              fr.x, fr.y, fr.w, fr.h,
+              1, 1, 1, 1,
+            );
+            sys.prog.end();
+            gl.disable(gl.BLEND);
+
+            gl.useProgram(this.prog);
+            gl.bindVertexArray(this.vao);
+            gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+            return;
+          }
         }
       }
       // --- SPRITE DRAW (fx MVP: explosions) ---
