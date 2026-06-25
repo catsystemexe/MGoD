@@ -63,6 +63,7 @@ export interface EnemyDef {
   hp: number;
   radius: number;
   scoreOnKill: number;
+  spriteId?: string;
   behaviorPreset: string; // content-driven (string); runtime resolves preset map
   render?: EnemyRenderDef; // OPTIONAL
 
@@ -160,6 +161,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
 
     // attack profile (optional)
     const attackProfileIdRaw = t?.attackProfileId;
+    const spriteIdRaw = typeof t?.spriteId === "string" && t.spriteId.length ? t.spriteId : undefined;
 
     const hp = numOr(hpRaw, 1);
     const radius = numOr(radiusRaw, 4);
@@ -300,6 +302,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       ...(aiWeight !== undefined ? { aiWeight } : {}),
       ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),
       ...(attackProfile ? { attackProfile } : {}),
+      ...(spriteIdRaw ? { spriteId: spriteIdRaw } : {}),
     };
   }
 

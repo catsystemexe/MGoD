@@ -254,7 +254,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
 
 
             // Sprite keys: keep empty by default (glyph/proc are default MVP)
-            ent.spriteId = "";
+            ent.spriteId = def.spriteId ?? "";
             ent.animId = "";
 
             if ((globalThis as any).__DEV__) {
