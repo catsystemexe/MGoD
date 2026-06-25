@@ -661,7 +661,24 @@ export class WebGLSceneRenderer {
       // so every entity converts world -> screen the same way.
       ix -= sx;
       iy -= sy;
+      
+      if (kind === "enemy") {
+        const typeId = String((e as any).typeId ?? "");
+        const spriteIdRaw = String((e as any).spriteId ?? "");
+        const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
+        const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
 
+        console.log("[EARLY_ENEMY_SPRITE]", {
+          typeId,
+          spriteIdRaw,
+          spritePrefix,
+          sys: !!sys,
+          ready: sys?.ready,
+          atlas: !!sys?.atlas,
+          tex: sys?.tex?.ready,
+          frameKeys: sys?.atlas ? Object.keys((sys.atlas as any).json?.frames ?? {}) : [],
+        });
+      }
       
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
       const baseColStr = (e as any).render?.color;
@@ -777,6 +794,95 @@ export class WebGLSceneRenderer {
         return;
       }
 
+          // 0) Enemy sprite path — must run before SDF/proc/glyph fallback.
+
+              if (kind === "enemy") {
+
+                const typeId = String((e as any).typeId ?? "");
+
+                const spriteIdRaw = String((e as any).spriteId ?? "");
+
+                const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
+
+                const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
+
+                if (sys?.ready && sys.atlas && sys.tex.ready) {
+
+                  const atlas = sys.atlas;
+
+                  const phase = Number((e as any).bState?.phase ?? 0);
+
+                  const spriteId = String((e as any).spriteId ?? "");
+
+                  const animId = String((e as any).animId ?? "");
+
+                  const fr =
+
+                    (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
+
+                    (spriteId && atlas.frame(spriteId)) ||
+
+                    atlas.frame("enemy." + typeId + ".idle") ||
+
+                    atlas.frame(typeId + ".idle") ||
+
+                    atlas.frame(Object.keys((atlas as any).json?.frames ?? {})[0] ?? "");
+
+                  if (fr) {
+
+                    gl.enable(gl.BLEND);
+
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+                    sys.prog.begin(
+
+                      this.logicW,
+
+                      this.logicH,
+
+                      sys.tex.tex,
+
+                      sys.tex.w,
+
+                      sys.tex.h,
+
+                    );
+
+                    sys.prog.draw(
+
+                      ix, iy,
+
+                      fr.w, fr.h,
+
+                      fr.px, fr.py,
+
+                      0,
+
+                      fr.x, fr.y, fr.w, fr.h,
+
+                      1, 1, 1, 1,
+
+                    );
+
+                    sys.prog.end();
+
+                    gl.disable(gl.BLEND);
+
+                    gl.useProgram(this.prog);
+
+                    gl.bindVertexArray(this.vao);
+
+                    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+
+                    return;
+
+                  }
+
+                }
+
+              }
+
+      
       // 0) SDF vector shape (highest priority — short-circuits all other paths).
       // Skipped entirely if the pass failed to compile (this.sdfPass === null).
       const sdf = (e as any).render?.sdf;
@@ -794,6 +900,16 @@ export class WebGLSceneRenderer {
           : velX >= 0
             ? Math.min(1.0, speed / 150.0)
             : Math.max(0.1, speed / 300.0);
+
+        if (kind === "enemy") {
+          console.log("[SDF_FALLBACK]", {
+            typeId: (e as any).typeId,
+            spriteId: (e as any).spriteId,
+            sdf
+          });
+        }
+
+        
         this.sdfPass.draw({
           ix,
           iy,
@@ -1023,6 +1139,13 @@ export class WebGLSceneRenderer {
           null;
 
         if (fr) {
+
+          console.log("[SPRITE_DRAW_EXECUTED]", {
+            typeId: (e as any).typeId,
+            spriteId,
+            frame: fr
+          });
+          
           gl.enable(gl.BLEND);
           gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -1056,7 +1179,10 @@ export class WebGLSceneRenderer {
       // Per-typeId sprite rendering
       if (kind === "enemy") {
         const typeId = String((e as any).typeId ?? "");
-        const sys = typeId ? this.enemySpriteMap.get(typeId) : undefined;
+        const spriteIdRaw = String((e as any).spriteId ?? "");
+        const spritePrefix = spriteIdRaw.split(".").slice(1, -1).join("_") || typeId;
+        const sys = this.enemySpriteMap.get(spritePrefix) ?? this.enemySpriteMap.get(typeId);
+        console.log("[SPR]", { spritePrefix, typeId, sysExists: !!sys, ready: sys?.ready, atlasOk: !!sys?.atlas, texOk: sys?.tex?.ready });
         if (sys?.ready && sys.atlas && sys.tex.ready) {
           const atlas = sys.atlas;
           const phase = Number((e as any).bState?.phase ?? 0);
@@ -1066,7 +1192,7 @@ export class WebGLSceneRenderer {
             (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
             (spriteId && atlas.frame(spriteId)) ||
             atlas.frame(typeId + ".idle") ||
-            atlas.frame(Object.keys((atlas as any).frames ?? {})[0] ?? "");
+            atlas.frame(Object.keys((atlas as any).json?.frames ?? {})[0] ?? "");
           if (fr) {
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -1087,6 +1213,8 @@ export class WebGLSceneRenderer {
               1, 1, 1, 1,
             );
             sys.prog.end();
+            console.log("[SPRITE_DRAW_DONE]");
+            
             gl.disable(gl.BLEND);
 
             gl.useProgram(this.prog);

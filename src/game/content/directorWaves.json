@@ -47,7 +47,7 @@
       "durationSec": 20,
       "spawnEverySec": 2.5,
       "maxAlive": 3,
-      "enemyTypeId": "grunt_linear",
+      "enemyTypeId": "basic_1",
       "behaviorPresetId": "straight.basic",
       "pattern": { "kind": "line", "originX": 936, "originY": 360, "spacingX": 0, "slopeY": 0 }
     },
