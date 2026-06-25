@@ -55,6 +55,16 @@ export type EnemyTypeDef = {
   radius: number;
   scoreOnKill: number;
   behaviorPresetId: string;   // default preset for this type (can be overridden by wave)
+
+  // Optional render extras used by EnemyDefs; loadContent validates the shape when present.
+  spriteId?: string; // legacy compatibility alias during render.sprite migration
+  render?: {
+    sprite?: {
+      id: string;
+      scale?: number;
+    };
+    [k: string]: unknown;
+  };
 };
 
 // wave def as loaded from directorWaves.json

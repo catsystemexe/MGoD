@@ -13,7 +13,7 @@ function isNum(x: any) { return typeof x === "number" && Number.isFinite(x); }
 function isStr(x: any) { return typeof x === "string" && x.length > 0; }
 
 
-function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
+export function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
   assert(Array.isArray(list), "enemyTypes must be an array");
   for (const e of list) {
     assert(e && typeof e === "object", "enemyTypes item must be object");
@@ -22,6 +22,15 @@ function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
     assert(isNum(e.radius), `enemyTypes(${e.id}).radius must be number`);
     assert(isNum(e.scoreOnKill), `enemyTypes(${e.id}).scoreOnKill must be number`);
     assert(isStr(e.behaviorPresetId), `enemyTypes(${e.id}).behaviorPresetId must be string`);
+
+    const sprite = e?.render?.sprite;
+    if (sprite !== undefined) {
+      assert(sprite && typeof sprite === "object" && !Array.isArray(sprite), `enemyTypes(${e.id}).render.sprite must be object if provided`);
+      assert(typeof sprite.id === "string" && sprite.id.trim().length > 0, `enemyTypes(${e.id}).render.sprite.id must be non-empty string`);
+      if (sprite.scale !== undefined) {
+        assert(isNum(sprite.scale) && sprite.scale > 0, `enemyTypes(${e.id}).render.sprite.scale must be positive finite number if provided`);
+      }
+    }
     // NOTE: allow extra fields like render
   }
   return list as EnemyTypeDef[];
