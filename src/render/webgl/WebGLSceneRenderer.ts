@@ -43,12 +43,21 @@ type EnemySpriteCandidate = {
 };
 
 export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
-  enemy: { typeId?: unknown; spriteId?: unknown; animId?: unknown; bState?: { phase?: unknown } },
+  enemy: {
+    typeId?: unknown;
+    spriteId?: unknown;
+    animId?: unknown;
+    render?: { sprite?: { id?: unknown } };
+    bState?: { phase?: unknown };
+  },
   enemySpriteMap: Pick<Map<string, T>, "get">,
   tSec: number,
 ): { sys: T; frame: EnemySpriteFrame } | null {
   const typeId = String(enemy.typeId ?? "");
-  const spriteId = String(enemy.spriteId ?? "");
+  const renderSpriteId = enemy.render?.sprite?.id;
+  const spriteId = typeof renderSpriteId === "string" && renderSpriteId.length
+    ? renderSpriteId
+    : String(enemy.spriteId ?? "");
   const spritePrefix = spriteId.split(".").slice(1, -1).join("_") || typeId;
   const sys = enemySpriteMap.get(spritePrefix) ?? enemySpriteMap.get(typeId);
   if (!sys?.ready || !sys.atlas || !sys.tex?.ready) return null;
@@ -61,6 +70,23 @@ export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
     null;
 
   return frame ? { sys, frame } : null;
+}
+
+export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unknown): {
+  width: number;
+  height: number;
+  pivotX: number;
+  pivotY: number;
+} {
+  const scale = typeof scaleRaw === "number" && Number.isFinite(scaleRaw) && scaleRaw > 0
+    ? scaleRaw
+    : 1;
+  return {
+    width: frame.w * scale,
+    height: frame.h * scale,
+    pivotX: frame.px * scale,
+    pivotY: frame.py * scale,
+  };
 }
 
   
@@ -805,6 +831,7 @@ export class WebGLSceneRenderer {
         const selected = selectEnemySpriteFrame(e as any, this.enemySpriteMap, tSec);
         if (selected) {
           const { sys, frame: fr } = selected;
+          const geom = computeSpriteDrawGeometry(fr, (e as any).render?.sprite?.scale);
           gl.enable(gl.BLEND);
           gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -817,8 +844,8 @@ export class WebGLSceneRenderer {
           );
           sys.prog.draw(
             ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
+            geom.width, geom.height,
+            geom.pivotX, geom.pivotY,
             0,
             fr.x, fr.y, fr.w, fr.h,
             1, 1, 1, 1,

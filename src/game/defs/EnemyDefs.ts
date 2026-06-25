@@ -22,9 +22,17 @@ const SDF_SHAPES: ReadonlySet<string> = new Set([
   "bolt", "triangle", "chevron", "thruster", "laser",
 ]);
 
+export interface EnemySpriteRenderDef {
+  id: string;
+  scale?: number;
+}
+
 export interface EnemyRenderDef {
   // OPTIONAL: base color (fallback)
   color?: string; // CSS color, typicky "#rrggbb"
+
+  // OPTIONAL: sprite frame id + visual-only scale
+  sprite?: EnemySpriteRenderDef;
 
   // OPTIONAL: signed-distance-field vector shape (GPU SDF pass)
   sdf?: SdfRenderDef;
@@ -106,6 +114,46 @@ function clamp01(x: number): number {
   return x;
 }
 
+export function normalizeEnemySpriteRender(
+  renderSpriteRaw: unknown,
+  rootSpriteIdRaw: unknown,
+  enemyTypeId: string,
+): EnemySpriteRenderDef | undefined {
+  const rootSpriteId = typeof rootSpriteIdRaw === "string" && rootSpriteIdRaw.trim().length
+    ? rootSpriteIdRaw.trim()
+    : undefined;
+
+  let spriteId: string | undefined;
+  let scale = 1.0;
+
+  if (isObj(renderSpriteRaw)) {
+    const rawId = (renderSpriteRaw as any).id;
+    if (typeof rawId === "string" && rawId.trim().length > 0) {
+      spriteId = rawId.trim();
+    } else if (rawId !== undefined) {
+      console.warn("[EnemyDefs] Invalid render.sprite.id for", enemyTypeId, "value:", rawId);
+    }
+
+    const rawScale = (renderSpriteRaw as any).scale;
+    if (rawScale !== undefined) {
+      if (typeof rawScale === "number" && Number.isFinite(rawScale) && rawScale > 0) {
+        scale = rawScale;
+      } else {
+        console.warn("[EnemyDefs] Invalid render.sprite.scale for", enemyTypeId, "value:", rawScale, "using 1.0");
+      }
+    }
+  } else if (renderSpriteRaw !== undefined) {
+    console.warn("[EnemyDefs] Invalid render.sprite for", enemyTypeId, "value:", renderSpriteRaw);
+  }
+
+  if (spriteId && rootSpriteId && spriteId !== rootSpriteId) {
+    console.warn("[EnemyDefs] render.sprite.id overrides root spriteId for", enemyTypeId, { renderSpriteId: spriteId, rootSpriteId });
+  }
+
+  const id = spriteId ?? rootSpriteId;
+  return id ? { id, scale } : undefined;
+}
+
 /**
  * ENEMY_DEFS se generuje z contentu, aby nemohly vzniknout 2 světy ID.
  * Single source of truth = src/game/content/enemyTypes.json (přes loadContent()).
@@ -153,6 +201,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     const procRaw = t?.render?.proc ?? t?.proc;
 
     const sdfRaw = t?.render?.sdf ?? t?.sdf;
+    const spriteRaw = t?.render?.sprite;
 
     // ai overlay (optional)
     const aiRaw = t?.ai;
@@ -161,7 +210,8 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
 
     // attack profile (optional)
     const attackProfileIdRaw = t?.attackProfileId;
-    const spriteIdRaw = typeof t?.spriteId === "string" && t.spriteId.length ? t.spriteId : undefined;
+    const spriteIdRaw = typeof t?.spriteId === "string" && t.spriteId.trim().length ? t.spriteId.trim() : undefined;
+    const sprite = normalizeEnemySpriteRender(spriteRaw, spriteIdRaw, id);
 
     const hp = numOr(hpRaw, 1);
     const radius = numOr(radiusRaw, 4);
@@ -280,7 +330,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       console.warn("[EnemyDefs] Invalid proc (expected {kind:'parts',parts:[]}) for", id, "value:", procRaw);
     }
 
-    const hasRender = !!(color || glyphId || glyphs || proc || sdf);
+    const hasRender = !!(color || sprite || glyphId || glyphs || proc || sdf);
 
     out[id] = {
       hp,
@@ -291,6 +341,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
         ? {
             render: {
               ...(color ? { color } : {}),
+              ...(sprite ? { sprite } : {}),
               ...(glyphId ? { glyphId } : {}),
               ...(glyphs ? { glyphs } : {}),
               ...(proc ? { proc } : {}),
@@ -302,7 +353,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       ...(aiWeight !== undefined ? { aiWeight } : {}),
       ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),
       ...(attackProfile ? { attackProfile } : {}),
-      ...(spriteIdRaw ? { spriteId: spriteIdRaw } : {}),
+      ...(sprite ? { spriteId: sprite.id } : {}),
     };
   }
 
