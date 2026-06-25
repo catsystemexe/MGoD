@@ -1,0 +1,7 @@
+{
+ "texture": "/assets/sprites/basic_1.png",
+ "frames": {
+   "enemy.basic_1.idle": { "x": 0, "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 }
+ },
+ "anims": {}
+}

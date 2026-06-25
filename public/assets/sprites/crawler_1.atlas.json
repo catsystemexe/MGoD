@@ -1,0 +1,7 @@
+{
+ "texture": "/assets/sprites/crawler_1.png",
+ "frames": {
+   "enemy.crawler_1.idle": { "x": 0, "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 }
+ },
+ "anims": {}
+}
