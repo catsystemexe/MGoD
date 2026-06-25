@@ -181,6 +181,7 @@
     },
     {
       "id": "grunt_linear",
+      "spriteId": "enemy.basic_1.idle",
       "hp": 3,
       "radius": 9,
       "scoreOnKill": 75,
