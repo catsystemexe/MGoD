@@ -257,15 +257,6 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.spriteId = def.spriteId ?? "";
             ent.animId = "";
 
-            if ((globalThis as any).__DEV__) {
-              if (Math.random() < 0.05) {
-                console.log("[SPAWN_ENEMY_RENDER_KEYS]", { typeId: p.typeId, spriteId: ent.spriteId, animId: ent.animId });
-              }
-            }
-
-
-
-            
             // ✅ BE V1 deterministic index
             ent.spawnOrdinal = spawnOrdinal;
             // ✅ BE V1 deterministic index
