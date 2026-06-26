@@ -2,8 +2,9 @@ import enemyTypesJson from "./enemyTypes.json";
 import behaviorPresetsJson from "./behaviorPresets.json";
 import directorWavesJson from "./directorWaves.json";
 
+import type { BehaviorPreset } from "../enemies/EnemyBehaviorTypes";
 import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
-import type { ContentBundle, EnemyTypeDef, BehaviorPreset, WaveDef } from "../enemies/EnemyBehaviorTypes";
+import type { EnemyContentBundle, EnemyTypeContentDef, EnemyWaveContentDef } from "../defs/EnemyContentTypes";
 
 function assert(cond: any, msg: string): asserts cond {
   if (!cond) throw new Error("[Content] " + msg);
@@ -13,7 +14,7 @@ function isNum(x: any) { return typeof x === "number" && Number.isFinite(x); }
 function isStr(x: any) { return typeof x === "string" && x.length > 0; }
 
 
-export function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
+export function validateEnemyTypes(list: any[]): EnemyTypeContentDef[] {
   assert(Array.isArray(list), "enemyTypes must be an array");
   for (const e of list) {
     assert(e && typeof e === "object", "enemyTypes item must be object");
@@ -33,7 +34,7 @@ export function validateEnemyTypes(list: any[]): EnemyTypeDef[] {
     }
     // NOTE: allow extra fields like render
   }
-  return list as EnemyTypeDef[];
+  return list as EnemyTypeContentDef[];
 }
 
 function validateBehaviorPresets(list: any[]): BehaviorPreset[] {
@@ -48,7 +49,7 @@ function validateBehaviorPresets(list: any[]): BehaviorPreset[] {
   return list as BehaviorPreset[];
 }
 
-function validateWaves(list: any[]): WaveDef[] {
+function validateWaves(list: any[]): EnemyWaveContentDef[] {
   assert(Array.isArray(list), "waves must be an array");
   for (const w of list) {
     assert(w && typeof w === "object", "waves item must be object");
@@ -64,10 +65,10 @@ function validateWaves(list: any[]): WaveDef[] {
     }
     // NOTE: allow pattern:any (data-first)
   }
-  return list as WaveDef[];
+  return list as EnemyWaveContentDef[];
 }
 
-export function loadContent(): ContentBundle {
+export function loadContent(): EnemyContentBundle {
   const enemyTypes = validateEnemyTypes((enemyTypesJson as any).enemyTypes);
   const behaviorPresets = validateBehaviorPresets((behaviorPresetsJson as any).behaviorPresets);
   const waves = validateWaves((directorWavesJson as any).waves);

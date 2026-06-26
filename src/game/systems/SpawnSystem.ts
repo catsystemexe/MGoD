@@ -12,6 +12,7 @@ import { COLORS } from "../../rendering/ColorPalette";
 import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/EnemyBehaviorPresets";
 
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
+import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
 
 type Vec2 = { x: number; y: number };
 import type { WorldState } from "../data/WorldState";
@@ -77,8 +78,7 @@ export interface EnemyEntity extends BaseEntity {
   // stable per-spawn index (used for desync: phases, patterns, etc.)
   spawnOrdinal?: number;
 
-  // Sprite MVP v1 (optional; renderer falls back if missing)
-  spriteId?: string;
+  // Enemy animation id placeholder; sprite identity lives in render.sprite.
   animId?: string;
 
   pos: Vec2;
@@ -253,8 +253,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.waveId = waveId;
 
 
-            // Sprite compatibility alias; canonical Phase 2 data lives in render.sprite.
-            ent.spriteId = (def.render as any)?.sprite?.id ?? def.spriteId ?? "";
+            delete ent.spriteId;
             ent.animId = "";
 
             // ✅ BE V1 deterministic index
@@ -269,26 +268,7 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.hp = def.hp;
             ent.maxHp = def.hp;
             ent.radius = r;
-            const dr: any = def.render;
-            ent.render = dr
-              ? {
-                  ...(dr.color ? { color: dr.color } : {}),
-                  ...(dr.sprite ? { sprite: { ...dr.sprite } } : {}),
-                  ...(dr.glyphId ? { glyphId: dr.glyphId } : {}),
-                  ...(dr.glyphs ? { glyphs: (Array.isArray(dr.glyphs) ? dr.glyphs.map((g: any) => ({ ...g })) : undefined) } : {}),
-                  ...(dr.proc ? { proc: (dr.proc && typeof dr.proc === "object"
-                      ? { ...dr.proc, parts: Array.isArray(dr.proc.parts) ? dr.proc.parts.map((p: any) => ({ ...p })) : dr.proc.parts }
-                      : dr.proc) } : {}),
-                  ...(dr.sdf ? { sdf: { ...dr.sdf } } : {}),
-                }
-              : {};
-      if (ent.render) {
-  const rr: any = ent.render as any;
-    if (!rr.glyphId && !rr.proc && !(Array.isArray(rr.glyphs) && rr.glyphs.length)) {
-    const tid = String(ent.typeId ?? "");
-    rr.glyphId = tid ? ("enemy." + tid) : "enemy.diamond";
-  }
-}
+            ent.render = materializeEnemyAppearance(def.render);
 // OPTIONAL AI overlay (disabled unless def.ai exists)
             ent.ai = (def as any).ai ? { ...(def as any).ai } : undefined;
             ent.aiWeight = typeof (def as any).aiWeight === "number" ? (def as any).aiWeight : 0;

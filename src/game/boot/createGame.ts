@@ -211,7 +211,7 @@ export async function createGame(
     store.debugForEachAlive((_ref, e: any) => {
       if (e?.kind === "enemy" && !e.pendingKill) n++;
       // DEV only
-      // console.log("[DBG] enemy missing waveId", { id: e.id, typeId: e.typeId, spriteId: e.spriteId });
+      // console.log("[DBG] enemy missing waveId", { id: e.id, typeId: e.typeId });
     });
     return n;
   }
