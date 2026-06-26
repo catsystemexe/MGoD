@@ -327,8 +327,8 @@ if (ent?.pos) {
       fx.pos = { x: ex, y: ey };
       fx.posPrev = { x: ex, y: ey };
       fx.vel = {
-        x: deathVel.x * 0.65,
-        y: deathVel.y * 0.65,
+        x: 95,
+        y: deathVel.y * 1.20,
       };
       fx.ttl = 0.5;
       fx.fxAge = 0;
