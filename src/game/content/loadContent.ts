@@ -31,6 +31,14 @@ export function validateEnemyTypes(list: any[]): EnemyTypeContentDef[] {
       if (sprite.scale !== undefined) {
         assert(isNum(sprite.scale) && sprite.scale > 0, `enemyTypes(${e.id}).render.sprite.scale must be positive finite number if provided`);
       }
+      if (sprite.animation !== undefined) {
+        const animation = sprite.animation;
+        assert(animation && typeof animation === "object" && !Array.isArray(animation), `enemyTypes(${e.id}).render.sprite.animation must be object if provided`);
+        assert(typeof animation.id === "string" && animation.id.trim().length > 0, `enemyTypes(${e.id}).render.sprite.animation.id must be non-empty string`);
+        if (animation.speed !== undefined) {
+          assert(isNum(animation.speed) && animation.speed > 0, `enemyTypes(${e.id}).render.sprite.animation.speed must be positive finite number if provided`);
+        }
+      }
     }
     // NOTE: allow extra fields like render
   }

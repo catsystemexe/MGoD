@@ -8,6 +8,7 @@ import type {
   EnemyProcRenderDef,
   EnemySdfRenderDef,
   EnemySdfShape,
+  EnemySpriteAnimationDef,
   EnemySpriteRenderDef,
 } from "./EnemyAppearanceTypes";
 
@@ -61,6 +62,7 @@ export function normalizeEnemySpriteRender(
 ): EnemySpriteRenderDef | undefined {
   let spriteId: string | undefined;
   let scale = 1.0;
+  let animation: EnemySpriteAnimationDef | undefined;
 
   if (isObj(renderSpriteRaw)) {
     const rawId = (renderSpriteRaw as any).id;
@@ -78,11 +80,42 @@ export function normalizeEnemySpriteRender(
         console.warn("[EnemyDefs] Invalid render.sprite.scale for", enemyTypeId, "value:", rawScale, "using 1.0");
       }
     }
+
+    animation = normalizeEnemySpriteAnimation((renderSpriteRaw as any).animation, enemyTypeId);
   } else if (renderSpriteRaw !== undefined) {
     console.warn("[EnemyDefs] Invalid render.sprite for", enemyTypeId, "value:", renderSpriteRaw);
   }
 
-  return spriteId ? { id: spriteId, scale } : undefined;
+  return spriteId ? { id: spriteId, scale, ...(animation ? { animation } : {}) } : undefined;
+}
+
+export function normalizeEnemySpriteAnimation(
+  raw: unknown,
+  enemyTypeId: string,
+): EnemySpriteAnimationDef | undefined {
+  if (raw === undefined) return undefined;
+
+  if (!isObj(raw) || Array.isArray(raw)) {
+    console.warn("[EnemyDefs] Invalid render.sprite.animation for", enemyTypeId, "value:", raw);
+    return undefined;
+  }
+
+  const rawId = (raw as any).id;
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    console.warn("[EnemyDefs] Invalid render.sprite.animation.id for", enemyTypeId, "value:", rawId);
+    return undefined;
+  }
+
+  const rawSpeed = (raw as any).speed;
+  if (rawSpeed !== undefined && (typeof rawSpeed !== "number" || !Number.isFinite(rawSpeed) || rawSpeed <= 0)) {
+    console.warn("[EnemyDefs] Invalid render.sprite.animation.speed for", enemyTypeId, "value:", rawSpeed);
+    return undefined;
+  }
+
+  return {
+    id: rawId.trim(),
+    speed: rawSpeed === undefined ? 1.0 : rawSpeed,
+  };
 }
 
 export function buildEnemyAppearanceRaw(t: unknown): Record<string, unknown> {

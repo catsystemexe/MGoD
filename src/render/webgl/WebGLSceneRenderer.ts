@@ -45,8 +45,7 @@ type EnemySpriteCandidate = {
 export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
   enemy: {
     typeId?: unknown;
-    animId?: unknown;
-    render?: { sprite?: { id?: unknown } };
+    render?: { sprite?: { id?: unknown; animation?: { id?: unknown; speed?: unknown } } };
     bState?: { phase?: unknown };
   },
   enemySpriteMap: Pick<Map<string, T>, "get">,
@@ -61,10 +60,16 @@ export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
   const sys = enemySpriteMap.get(spritePrefix) ?? enemySpriteMap.get(typeId);
   if (!sys?.ready || !sys.atlas || !sys.tex?.ready) return null;
 
-  const phase = Number(enemy.bState?.phase ?? 0);
-  const animId = String(enemy.animId ?? "");
+  const phaseRaw = Number(enemy.bState?.phase ?? 0);
+  const deterministicPhase = Number.isFinite(phaseRaw) ? phaseRaw : 0;
+  const animation = enemy.render?.sprite?.animation;
+  const animationId = typeof animation?.id === "string" && animation.id.length ? animation.id : "";
+  const animationSpeed =
+    typeof animation?.speed === "number" && Number.isFinite(animation.speed) && animation.speed > 0
+      ? animation.speed
+      : 1;
   const frame =
-    (animId && sys.atlas.pickAnimFrame(animId, tSec + phase)) ||
+    (animationId && sys.atlas.pickAnimFrame(animationId, tSec * animationSpeed + deterministicPhase)) ||
     (spriteId && sys.atlas.frame(spriteId)) ||
     null;
 
