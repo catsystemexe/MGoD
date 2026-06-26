@@ -78,7 +78,7 @@ export interface EnemyEntity extends BaseEntity {
   // stable per-spawn index (used for desync: phases, patterns, etc.)
   spawnOrdinal?: number;
 
-  // Enemy animation id placeholder; sprite identity lives in render.sprite.
+  // Legacy root animation cleanup boundary; enemy sprite animation lives in render.sprite.animation.
   animId?: string;
 
   pos: Vec2;

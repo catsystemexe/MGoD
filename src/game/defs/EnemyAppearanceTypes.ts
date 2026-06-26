@@ -10,9 +10,17 @@ export type EnemySdfShape =
   | "thruster"
   | "laser";
 
+export interface EnemySpriteAnimationDef {
+  /** Atlas animation key in SpriteAtlasJSON.anims. */
+  id: string;
+  /** Visual-only playback-rate multiplier. */
+  speed: number;
+}
+
 export interface EnemySpriteRenderDef {
   id: string;
   scale: number;
+  animation?: EnemySpriteAnimationDef;
 }
 
 export interface EnemySdfRenderDef {
@@ -63,7 +71,14 @@ export function materializeEnemyAppearance(
 
   return {
     ...(appearance.color ? { color: appearance.color } : {}),
-    ...(appearance.sprite ? { sprite: { ...appearance.sprite } } : {}),
+    ...(appearance.sprite
+      ? {
+          sprite: {
+            ...appearance.sprite,
+            ...(appearance.sprite.animation ? { animation: { ...appearance.sprite.animation } } : {}),
+          },
+        }
+      : {}),
     ...(appearance.sdf ? { sdf: { ...appearance.sdf } } : {}),
     ...(appearance.glyphId ? { glyphId: appearance.glyphId } : {}),
     ...(appearance.glyphs ? { glyphs: appearance.glyphs.map((glyph) => ({ ...glyph })) } : {}),
