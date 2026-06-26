@@ -45,7 +45,6 @@ type EnemySpriteCandidate = {
 export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
   enemy: {
     typeId?: unknown;
-    spriteId?: unknown;
     animId?: unknown;
     render?: { sprite?: { id?: unknown } };
     bState?: { phase?: unknown };
@@ -57,7 +56,7 @@ export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
   const renderSpriteId = enemy.render?.sprite?.id;
   const spriteId = typeof renderSpriteId === "string" && renderSpriteId.length
     ? renderSpriteId
-    : String(enemy.spriteId ?? "");
+    : "";
   const spritePrefix = spriteId.split(".").slice(1, -1).join("_") || typeId;
   const sys = enemySpriteMap.get(spritePrefix) ?? enemySpriteMap.get(typeId);
   if (!sys?.ready || !sys.atlas || !sys.tex?.ready) return null;

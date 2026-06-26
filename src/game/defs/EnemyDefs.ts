@@ -2,19 +2,16 @@
 import { CONTENT } from "../content/CONTENT";
 import attackProfilesJson from "../content/attackProfiles.json";
 import type { AttackProfileDef } from "../enemies/AttackController";
+import type {
+  EnemyAppearanceDef,
+  EnemyGlyphRenderDef,
+  EnemyProcRenderDef,
+  EnemySdfRenderDef,
+  EnemySdfShape,
+  EnemySpriteRenderDef,
+} from "./EnemyAppearanceTypes";
 
 export type EnemyTypeId = string;
-
-// OPTIONAL: signed-distance-field shape (vector, GPU-evaluated). New render path
-// alongside glyph/proc/sprite. shape selects a primitive in SdfPass' fragment shader.
-// Must match SHAPE_ID keys in src/render/webgl/SdfPass.ts
-export type SdfShape = "arrow" | "orb" | "crown" | "mandala" | "sigil" | "bolt" | "triangle" | "chevron" | "thruster" | "laser";
-
-export interface SdfRenderDef {
-  shape: SdfShape;
-  color?: string; // hex, fallback na entity color
-  size?: number; // radius multiplier, default 1.0
-}
 
 // Must match SHAPE_ID keys in src/render/webgl/SdfPass.ts
 const SDF_SHAPES: ReadonlySet<string> = new Set([
@@ -22,58 +19,12 @@ const SDF_SHAPES: ReadonlySet<string> = new Set([
   "bolt", "triangle", "chevron", "thruster", "laser",
 ]);
 
-export interface EnemySpriteRenderDef {
-  id: string;
-  scale?: number;
-}
-
-export interface EnemyRenderDef {
-  // OPTIONAL: base color (fallback)
-  color?: string; // CSS color, typicky "#rrggbb"
-
-  // OPTIONAL: sprite frame id + visual-only scale
-  sprite?: EnemySpriteRenderDef;
-
-  // OPTIONAL: signed-distance-field vector shape (GPU SDF pass)
-  sdf?: SdfRenderDef;
-
-  // OPTIONAL: pixel-glyph id (render/glyphs)
-  glyphId?: string;
-
-  // OPTIONAL: stacked glyphs (composite entity)
-  glyphs?: Array<{
-    id: string; // glyph id in GlyphDB
-    dx?: number; // offset from entity center
-    dy?: number;
-    color?: string; // overrides base color
-    alpha?: number; // 0..1
-    pulseHz?: number; // if set => sin pulse alpha
-    pulseAmp?: number; // 0..1
-  }>;
-
-  // OPTIONAL: procedural vector parts (rendered as quads)
-  proc?: {
-    kind: "parts";
-    parts: Array<{
-      dx: number; // offset from entity center
-      dy: number;
-      w: number;
-      h: number;
-      color?: string; // overrides base color
-      alpha?: number; // 0..1
-      pulseHz?: number; // if set => sin pulse alpha
-      pulseAmp?: number; // 0..1
-    }>;
-  };
-}
-
 export interface EnemyDef {
   hp: number;
   radius: number;
   scoreOnKill: number;
-  spriteId?: string;
   behaviorPreset: string; // content-driven (string); runtime resolves preset map
-  render?: EnemyRenderDef; // OPTIONAL
+  render?: EnemyAppearanceDef; // OPTIONAL
 
   // OPTIONAL AI overlay (future-ready; no runtime effect unless EnemySystem uses it)
   ai?: Record<string, unknown>;
@@ -84,16 +35,6 @@ export interface EnemyDef {
 }
 
 const ATTACK_PROFILES: Record<string, AttackProfileDef> = attackProfilesJson as any;
-
-type GlyphStackItem = {
-  id: string;
-  dx?: number;
-  dy?: number;
-  color?: string;
-  alpha?: number;
-  pulseHz?: number;
-  pulseAmp?: number;
-};
 
 function isObj(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object";
@@ -116,13 +57,8 @@ function clamp01(x: number): number {
 
 export function normalizeEnemySpriteRender(
   renderSpriteRaw: unknown,
-  rootSpriteIdRaw: unknown,
   enemyTypeId: string,
 ): EnemySpriteRenderDef | undefined {
-  const rootSpriteId = typeof rootSpriteIdRaw === "string" && rootSpriteIdRaw.trim().length
-    ? rootSpriteIdRaw.trim()
-    : undefined;
-
   let spriteId: string | undefined;
   let scale = 1.0;
 
@@ -146,13 +82,158 @@ export function normalizeEnemySpriteRender(
     console.warn("[EnemyDefs] Invalid render.sprite for", enemyTypeId, "value:", renderSpriteRaw);
   }
 
-  if (spriteId && rootSpriteId && spriteId !== rootSpriteId) {
-    console.warn("[EnemyDefs] render.sprite.id overrides root spriteId for", enemyTypeId, { renderSpriteId: spriteId, rootSpriteId });
+  return spriteId ? { id: spriteId, scale } : undefined;
+}
+
+export function buildEnemyAppearanceRaw(t: unknown): Record<string, unknown> {
+  const enemyRaw = isObj(t) ? t : {};
+  const renderRaw = isObj(enemyRaw.render) ? enemyRaw.render : {};
+
+  return {
+    ...renderRaw,
+    ...(renderRaw.color === undefined
+      ? { color: enemyRaw.renderColor ?? enemyRaw.color }
+      : {}),
+    ...(renderRaw.glyphId === undefined && enemyRaw.glyphId !== undefined
+      ? { glyphId: enemyRaw.glyphId }
+      : {}),
+    ...(renderRaw.glyphs === undefined && enemyRaw.glyphs !== undefined
+      ? { glyphs: enemyRaw.glyphs }
+      : {}),
+    ...(renderRaw.proc === undefined && enemyRaw.proc !== undefined
+      ? { proc: enemyRaw.proc }
+      : {}),
+    ...(renderRaw.sdf === undefined && enemyRaw.sdf !== undefined
+      ? { sdf: enemyRaw.sdf }
+      : {}),
+  };
+}
+
+export function normalizeEnemyAppearance(
+  raw: unknown,
+  enemyTypeId: string,
+): EnemyAppearanceDef | undefined {
+  const renderRaw = isObj(raw) ? raw : undefined;
+
+  const colorRaw = renderRaw?.color;
+  const glyphIdRaw = renderRaw?.glyphId;
+  const glyphsRaw = renderRaw?.glyphs;
+  const procRaw = renderRaw?.proc;
+  const sdfRaw = renderRaw?.sdf;
+  const spriteRaw = renderRaw?.sprite;
+
+  const color = strOrUndef(colorRaw);
+  const glyphId = strOrUndef(glyphIdRaw);
+  const sprite = normalizeEnemySpriteRender(spriteRaw, enemyTypeId);
+
+  let glyphs: EnemyGlyphRenderDef[] | undefined;
+  if (glyphsRaw !== undefined) {
+    if (Array.isArray(glyphsRaw)) {
+      const parsed = glyphsRaw
+        .filter((x: any) => isObj(x))
+        .map((x: any) => {
+          const gid = String(x.id ?? "");
+          if (!gid) return null;
+
+          const dx = numOr(x.dx, 0);
+          const dy = numOr(x.dy, 0);
+
+          const col = strOrUndef(x.color);
+          const alpha =
+            typeof x.alpha === "number" && Number.isFinite(x.alpha) ? clamp01(x.alpha) : undefined;
+
+          const pulseHz =
+            typeof x.pulseHz === "number" && Number.isFinite(x.pulseHz) ? x.pulseHz : undefined;
+
+          const pulseAmp =
+            typeof x.pulseAmp === "number" && Number.isFinite(x.pulseAmp) ? clamp01(x.pulseAmp) : undefined;
+
+          const it: EnemyGlyphRenderDef = { id: gid, dx, dy };
+          if (col) it.color = col;
+          if (alpha !== undefined) it.alpha = alpha;
+          if (pulseHz !== undefined) it.pulseHz = pulseHz;
+          if (pulseAmp !== undefined) it.pulseAmp = pulseAmp;
+          return it;
+        })
+        .filter((x: any) => !!x) as EnemyGlyphRenderDef[];
+
+      glyphs = parsed.length ? parsed : undefined;
+    } else {
+      glyphs = undefined;
+    }
   }
 
-  const id = spriteId ?? rootSpriteId;
-  return id ? { id, scale } : undefined;
+  let proc: EnemyProcRenderDef | undefined;
+  if (procRaw !== undefined) {
+    if (isObj(procRaw) && (procRaw as any).kind === "parts" && Array.isArray((procRaw as any).parts)) {
+      proc = {
+        kind: "parts",
+        parts: (procRaw as any).parts
+          .filter((x: any) => isObj(x))
+          .map((x: any) => ({
+            dx: numOr(x.dx, 0),
+            dy: numOr(x.dy, 0),
+            w: numOr(x.w, 0),
+            h: numOr(x.h, 0),
+            ...(strOrUndef(x.color) ? { color: strOrUndef(x.color) } : {}),
+            ...(typeof x.alpha === "number" && Number.isFinite(x.alpha) ? { alpha: clamp01(x.alpha) } : {}),
+            ...(typeof x.pulseHz === "number" && Number.isFinite(x.pulseHz) ? { pulseHz: x.pulseHz } : {}),
+            ...(typeof x.pulseAmp === "number" && Number.isFinite(x.pulseAmp) ? { pulseAmp: clamp01(x.pulseAmp) } : {}),
+          })),
+      };
+    } else {
+      proc = undefined;
+    }
+  }
+
+  let sdf: EnemySdfRenderDef | undefined;
+  if (sdfRaw !== undefined) {
+    const shapeRaw = isObj(sdfRaw) ? String((sdfRaw as any).shape ?? "") : "";
+    if (isObj(sdfRaw) && SDF_SHAPES.has(shapeRaw)) {
+      const scol = strOrUndef((sdfRaw as any).color);
+      const ssize =
+        typeof (sdfRaw as any).size === "number" && Number.isFinite((sdfRaw as any).size)
+          ? (sdfRaw as any).size
+          : undefined;
+      sdf = {
+        shape: shapeRaw as EnemySdfShape,
+        ...(scol ? { color: scol } : {}),
+        ...(ssize !== undefined ? { size: ssize } : {}),
+      };
+    } else {
+      console.warn("[EnemyDefs] Invalid sdf (shape must be one of arrow/orb/crown/mandala/sigil/bolt/triangle/chevron/thruster/laser) for", enemyTypeId, "value:", sdfRaw);
+    }
+  }
+
+  if (colorRaw !== undefined && color === undefined) {
+    console.warn("[EnemyDefs] Invalid render color for", enemyTypeId, "value:", colorRaw);
+  }
+
+  if (glyphIdRaw !== undefined && glyphId === undefined) {
+    console.warn("[EnemyDefs] Invalid glyphId for", enemyTypeId, "value:", glyphIdRaw);
+  }
+
+  if (glyphsRaw !== undefined && !Array.isArray(glyphsRaw)) {
+    console.warn("[EnemyDefs] Invalid glyphs (expected array) for", enemyTypeId, "value:", glyphsRaw);
+  }
+
+  if (procRaw !== undefined && proc === undefined) {
+    console.warn("[EnemyDefs] Invalid proc (expected {kind:'parts',parts:[]}) for", enemyTypeId, "value:", procRaw);
+  }
+
+  const hasUsableAppearancePath = !!(sprite || glyphId || glyphs || proc || sdf);
+
+  return {
+    ...(color ? { color } : {}),
+    ...(sprite ? { sprite } : {}),
+    ...(sdf ? { sdf } : {}),
+    ...(glyphId ? { glyphId } : {}),
+    ...(glyphs ? { glyphs } : {}),
+    ...(proc ? { proc } : {}),
+    ...(!hasUsableAppearancePath ? { glyphId: `enemy.${enemyTypeId}` } : {}),
+  };
 }
+
 
 /**
  * ENEMY_DEFS se generuje z contentu, aby nemohly vzniknout 2 světy ID.
@@ -190,18 +271,12 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       t.behavior ??
       "none.basic"; // ✅ tvoje content preset ID pro none
 
-    // render.color tolerance:
-    // - preferred: t.render.color
-    // - alternates: t.color, t.renderColor
-    const colorRaw = t?.render?.color ?? t?.renderColor ?? t?.color;
+    const appearance = normalizeEnemyAppearance(buildEnemyAppearanceRaw(t), id);
 
-    const glyphIdRaw = t?.render?.glyphId ?? t?.glyphId;
-    const glyphsRaw = t?.render?.glyphs ?? t?.glyphs;
-
-    const procRaw = t?.render?.proc ?? t?.proc;
-
-    const sdfRaw = t?.render?.sdf ?? t?.sdf;
-    const spriteRaw = t?.render?.sprite;
+    const hp = numOr(hpRaw, 1);
+    const radius = numOr(radiusRaw, 4);
+    const scoreOnKill = numOr(scoreRaw, 0);
+    const behaviorPreset = typeof presetRaw === "string" && presetRaw.length ? presetRaw : "none.basic";
 
     // ai overlay (optional)
     const aiRaw = t?.ai;
@@ -210,85 +285,6 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
 
     // attack profile (optional)
     const attackProfileIdRaw = t?.attackProfileId;
-    const spriteIdRaw = typeof t?.spriteId === "string" && t.spriteId.trim().length ? t.spriteId.trim() : undefined;
-    const sprite = normalizeEnemySpriteRender(spriteRaw, spriteIdRaw, id);
-
-    const hp = numOr(hpRaw, 1);
-    const radius = numOr(radiusRaw, 4);
-    const scoreOnKill = numOr(scoreRaw, 0);
-    const behaviorPreset = typeof presetRaw === "string" && presetRaw.length ? presetRaw : "none.basic";
-
-    const color = strOrUndef(colorRaw);
-    const glyphId = strOrUndef(glyphIdRaw);
-
-    // glyph stack: tolerant parser, but ensures id is non-empty and numbers are sane
-    let glyphs: GlyphStackItem[] | undefined;
-    if (glyphsRaw !== undefined) {
-      if (Array.isArray(glyphsRaw)) {
-        const parsed = glyphsRaw
-          .filter((x: any) => isObj(x))
-          .map((x: any) => {
-            const gid = String(x.id ?? "");
-            if (!gid) return null;
-
-            const dx = numOr(x.dx, 0);
-            const dy = numOr(x.dy, 0);
-
-            const col = strOrUndef(x.color);
-            const alpha =
-              typeof x.alpha === "number" && Number.isFinite(x.alpha) ? clamp01(x.alpha) : undefined;
-
-            const pulseHz =
-              typeof x.pulseHz === "number" && Number.isFinite(x.pulseHz) ? x.pulseHz : undefined;
-
-            const pulseAmp =
-              typeof x.pulseAmp === "number" && Number.isFinite(x.pulseAmp) ? clamp01(x.pulseAmp) : undefined;
-
-            const it: GlyphStackItem = { id: gid, dx, dy };
-            if (col) it.color = col;
-            if (alpha !== undefined) it.alpha = alpha;
-            if (pulseHz !== undefined) it.pulseHz = pulseHz;
-            if (pulseAmp !== undefined) it.pulseAmp = pulseAmp;
-            return it;
-          })
-          .filter((x: any) => !!x) as GlyphStackItem[];
-
-        glyphs = parsed.length ? parsed : undefined;
-      } else {
-        // present but wrong type
-        glyphs = undefined;
-      }
-    }
-
-    // proc: accept only { kind:"parts", parts:Array }
-    let proc: EnemyRenderDef["proc"] | undefined;
-    if (procRaw !== undefined) {
-      if (isObj(procRaw) && (procRaw as any).kind === "parts" && Array.isArray((procRaw as any).parts)) {
-        proc = procRaw as any;
-      } else {
-        proc = undefined;
-      }
-    }
-
-    // sdf: accept only { shape:<whitelist>, color?, size? }; otherwise warn + skip.
-    let sdf: SdfRenderDef | undefined;
-    if (sdfRaw !== undefined) {
-      const shapeRaw = isObj(sdfRaw) ? String((sdfRaw as any).shape ?? "") : "";
-      if (isObj(sdfRaw) && SDF_SHAPES.has(shapeRaw)) {
-        const scol = strOrUndef((sdfRaw as any).color);
-        const ssize =
-          typeof (sdfRaw as any).size === "number" && Number.isFinite((sdfRaw as any).size)
-            ? (sdfRaw as any).size
-            : undefined;
-        sdf = {
-          shape: shapeRaw as SdfShape,
-          ...(scol ? { color: scol } : {}),
-          ...(ssize !== undefined ? { size: ssize } : {}),
-        };
-      } else {
-        console.warn("[EnemyDefs] Invalid sdf (shape must be one of arrow/orb/crown/mandala/sigil/bolt/triangle/chevron/thruster/laser) for", id, "value:", sdfRaw);
-      }
-    }
 
     const ai = isObj(aiRaw) ? (aiRaw as Record<string, unknown>) : undefined;
     const aiWeight = typeof aiWeightRaw === "number" && Number.isFinite(aiWeightRaw) ? aiWeightRaw : undefined;
@@ -314,46 +310,16 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       });
     }
 
-    if (colorRaw !== undefined && color === undefined) {
-      console.warn("[EnemyDefs] Invalid render color for", id, "value:", colorRaw);
-    }
-
-    if (glyphIdRaw !== undefined && glyphId === undefined) {
-      console.warn("[EnemyDefs] Invalid glyphId for", id, "value:", glyphIdRaw);
-    }
-
-    if (glyphsRaw !== undefined && !Array.isArray(glyphsRaw)) {
-      console.warn("[EnemyDefs] Invalid glyphs (expected array) for", id, "value:", glyphsRaw);
-    }
-
-    if (procRaw !== undefined && proc === undefined) {
-      console.warn("[EnemyDefs] Invalid proc (expected {kind:'parts',parts:[]}) for", id, "value:", procRaw);
-    }
-
-    const hasRender = !!(color || sprite || glyphId || glyphs || proc || sdf);
-
     out[id] = {
       hp,
       radius,
       scoreOnKill,
       behaviorPreset,
-      ...(hasRender
-        ? {
-            render: {
-              ...(color ? { color } : {}),
-              ...(sprite ? { sprite } : {}),
-              ...(glyphId ? { glyphId } : {}),
-              ...(glyphs ? { glyphs } : {}),
-              ...(proc ? { proc } : {}),
-              ...(sdf ? { sdf } : {}),
-            },
-          }
-        : {}),
+      ...(appearance ? { render: appearance } : {}),
       ...(ai ? { ai } : {}),
       ...(aiWeight !== undefined ? { aiWeight } : {}),
       ...(aiEaseSec !== undefined ? { aiEaseSec } : {}),
       ...(attackProfile ? { attackProfile } : {}),
-      ...(sprite ? { spriteId: sprite.id } : {}),
     };
   }
 
