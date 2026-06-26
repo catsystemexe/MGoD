@@ -5,11 +5,11 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { ParticleStore } from "../../engine/fx/ParticleStore";
-
-// Capacity guard retained as paranoia layer — particles now go to ParticleStore
-// (ring buffer, never throws), but if a future code path spawns ECS particles
-// this guard still prevents the hard crash.
-const POOL_GUARD = 0.85;
+import {
+  createEnemyDeathGhostData,
+  DEFAULT_ENEMY_DEATH_VISUAL,
+  snapshotEnemyDeathVisual,
+} from "../fx/EnemyDeathVisual";
 
 export type DamageRules = {
   projectileHitEnemyDamage: number;
@@ -33,9 +33,19 @@ export class DamageSystem<T extends BaseEntity> {
     private readonly rules: DamageRules,
   ) {}
 
-  /** True while the shared pool has headroom for cosmetic particle/fx spawns. */
-  private canSpawnParticle(): boolean {
-    return this.store.aliveCount() < this.store.getCapacity() * POOL_GUARD;
+  /** True when the shared ECS pool has at least one free slot for optional cosmetic FX. */
+  private canSpawnCosmeticEntity(): boolean {
+    return this.store.aliveCount() < this.store.getCapacity();
+  }
+
+  private trySpawnCosmeticEntity(factory: (e: T) => void): EntityRef | null {
+    if (!this.canSpawnCosmeticEntity()) return null;
+    try {
+      return this.store.spawn(factory);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("[EntityStore] Out of capacity")) return null;
+      throw err;
+    }
   }
 
   update(eventsOverride?: any[]): void {
@@ -248,6 +258,7 @@ export class DamageSystem<T extends BaseEntity> {
       return;
     }
     (ent as any).__deathFxDone = true;
+    const deathSnapshot = snapshotEnemyDeathVisual(ent);
 
     // markKill EARLY so other systems skip it in same tick
     this.store.markKill(target);
@@ -306,21 +317,40 @@ if (ent?.pos) {
     });
   }
 
-  // Sprite explosion fx-entity (Fáze 1 — paralelní s quad ring efektem)
-  if (this.canSpawnParticle()) {
-    const nowSec =
-      (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
-    this.store.spawn((fx: any) => {
+  // Animated sprite explosion FX. Uses local fxAge for deterministic renderer timing.
+  this.trySpawnCosmeticEntity((fx: any) => {
       fx.kind = "fx";
       fx.pos = { x: ex, y: ey };
       fx.posPrev = { x: ex, y: ey };
       fx.vel = { x: 0, y: 0 };
-      fx.ttl = 0.4;
-      fx.spawnT = nowSec;
-      fx.spriteId = "fx.explosion.bug1.0";
-      fx.radius = 32;
+      fx.ttl = 0.5;
+      fx.fxAge = 0;
+      fx.spawnT = 0;
+      fx.animId = DEFAULT_ENEMY_DEATH_VISUAL.explosionId;
+      fx.spriteId = `${DEFAULT_ENEMY_DEATH_VISUAL.explosionId}.0`;
+      fx.explosionScale = DEFAULT_ENEMY_DEATH_VISUAL.explosionScale;
+      fx.radius = 40 * DEFAULT_ENEMY_DEATH_VISUAL.explosionScale;
       fx.render = {};
     });
+
+  // Render-only enemy death ghost FX. Optional cosmetic; explosion has priority.
+  if (deathSnapshot) {
+    const ghost = createEnemyDeathGhostData(
+      { typeId: deathSnapshot.typeId, pos: deathSnapshot.pos, posPrev: deathSnapshot.posPrev, radius: deathSnapshot.radius, render: deathSnapshot.render },
+      DEFAULT_ENEMY_DEATH_VISUAL,
+    );
+    if (ghost) {
+      this.trySpawnCosmeticEntity((fx: any) => {
+        fx.kind = ghost.kind;
+        fx.pos = ghost.pos;
+        fx.posPrev = ghost.posPrev;
+        fx.vel = ghost.vel;
+        fx.ttl = ghost.ttl;
+        fx.fxAge = 0;
+        fx.radius = ghost.radius;
+        fx.deathVisual = ghost.deathVisual;
+      });
+    }
   }
 }
   }

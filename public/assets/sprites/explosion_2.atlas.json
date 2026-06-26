@@ -1,0 +1,85 @@
+{
+  "texture": "/assets/sprites/explosion_2.png",
+  "frames": {
+    "fx.explosion.2.0": {
+      "x": 0,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.1": {
+      "x": 80,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.2": {
+      "x": 160,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.3": {
+      "x": 240,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.4": {
+      "x": 320,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.5": {
+      "x": 400,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.6": {
+      "x": 480,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    },
+    "fx.explosion.2.7": {
+      "x": 560,
+      "y": 0,
+      "w": 80,
+      "h": 80,
+      "px": 40,
+      "py": 40
+    }
+  },
+  "anims": {
+    "fx.explosion.2": {
+      "fps": 16,
+      "frames": [
+        "fx.explosion.2.0",
+        "fx.explosion.2.1",
+        "fx.explosion.2.2",
+        "fx.explosion.2.3",
+        "fx.explosion.2.4",
+        "fx.explosion.2.5",
+        "fx.explosion.2.6",
+        "fx.explosion.2.7"
+      ],
+      "loop": false
+    }
+  }
+}

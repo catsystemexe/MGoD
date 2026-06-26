@@ -14,6 +14,12 @@ import { createMeshPass, type MeshPass } from "../../rendering/MeshPass";
 import { loadGLB } from "../../rendering/MeshLoader";
 import { uploadMesh, type GpuMesh } from "../../rendering/GpuMesh";
 import { hexToRgb } from "../../rendering/ColorPalette";
+import {
+  computeEnemyDeathVisualState,
+  DEFAULT_ENEMY_DEATH_VISUAL,
+  type EnemyDeathGhostSnapshot,
+  type EnemyDeathVisualDef,
+} from "../../game/fx/EnemyDeathVisual";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
 
@@ -26,6 +32,13 @@ type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
 type HasRadius = { radius?: number };
 type HasRender = { render?: { color?: string } };
+type DeathVisualFx = {
+  age: number;
+  flashSec: number;
+  burnSec: number;
+  overlapSec: number;
+  snapshot: EnemyDeathGhostSnapshot;
+};
 
 function readKind(e: any): string | null {
   const k = e as HasKind;
@@ -76,6 +89,67 @@ export function selectEnemySpriteFrame<T extends EnemySpriteCandidate>(
   return frame ? { sys, frame } : null;
 }
 
+export type EnemyDeathGhostDrawState<T extends EnemySpriteCandidate = EnemySpriteCandidate> = {
+  sys: T;
+  frame: EnemySpriteFrame;
+  phase: "flash" | "burn";
+  tint: [number, number, number];
+  opacity: number;
+  scale: number;
+  hidden: false;
+};
+
+export function selectEnemyDeathGhostFrame<T extends EnemySpriteCandidate>(
+  deathVisual: DeathVisualFx | undefined,
+  enemySpriteMap: Pick<Map<string, T>, "get">,
+  renderTimeSec: number,
+): EnemyDeathGhostDrawState<T> | null {
+  void renderTimeSec;
+  if (!deathVisual?.snapshot) return null;
+
+  const visualDef: EnemyDeathVisualDef = {
+    flashSec: deathVisual.flashSec,
+    burnSec: deathVisual.burnSec,
+    overlapSec: deathVisual.overlapSec,
+    explosionId: DEFAULT_ENEMY_DEATH_VISUAL.explosionId,
+    explosionScale: DEFAULT_ENEMY_DEATH_VISUAL.explosionScale,
+  };
+  const visualState = computeEnemyDeathVisualState(deathVisual.age, visualDef);
+  if (visualState.phase === "hidden" || visualState.opacity <= 0) return null;
+
+  const snapshot = deathVisual.snapshot;
+  const phaseRaw = Number((snapshot as any).bState?.phase ?? (snapshot as any).phase ?? 0);
+  const deterministicPhase = Number.isFinite(phaseRaw) ? phaseRaw : 0;
+  const selected = selectEnemySpriteFrame(
+    {
+      typeId: snapshot.typeId,
+      render: snapshot.render,
+      bState: { phase: deterministicPhase },
+    },
+    enemySpriteMap,
+    Math.max(0, Number.isFinite(Number(deathVisual.age)) ? Number(deathVisual.age) : 0),
+  );
+  if (!selected) return null;
+
+  return {
+    sys: selected.sys,
+    frame: selected.frame,
+    phase: visualState.phase,
+    tint: visualState.tint,
+    opacity: visualState.opacity,
+    scale: snapshot.render?.sprite?.scale ?? 1,
+    hidden: false,
+  };
+}
+
+export type FxRenderLayerKind = "normal" | "deathGhost" | "explosion";
+
+export function classifyFxRenderLayer(entity: { kind?: unknown; type?: unknown; tag?: unknown; deathVisual?: unknown }): FxRenderLayerKind {
+  const kind = String(entity.kind ?? entity.type ?? entity.tag ?? "");
+  if (kind !== "fx") return "normal";
+  return entity.deathVisual ? "deathGhost" : "explosion";
+}
+
 export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unknown): {
   width: number;
   height: number;
@@ -91,6 +165,52 @@ export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unk
     pivotX: frame.px * scale,
     pivotY: frame.py * scale,
   };
+}
+
+type FxSpriteFrame = EnemySpriteFrame;
+type FxSpriteCandidate = EnemySpriteCandidate;
+
+function fxAnimRegistryKeys(animId: string): string[] {
+  return animId ? [animId] : [];
+}
+
+function fxStaticRegistryKeys(spriteId: string): string[] {
+  if (!spriteId) return [];
+  const parts = spriteId.split(".");
+  return parts.length > 1 ? [parts.slice(0, -1).join("."), spriteId] : [spriteId];
+}
+
+export function selectFxSpriteFrame<T extends FxSpriteCandidate>(
+  entity: { animId?: unknown; spriteId?: unknown; spawnT?: unknown; fxAge?: unknown },
+  fxSpriteSystems: Pick<Map<string, T>, "get">,
+  renderTimeSec: number,
+): { sys: T; frame: FxSpriteFrame } | null {
+  const animId = String(entity.animId ?? "");
+  const spriteId = String(entity.spriteId ?? "");
+  const fxAgeRaw = Number(entity.fxAge);
+  const localT = Number.isFinite(fxAgeRaw)
+    ? Math.max(0, fxAgeRaw)
+    : Math.max(0, renderTimeSec - (Number.isFinite(Number(entity.spawnT ?? 0)) ? Number(entity.spawnT ?? 0) : 0));
+
+  if (animId) {
+    for (const key of fxAnimRegistryKeys(animId)) {
+      const sys = fxSpriteSystems.get(key);
+      if (!sys?.ready || !sys.atlas || !sys.tex?.ready) continue;
+      const frame = sys.atlas.pickAnimFrame(animId, localT);
+      if (frame) return { sys, frame };
+    }
+  }
+
+  if (spriteId) {
+    for (const key of fxStaticRegistryKeys(spriteId)) {
+      const sys = fxSpriteSystems.get(key);
+      if (!sys?.ready || !sys.atlas || !sys.tex?.ready) continue;
+      const frame = sys.atlas.frame(spriteId);
+      if (frame) return { sys, frame };
+    }
+  }
+
+  return null;
 }
 
   
@@ -155,6 +275,7 @@ export class WebGLSceneRenderer {
   private lastRenderMs = -1;
 
   private fxSprites: SpriteSystem;
+  private fxSpriteSystems: Map<string, SpriteSystem> = new Map();
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
   private enemySpriteMap: Map<string, SpriteSystem> = new Map();
@@ -258,10 +379,22 @@ export class WebGLSceneRenderer {
       void this.sprites.load("/assets/sprites/core.atlas.json", "/assets/sprites/core.png");
 
 
+    const fxSpriteAssets: Array<{ id: string; atlas: string; png: string }> = [
+      { id: "fx.explosion.bug1", atlas: "/assets/sprites/explosion_bug1.atlas.json", png: "/assets/sprites/explosion_bug1.png" },
+      { id: "fx.explosion.1", atlas: "/assets/sprites/explosion_1.atlas.json", png: "/assets/sprites/explosion_1.png" },
+      { id: "fx.explosion.2", atlas: "/assets/sprites/explosion_2.atlas.json", png: "/assets/sprites/explosion_2.png" },
+      { id: "fx.explosion.3", atlas: "/assets/sprites/explosion_3.atlas.json", png: "/assets/sprites/explosion_3.png" },
+      { id: "fx.explosion.4", atlas: "/assets/sprites/explosion_4.atlas.json", png: "/assets/sprites/explosion_4.png" },
+    ];
     this.fxSprites = new SpriteSystem(gl);
-    void this.fxSprites
-      .load("/assets/sprites/explosion_bug1.atlas.json", "/assets/sprites/explosion_bug1.png")
-      .catch((err) => console.warn("[SPRITES] fxSprites load failed", err));
+    for (const asset of fxSpriteAssets) {
+      const sys = new SpriteSystem(gl);
+      void sys
+        .load(asset.atlas, asset.png)
+        .catch((err) => console.warn(`[SPRITES] fxSprites ${asset.id} load failed`, err));
+      this.fxSpriteSystems.set(asset.id, sys);
+      if (asset.id === "fx.explosion.bug1") this.fxSprites = sys;
+    }
 
     
     this.projSprites = new SpriteSystem(gl);
@@ -287,6 +420,82 @@ export class WebGLSceneRenderer {
     }
     }
 
+
+  private drawEnemyDeathGhostFx(e: any, ix: number, iy: number, tSec: number): boolean {
+    const gl = this.gl;
+    const selected = selectEnemyDeathGhostFrame(e?.deathVisual, this.enemySpriteMap, tSec);
+    if (!selected) return false;
+
+    const geom = computeSpriteDrawGeometry(selected.frame, selected.scale);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    selected.sys.prog.begin(
+      this.logicW,
+      this.logicH,
+      selected.sys.tex.tex,
+      selected.sys.tex.w,
+      selected.sys.tex.h,
+    );
+    selected.sys.prog.draw(
+      ix, iy,
+      geom.width, geom.height,
+      geom.pivotX, geom.pivotY,
+      0,
+      selected.frame.x, selected.frame.y, selected.frame.w, selected.frame.h,
+      selected.tint[0], selected.tint[1], selected.tint[2], selected.opacity,
+    );
+    selected.sys.prog.end();
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(this.prog);
+    gl.bindVertexArray(this.vao);
+    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+    return true;
+  }
+
+  private drawFxSpriteEntity(e: any, ix: number, iy: number, tSec: number): boolean {
+    const gl = this.gl;
+    const animId = String((e as any).animId ?? "");
+    const spriteId = String((e as any).spriteId ?? "");
+    void animId;
+    void spriteId;
+    const selectedFxSprite = selectFxSpriteFrame(e as any, this.fxSpriteSystems, tSec);
+    if (!selectedFxSprite) return false;
+
+    const fr = selectedFxSprite.frame;
+    const fxSprites = selectedFxSprite.sys;
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    fxSprites.prog.begin(
+      this.logicW,
+      this.logicH,
+      fxSprites.tex.tex,
+      fxSprites.tex.w,
+      fxSprites.tex.h,
+    );
+
+    const scale = typeof (e as any).explosionScale === "number" && Number.isFinite((e as any).explosionScale) && (e as any).explosionScale > 0
+      ? (e as any).explosionScale
+      : 1;
+    fxSprites.prog.draw(
+      ix, iy,
+      fr.w * scale, fr.h * scale,
+      fr.px * scale, fr.py * scale,
+      0,
+      fr.x, fr.y, fr.w, fr.h,
+      1, 1, 1, 1,
+    );
+
+    fxSprites.prog.end();
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(this.prog);
+    gl.bindVertexArray(this.vao);
+    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+    return true;
+  }
 
   
   private async loadModel(id: string, url: string): Promise<void> {
@@ -615,6 +824,8 @@ export class WebGLSceneRenderer {
 
     // clamp once per frame
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+    const deathGhostFx: Array<{ e: any; ix: number; iy: number }> = [];
+    const explosionFx: Array<{ e: any; ix: number; iy: number; w: number; h: number }> = [];
 
     this.store.debugForEachAlive((_ref, e: any) => {
       if (!e) return;
@@ -716,6 +927,15 @@ export class WebGLSceneRenderer {
       // so every entity converts world -> screen the same way.
       ix -= sx;
       iy -= sy;
+      const fxLayer = classifyFxRenderLayer(e as any);
+      if (fxLayer === "deathGhost") {
+        deathGhostFx.push({ e, ix, iy });
+        return;
+      }
+      if (fxLayer === "explosion") {
+        explosionFx.push({ e, ix, iy, w, h });
+        return;
+      }
       // --- PROC PARTS PATH (vector parts) + GLYPH STACK PATH (composite) + GLYPH PATH (single)
       const baseColStr = (e as any).render?.color;
       const baseCol = (typeof baseColStr === "string" && baseColStr.length) ? baseColStr : null;
@@ -1092,59 +1312,23 @@ export class WebGLSceneRenderer {
         }
       }
 
-      // --- SPRITE DRAW (fx MVP: explosions) ---
-      if (kind === "fx" && this.fxSprites?.ready && this.fxSprites.atlas && this.fxSprites.tex.ready) {
-        const atlas = this.fxSprites.atlas;
-
-        const refStr = String(_ref ?? "");
-        let hsh = 0;
-        for (let i = 0; i < refStr.length; i++) hsh = (hsh * 31 + refStr.charCodeAt(i)) | 0;
-        const phase = ((hsh >>> 0) % 1000) / 1000;
-
-        const animId = String((e as any).animId ?? "");
-        const spriteId = String((e as any).spriteId ?? "");
-
-        const fr =
-          (animId && atlas.pickAnimFrame(animId, tSec + phase)) ||
-          (spriteId && atlas.frame(spriteId)) ||
-          null;
-
-        if (fr) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-          this.fxSprites.prog.begin(
-            this.logicW,
-            this.logicH,
-            this.fxSprites.tex.tex,
-            this.fxSprites.tex.w,
-            this.fxSprites.tex.h,
-          );
-
-          this.fxSprites.prog.draw(
-            ix, iy,
-            fr.w, fr.h,
-            fr.px, fr.py,
-            0,
-            fr.x, fr.y, fr.w, fr.h,
-            1, 1, 1, 1,
-          );
-
-          this.fxSprites.prog.end();
-          gl.disable(gl.BLEND);
-
-          gl.useProgram(this.prog);
-          gl.bindVertexArray(this.vao);
-          gl.uniform2f(this.uLogic, this.logicW, this.logicH);
-          return;
-        }
-      }
-      
       // --- QUAD FALLBACK (original) ---
       gl.uniform2f(this.uPos, ix, iy);
       gl.uniform2f(this.uSize, w, h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     });
+
+    for (const fx of deathGhostFx) {
+      this.drawEnemyDeathGhostFx(fx.e, fx.ix, fx.iy, tSec);
+    }
+
+    for (const fx of explosionFx) {
+      if (this.drawFxSpriteEntity(fx.e, fx.ix, fx.iy, tSec)) continue;
+      gl.uniform4f(this.uColor, 0, 1, 1, 1);
+      gl.uniform2f(this.uPos, fx.ix, fx.iy);
+      gl.uniform2f(this.uSize, fx.w, fx.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
 
     gl.bindVertexArray(null);
   }
