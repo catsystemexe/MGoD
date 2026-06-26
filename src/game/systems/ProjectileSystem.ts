@@ -24,6 +24,10 @@ export interface MovingTTL {
 
   // render interpolation
   posPrev?: Vec2;
+
+  // render-only FX local ages
+  fxAge?: number;
+  deathVisual?: { age?: number };
 }
 
 function safeNum(v: any, fb: number): number {
@@ -67,6 +71,17 @@ export class ProjectileSystem {
       if (e.pos && e.vel) {
         e.pos.x += e.vel.x * dtSec;
         e.pos.y += e.vel.y * dtSec;
+      }
+
+      // Render-only FX local ages (TTL remains authoritative for cleanup)
+      if (e.kind === "fx") {
+        const fxAge = Number((e as any).fxAge ?? 0);
+        (e as any).fxAge = (Number.isFinite(fxAge) && fxAge >= 0 ? fxAge : 0) + dtSec;
+
+        if ((e as any).deathVisual) {
+          const age = Number((e as any).deathVisual.age ?? 0);
+          (e as any).deathVisual.age = (Number.isFinite(age) && age >= 0 ? age : 0) + dtSec;
+        }
       }
 
       // Lifetime

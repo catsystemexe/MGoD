@@ -3,6 +3,7 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
+import type { EnemyDeathGhostSnapshot } from "../fx/EnemyDeathVisual";
 
 // --- World entities (MVP subset used by Collision) ---
 
@@ -83,9 +84,18 @@ export interface FxEntity {
   pendingKill: boolean;
   posPrev?: { x: number; y: number };
   spawnT?: number;
+  fxAge?: number;
+  explosionScale?: number;
   spriteId?: string;
   animId?: string;
   render?: Record<string, unknown>;
+  deathVisual?: {
+    age: number;
+    flashSec: number;
+    burnSec: number;
+    overlapSec: number;
+    snapshot: EnemyDeathGhostSnapshot;
+  };
 }
 
 // WorldEntity must satisfy BaseEntity contract used by the store
