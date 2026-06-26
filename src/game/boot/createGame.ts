@@ -390,8 +390,10 @@ export async function createGame(
   const damage = new DamageSystem<WorldEntity>(bus as any, store as any, particleStore, {
     projectileHitEnemyDamage: 3,
     playerHitEnemyDamage: 1,
-    onHitSpark: (p: any) => { vfx.onHitSpark(p); audio?.noteHit(); },
-    onExplosion: (p: any) => { vfx.onExplosion(p); audio?.noteExplosion(p); },
+    // Legacy VFX hit spark temporarily disabled; audio remains.
+    onHitSpark: (_p: any) => { audio?.noteHit(); },
+    // Legacy VFX explosion temporarily disabled; audio remains.
+    onExplosion: (p: any) => { audio?.noteExplosion(p); },
   });
 
   const impact = new ImpactPhaseSystem(damage, caImpact);

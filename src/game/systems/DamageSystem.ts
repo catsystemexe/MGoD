@@ -74,46 +74,7 @@ export class DamageSystem<T extends BaseEntity> {
             }
           }
 
-          // shards particles → ParticleStore ring buffer
-          if (enemyEnt && projEnt?.vel) {
-            const vx = Number(projEnt.vel.x ?? 0);
-            const vy = Number(projEnt.vel.y ?? -1);
-            const len = Math.hypot(vx, vy) || 1;
-            const dx = vx / len;
-            const dy = vy / len;
-
-            this.rules.onHitSpark?.({
-              x: Number(enemyEnt.pos?.x ?? 0),
-              y: Number(enemyEnt.pos?.y ?? 0),
-              dx,
-              dy,
-            });
-
-            const ex = Number(enemyEnt.pos?.x ?? 0);
-            const ey = Number(enemyEnt.pos?.y ?? 0);
-            const count = 4;
-            const baseSpeed = 80;
-            const spread = 0.3;
-
-            for (let i = 0; i < count; i++) {
-              const a = (Math.random() * 2 - 1) * spread;
-              const ca = Math.cos(a), sa = Math.sin(a);
-              const sx = dx * ca - dy * sa;
-              const sy = dx * sa + dy * ca;
-              const sp = baseSpeed * (0.7 + Math.random() * 0.6);
-              const ttl = 0.18 + Math.random() * 0.12;
-
-              this.particleStore.emit({
-                x: ex, y: ey,
-                vx: sx * sp, vy: sy * sp,
-                ttl, maxTtl: ttl,
-                r: 1, g: 1, b: 1,
-                size: 1,
-                kind: "shard",
-              });
-            }
-          }
-
+          // Legacy enemy-hit spark/shard visuals temporarily disabled.
           // --- actual HP damage to enemy (per-projectile if available, else global rule)
           const projDmg = (projEnt && typeof projEnt.damage === "number" && projEnt.damage > 0)
             ? projEnt.damage
@@ -130,24 +91,7 @@ export class DamageSystem<T extends BaseEntity> {
 
         case EventType.ENEMY_PROJECTILE_HIT_PLAYER: {
           const { player, damage: epDmg } = e.payload as CMEventMap[typeof EventType.ENEMY_PROJECTILE_HIT_PLAYER];
-          const hitPlayer: any = this.store.get(player);
-          if (hitPlayer?.pos) {
-            const px = Number(hitPlayer.pos.x ?? 0);
-            const py = Number(hitPlayer.pos.y ?? 0);
-            for (let i = 0; i < 4; i++) {
-              const ang = Math.random() * Math.PI * 2;
-              const sp = 80 + Math.random() * 60;
-              const ttl = 0.12 + Math.random() * 0.08;
-              this.particleStore.emit({
-                x: px, y: py,
-                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-                ttl, maxTtl: ttl,
-                r: 1, g: 0.3, b: 0.3,
-                size: 2,
-                kind: "shard",
-              });
-            }
-          }
+          // Legacy player-hit shard visuals temporarily disabled.
           this.applyPlayerContact(player, epDmg);
           break;
         }
@@ -289,37 +233,7 @@ if (ent?.pos) {
       : "#ffffff";
   const [cr, cg, cb] = hexToRgb01(baseCol);
 
-  // core flash
-  this.particleStore.emit({
-    x: ex, y: ey, vx: 0, vy: 0,
-    ttl: 0.10, maxTtl: 0.10,
-    r: cr, g: cg, b: cb,
-    size: 10,
-    kind: "flash",
-  });
-
-  // burst shards
-  const count = 18;
-  const baseSpeed = 220;
-
-  for (let i = 0; i < count; i++) {
-    const ang = (i / count) * Math.PI * 2;
-    const jitter = (Math.random() * 2 - 1) * 0.25;
-    const a = ang + jitter;
-    const vx = Math.cos(a);
-    const vy = Math.sin(a);
-    const sp = baseSpeed * (0.55 + Math.random() * 0.75);
-    const ttl = 0.22 + Math.random() * 0.22;
-
-    this.particleStore.emit({
-      x: ex, y: ey,
-      vx: vx * sp, vy: vy * sp,
-      ttl, maxTtl: ttl,
-      r: cr, g: cg, b: cb,
-      size: 2 + (Math.random() * 2),
-      kind: "shard",
-    });
-  }
+  // Legacy enemy-death flash/shard visuals temporarily disabled.
 
   // Animated sprite explosion FX. Uses local fxAge for deterministic renderer timing.
   this.trySpawnCosmeticEntity((fx: any) => {

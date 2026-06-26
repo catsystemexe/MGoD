@@ -827,7 +827,41 @@ export class WebGLSceneRenderer {
     const deathGhostFx: Array<{ e: any; ix: number; iy: number }> = [];
     const explosionFx: Array<{ e: any; ix: number; iy: number; w: number; h: number }> = [];
 
+    // ECS iterates recycled slots, not spawn order. Collect enemies separately
+    // and draw older IDs first so every newly spawned enemy appears on top.
+    const enemyRenderOrder: Array<{
+      e: any;
+      spawnId: number;
+      collectIndex: number;
+    }> = [];
+
+    let enemyCollectIndex = 0;
     this.store.debugForEachAlive((_ref, e: any) => {
+      if (!e || readKind(e) !== "enemy") return;
+
+      const rawId = Number(e.id);
+      enemyRenderOrder.push({
+        e,
+        spawnId: Number.isFinite(rawId) ? rawId : 0,
+        collectIndex: enemyCollectIndex++,
+      });
+    });
+
+    enemyRenderOrder.sort(
+      (left, right) =>
+        left.spawnId - right.spawnId ||
+        left.collectIndex - right.collectIndex,
+    );
+
+    let enemyDrawIndex = 0;
+
+    this.store.debugForEachAlive((_ref, storedEntity: any) => {
+      let e = storedEntity;
+
+      if (e && readKind(e) === "enemy") {
+        e = enemyRenderOrder[enemyDrawIndex++]?.e ?? e;
+      }
+
       if (!e) return;
 
       const kind = readKind(e);
