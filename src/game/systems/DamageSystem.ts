@@ -259,6 +259,10 @@ export class DamageSystem<T extends BaseEntity> {
     }
     (ent as any).__deathFxDone = true;
     const deathSnapshot = snapshotEnemyDeathVisual(ent);
+    const deathVel = {
+      x: Number.isFinite(Number(ent.vel?.x)) ? Number(ent.vel.x) : 0,
+      y: Number.isFinite(Number(ent.vel?.y)) ? Number(ent.vel.y) : 0,
+    };
 
     // markKill EARLY so other systems skip it in same tick
     this.store.markKill(target);
@@ -322,7 +326,10 @@ if (ent?.pos) {
       fx.kind = "fx";
       fx.pos = { x: ex, y: ey };
       fx.posPrev = { x: ex, y: ey };
-      fx.vel = { x: 0, y: 0 };
+      fx.vel = {
+        x: deathVel.x * 0.65,
+        y: deathVel.y * 0.65,
+      };
       fx.ttl = 0.5;
       fx.fxAge = 0;
       fx.spawnT = 0;
@@ -344,7 +351,10 @@ if (ent?.pos) {
         fx.kind = ghost.kind;
         fx.pos = ghost.pos;
         fx.posPrev = ghost.posPrev;
-        fx.vel = ghost.vel;
+        fx.vel = {
+          x: deathVel.x,
+          y: deathVel.y,
+        };
         fx.ttl = ghost.ttl;
         fx.fxAge = 0;
         fx.radius = ghost.radius;
