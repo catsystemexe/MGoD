@@ -25,6 +25,7 @@ export interface EnemyDef {
   radius: number;
   scoreOnKill: number;
   behaviorPreset: string; // content-driven (string); runtime resolves preset map
+  behaviorGraphId?: string;
   render?: EnemyAppearanceDef; // OPTIONAL
 
   // OPTIONAL AI overlay (future-ready; no runtime effect unless EnemySystem uses it)
@@ -36,6 +37,10 @@ export interface EnemyDef {
 }
 
 const ATTACK_PROFILES: Record<string, AttackProfileDef> = attackProfilesJson as any;
+
+export function getAttackProfile(id: string): AttackProfileDef | undefined {
+  return ATTACK_PROFILES[id];
+}
 
 function isObj(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object";
@@ -310,6 +315,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
     const radius = numOr(radiusRaw, 4);
     const scoreOnKill = numOr(scoreRaw, 0);
     const behaviorPreset = typeof presetRaw === "string" && presetRaw.length ? presetRaw : "none.basic";
+    const behaviorGraphId = strOrUndef(t?.behaviorGraphId);
 
     // ai overlay (optional)
     const aiRaw = t?.ai;
@@ -348,6 +354,7 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       radius,
       scoreOnKill,
       behaviorPreset,
+      ...(behaviorGraphId ? { behaviorGraphId } : {}),
       ...(appearance ? { render: appearance } : {}),
       ...(ai ? { ai } : {}),
       ...(aiWeight !== undefined ? { aiWeight } : {}),

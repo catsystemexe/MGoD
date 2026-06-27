@@ -1,8 +1,10 @@
 import enemyTypesJson from "./enemyTypes.json";
 import behaviorPresetsJson from "./behaviorPresets.json";
 import directorWavesJson from "./directorWaves.json";
+import behaviorGraphsRaw from "./behaviorGraphs.json";
 
 import type { BehaviorPreset } from "../enemies/EnemyBehaviorTypes";
+import type { BehaviorGraph } from "../enemies/fsm";
 import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import type { EnemyContentBundle, EnemyTypeContentDef, EnemyWaveContentDef } from "../defs/EnemyContentTypes";
 
@@ -80,15 +82,24 @@ export function loadContent(): EnemyContentBundle {
   const enemyTypes = validateEnemyTypes((enemyTypesJson as any).enemyTypes);
   const behaviorPresets = validateBehaviorPresets((behaviorPresetsJson as any).behaviorPresets);
   const waves = validateWaves((directorWavesJson as any).waves);
+  const behaviorGraphs = behaviorGraphsRaw as Record<string, BehaviorGraph>;
 
   // cross-ref checks
   const presetIds = new Set(behaviorPresets.map(b => b.id));
+  const graphIds = new Set(Object.keys(behaviorGraphs));
 
   for (const e of enemyTypes) {
     assert(
       presetIds.has(e.behaviorPresetId),
       `enemyType(${e.id}) references missing behaviorPresetId=${e.behaviorPresetId}`
     );
+
+    if (typeof e.behaviorGraphId === "string" && e.behaviorGraphId.length) {
+      assert(
+        graphIds.has(e.behaviorGraphId),
+        `enemyType(${e.id}) references missing behaviorGraphId=${e.behaviorGraphId}`
+      );
+    }
   }
 
   const typeIds = new Set(enemyTypes.map(e => e.id));
@@ -103,5 +114,5 @@ export function loadContent(): EnemyContentBundle {
     }
   }
 
-  return { enemyTypes, behaviorPresets, waves };
+  return { enemyTypes, behaviorPresets, behaviorGraphs, waves };
 }
