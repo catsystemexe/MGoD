@@ -2,10 +2,13 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { TickContext } from "../../engine/core/Loop";
 import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
+import { EnemyBehaviorPresets } from "../enemies/EnemyBehaviorPresets";
+import { updateFsm } from "../enemies/fsm";
 import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import type { EnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
-import { ENEMY_DEFS } from "../defs/EnemyDefs";
+import { ENEMY_DEFS, getAttackProfile } from "../defs/EnemyDefs";
 import { updateAttack } from "../enemies/AttackController";
+import { BEHAVIOR_GRAPHS } from "../content/CONTENT";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
@@ -19,6 +22,26 @@ function smoothTo(cur: number, target: number, easeSec: number, dt: number): num
   const c = Number.isFinite(cur) ? cur : 0;
   const t = Number.isFinite(target) ? target : c;
   return c + (t - c) * a;
+}
+
+function applyStateBehavior(e: any, movementPresetId?: string): void {
+  if (!movementPresetId) return;
+  if (e.fsmAppliedMovementPresetId === movementPresetId) return;
+
+  const preset = EnemyBehaviorPresets[movementPresetId] ?? EnemyBehaviorPresets["none.basic"];
+  if (!preset) return;
+
+  const nextBehaviorId = preset.behaviorId;
+  const behavior = EnemyBehaviorDB[nextBehaviorId] ?? EnemyBehaviorDB.none;
+  const attack = e.bState?.attack;
+
+  e.behaviorId = nextBehaviorId;
+  e.behavior = preset.params ?? {};
+  e.bState = { t: 0 };
+  if (attack) e.bState.attack = attack;
+  e.fsmAppliedMovementPresetId = movementPresetId;
+
+  behavior?.init?.(e);
 }
 
 export class EnemySystem {
@@ -88,6 +111,25 @@ export class EnemySystem {
         }
       }
 
+
+      const def = ENEMY_DEFS[e.typeId];
+      let fsmAttackProfile: any | undefined;
+      const graphId = typeof def?.behaviorGraphId === "string" ? def.behaviorGraphId : "";
+      const graph = graphId ? BEHAVIOR_GRAPHS[graphId] : undefined;
+      if (graph) {
+        const fsmResult = updateFsm({
+          ent: e,
+          graph,
+          scrollX,
+          logicW: W,
+          dt,
+        });
+        applyStateBehavior(e, fsmResult.state.movementPresetId);
+        fsmAttackProfile = fsmResult.state.attackProfileId
+          ? getAttackProfile(fsmResult.state.attackProfileId)
+          : undefined;
+      }
+
       // behavior id (TS-safe)
       const bid: EnemyBehaviorId = isEnemyBehaviorId(e.behaviorId) ? e.behaviorId : "none";
       if (DEV && bid === "none" && e.behaviorId && !isEnemyBehaviorId(e.behaviorId)) {
@@ -141,11 +183,11 @@ export class EnemySystem {
       e.pos.y += e.vel.y * dt;
 
       // attack controller (data-driven enemy shooting)
-      const def = ENEMY_DEFS[e.typeId];
-      if (def?.attackProfile) {
+      const attackProfile = fsmAttackProfile ?? def?.attackProfile;
+      if (attackProfile) {
         updateAttack({
           ent: e,
-          profile: def.attackProfile,
+          profile: attackProfile,
           playerPos,
           store: this.store,
           scrollX,

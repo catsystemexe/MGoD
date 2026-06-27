@@ -1,4 +1,5 @@
 import type { BehaviorPreset } from "../enemies/EnemyBehaviorTypes";
+import type { BehaviorGraph } from "../enemies/fsm";
 import type { EnemyAppearanceDef } from "./EnemyAppearanceTypes";
 
 export interface EnemyTypeContentDef {
@@ -7,6 +8,7 @@ export interface EnemyTypeContentDef {
   radius: number;
   scoreOnKill: number;
   behaviorPresetId: string;
+  behaviorGraphId?: string;
   attackProfileId?: string;
   render?: EnemyAppearanceDef;
   ai?: Record<string, unknown>;
@@ -39,5 +41,6 @@ export interface EnemyWaveContentDef {
 export interface EnemyContentBundle {
   enemyTypes: EnemyTypeContentDef[];
   behaviorPresets: BehaviorPreset[];
+  behaviorGraphs: Record<string, BehaviorGraph>;
   waves: EnemyWaveContentDef[];
 }
