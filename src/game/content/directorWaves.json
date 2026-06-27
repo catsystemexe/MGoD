@@ -1,0 +1,150 @@
+{
+  "waves": [
+    {
+      "id": "wave.test",
+      "startSec": 0,
+      "durationSec": 999,
+      "spawnEverySec": 0.1,
+      "maxAlive": 5,
+      "enemyTypeId": "bug1",
+      "behaviorPresetId": "sine.hold",
+      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 50, "count": 5 }
+    },
+    {
+      "id": "wave.red",
+      "startSec": 5,
+      "durationSec": 10,
+      "spawnEverySec": 0.6,
+      "maxAlive": 5,
+      "enemyTypeId": "red",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 16, "slopeY": 0 }
+    },
+    {
+      "id": "wave.sniper",
+      "startSec": 8,
+      "durationSec": 14,
+      "spawnEverySec": 2.0,
+      "maxAlive": 2,
+      "enemyTypeId": "sniper_aimed",
+      "behaviorPresetId": "sine.sniper",
+      "pattern": { "kind": "line", "originX": 936, "originY": 300, "spacingX": 20, "slopeY": 0 }
+    },
+
+    {
+      "id": "wave.scout",
+      "startSec": 5,
+      "durationSec": 20,
+      "spawnEverySec": 1.5,
+      "maxAlive": 4,
+      "enemyTypeId": "scout_sine",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 0, "slopeY": 60 }
+    },
+    {
+      "id": "wave.grunt",
+      "startSec": 15,
+      "durationSec": 20,
+      "spawnEverySec": 2.5,
+      "maxAlive": 3,
+      "enemyTypeId": "basic_1",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 360, "spacingX": 0, "slopeY": 0 }
+    },
+
+    {
+      "id": "wave.green",
+      "startSec": 10,
+      "durationSec": 16,
+      "spawnEverySec": 0.5,
+      "maxAlive": 5,
+      "enemyTypeId": "bug1",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 12, "slopeY": 0 }
+    },
+
+    {
+      "id": "wave.red.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "red",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    },
+    {
+      "id": "wave.bug1.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "bug1",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    },
+    {
+      "id": "wave.blue.parallel.low",
+      "startSec": 0,
+      "durationSec": 14,
+      "spawnEverySec": 0.45,
+      "maxAlive": 22,
+      "enemyTypeId": "blue",
+      "behaviorPresetId": "invaders.basic",
+      "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
+    },
+
+  
+
+    {
+      "id": "wave.obelisk.line",
+      "startSec": 0,
+      "durationSec": 12,
+      "spawnEverySec": 0.9,
+      "maxAlive": 4,
+      "enemyTypeId": "obelisk",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "line", "originX": 936, "originY": 180, "spacingX": 22, "slopeY": 0 }
+    },
+    {
+      "id": "wave.sigil.grid",
+      "startSec": 12,
+      "durationSec": 24,
+      "spawnEverySec": 0.7,
+      "maxAlive": 6,
+      "enemyTypeId": "sigil",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "grid", "originX": 900, "originY": 140, "cols": 3, "rows": 2, "spacingX": 24, "spacingY": 22 }
+    },
+    {
+      "id": "wave.crown.grid",
+      "startSec": 24,
+      "durationSec": 32,
+      "spawnEverySec": 0.8,
+      "maxAlive": 5,
+      "enemyTypeId": "crown",
+      "behaviorPresetId": "invaders.basic",
+      "pattern": { "kind": "grid", "originX": 900, "originY": 200, "cols": 3, "rows": 2, "spacingX": 24, "spacingY": 22 }
+    },
+    {
+      "id": "wave.orb.ring",
+      "startSec": 32,
+      "durationSec": 44,
+      "spawnEverySec": 0.55,
+      "maxAlive": 8,
+      "enemyTypeId": "orb",
+      "behaviorPresetId": "straight.basic",
+      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 80, "count": 6 }
+    },
+    {
+      "id": "wave.mandala.ring",
+      "startSec": 44,
+      "durationSec": 52,
+      "spawnEverySec": 1.0,
+      "maxAlive": 3,
+      "enemyTypeId": "mandala",
+      "behaviorPresetId": "sine.basic",
+      "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 60, "count": 4 }
+    }
+  ]
+}

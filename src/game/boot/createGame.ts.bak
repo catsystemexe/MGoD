@@ -1,0 +1,119 @@
+import { EventBus } from "../../engine/core/EventBus";
+import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
+import { Loop } from "../../engine/core/Loop";
+import type { CMEventMap } from "../../engine/core/events";
+import { DIRECTOR_DEFS_MVP } from "../defs/DirectorDefs";
+import { EntityStore } from "../../engine/ecs/EntityStore";
+import { makeSessionState } from "../data/SessionState";
+
+import { FlowDispatcher } from "../systems/FlowDispatcher";
+import { FlowSystem } from "../systems/FlowSystem";
+import { ScoreSystem } from "../systems/ScoreSystem";
+import { GameOverSystem } from "../systems/GameOverSystem";
+
+import { SpawnSystem } from "../systems/SpawnSystem";
+import { DirectorSystem } from "../systems/DirectorSystem";
+import { DirectorPhaseSystem } from "../systems/DirectorPhaseSystem";
+
+import { CollisionSystem } from "../systems/CollisionSystem";
+
+import { InputManager } from "../../engine/input/InputManager";
+import { makeInputRuntime } from "../data/InputRuntime";
+import { CAImpactSystem } from "../impact/CAImpactSystem";
+
+// 🔧 logika
+const LOGIC_W = 224;
+const LOGIC_H = 256;
+
+export function createGame(getCanvas: () => HTMLCanvasElement) {
+  const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
+    maxEventsPerTick: 256,
+    failFast: true,
+    dropLeftoversInProd: true,
+    onWarn: (m) => console.warn(m),
+    onError: (m) => console.error(m),
+  });
+
+  const session = makeSessionState();
+
+  // Store
+  const store = new EntityStore<any>(256);
+
+  // ✅ Player jako entita ve store (RenderSystem ji konečně uvidí)
+  // Pozn.: pokud spawn() nevrací ref, napiš mi výpis EntityStore.ts a upravíme to.
+  const playerRef = (store as any).spawn((ent: any) => {
+    ent.kind = "player";
+    ent.pos = { x: LOGIC_W * 0.5, y: LOGIC_H * 0.85 };
+    ent.radius = 6;
+    ent.pendingKill = false;
+  });
+
+  // Input runtime + manager
+  const inputRt = makeInputRuntime();
+  const inputMgr = new InputManager(getCanvas);
+
+  // ---- Flow pipeline
+  const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
+
+const flowDispatcher = new FlowDispatcher([score /*, respawn */]);
+
+
+  const flow = new FlowSystem(flowDispatcher);
+
+  // ---- Director + Spawn
+  const spawn = new SpawnSystem(store as any, {
+    rng01: Math.random,
+    logicSize: { w: LOGIC_W, h: LOGIC_H },
+    projectile: {
+      primary: { speed: 220, ttlSec: 1.2, damage: 3, radius: 2 },
+      secondary: { speed: 200, ttlSec: 1.0, damage: 2, radius: 2 },
+    },
+    bomb: { travelSec: 0.4, damage: 10, radius: 10, ttlSec: 0.4 },
+  });
+
+  const director = new DirectorSystem(bus, store as any, DIRECTOR_DEFS_MVP);
+  const directorPhase = new DirectorPhaseSystem(session, director, spawn);
+
+  // ---- Collision
+  const collision = new CollisionSystem(bus, store as any);
+
+  // ---- Impact
+  const ca = {
+    applyExplosion: (_x: number, _y: number, _r: number) => 0, // TODO
+  };
+  const impact = new CAImpactSystem(bus, ca, { explosionRadius: 3 });
+
+  const loop = new Loop<CMEventMap>({
+    eventBus: bus,
+
+    input: {
+      sample: (_ctx) => {
+        inputMgr.sample(inputRt.actions, LOGIC_W, LOGIC_H);
+      },
+    },
+
+    director: {
+      update: (ctx, events) => {
+        directorPhase.update(ctx, events);
+      },
+    },
+
+    simulation: {
+      update: (_ctx, _events) => {
+        // TODO: sem přijde PlayerSystem + WeaponSystem + ProjectileSystem
+        // Pro teď: jen držíme player entitu živou.
+        void playerRef;
+      },
+    },
+
+    collision: { update: (_ctx, _events) => collision.update() },
+
+    impact: { update: (ctx, events) => impact.update(ctx, events as any) },
+
+    flow: { update: (ctx, events) => flow.update(ctx, events as any) },
+
+    cleanup: { update: (_ctx, _events) => store.cleanup() },
+  });
+
+  return { loop, bus, store, session, inputRt, playerRef };
+}

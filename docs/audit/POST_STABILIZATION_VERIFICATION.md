@@ -1,0 +1,336 @@
+# Captain Meow — Post-Stabilization Verification Audit
+
+**Audit type:** verification only (no code changed, no commits, no PRs).
+**Branch audited:** `audit/claude-cm-prototype` @ `93bf2a8` (merge of PR #3
+`codex/fix-critical-runtime-blockers`).
+**Baseline compared:** `cd117cb` (pre-stabilization, original Claude audit point).
+**Date:** 2026-06-16. **Toolchain:** Node v22.22.2, global `tsc` 6.0.2, Vite 7.3.1.
+
+---
+
+## Executive Summary (one page)
+
+Stabilization Phase 1 **achieved its core objective**: all four P0 runtime
+blockers from the previous audit are fixed and verified, and `typecheck`, `build`,
+and `smoke` are all green. I independently reproduced every result.
+
+- **Renderer P0 — RESOLVED.** `WebGLSceneRenderer.render()` now declares `bgKind`
+  and `presetIndex` as locals reading the `__CM_BG_*` globals, and uses the
+  correct fields `this.bgFlowRibbon` / `this.bgFlowSegments`. The unused
+  self-referential `FlowSegmentsBg.bgSegments` member is removed. A repo-wide
+  sweep finds **no remaining stale identifiers**.
+- **`DEV_WAVE_KEYS` P0 — RESOLVED.** Replaced by `devWaveKeys`, derived from
+  `DIRECTOR_DEFS_MVP.waves` and capped to 9. Both the overlay mapping and the
+  digit-key handler reference the new local. No undefined identifier remains.
+- **Sticky aim — RESOLVED.** `PlayerSystem` now keeps the previous non-zero
+  `aimDir` (and skips rotation refresh) when the aim target exactly overlaps the
+  player (`len === 0`). `PlayerSystem.smoke` passes.
+- **Build/typecheck mismatch — RESOLVED.** A real `typecheck` script
+  (`tsc --noEmit`) was added and **passes** (98 source files, transitively
+  including the renderer and bg files). `build` passes. `smoke` passes (12/12).
+
+**No production regressions were introduced.** The one behavioral change — the
+re-enabled `SPAWN_BOMB` materialization — is **gated behind `cfg.bomb`, which the
+production `createGame` does not supply**, so it is **inert in the actual game**
+and only exercised by `SpawnSystem.smoke.ts`. Even where active, the bomb has no
+collision, damage, or explosion.
+
+**New debt is minor but real:** the smoke-compatibility shims in `WeaponSystem`
+and `SpawnSystem` add ~7 net `as any` casts and dual-shape (string|object,
+weaponDb|projectile) branching to production runtime paths purely to satisfy
+legacy smoke construction. Pre-existing, out-of-scope gaps (projectile aiming
+hardcoded, pickups disabled, smoke coverage gap, replay/determinism gaps,
+console spam, `.bak` clutter) are **unchanged**.
+
+**Recommendation: READY FOR MERGE WITH KNOWN DEBT** (already merged via PR #3;
+this confirms the merged state is healthy). Track the new shim/bomb debt and the
+unchanged scope items for a follow-up.
+
+---
+
+## Detailed Findings (with evidence)
+
+### 1. Current health — commands run
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `npm run typecheck` (`tsc --noEmit`) | ✅ PASS (exit 0) | Ran clean, no diagnostics. `tsc --listFilesOnly` confirms it checks 98 `src/` files including `WebGLSceneRenderer.ts`, `FlowSegmentsBg.ts`, `FlowRibbonBg.ts`, `createGame.ts`, `PlayerSystem.ts`, `SpawnSystem.ts`, `WeaponSystem.ts`. |
+| `npm run build` (`vite build`) | ✅ PASS (exit 0) | 74 modules transformed; `dist/` emitted in ~0.6s. |
+| `npm run smoke` | ✅ PASS (exit 0) | `[SMOKE RUNNER] OK`; 12/12 green incl. `PlayerSystem OK`, `WeaponSystem OK`, `SpawnSystem OK`. |
+
+**Warnings / caveats:**
+- `typescript` is **not** a declared dependency; `npm run typecheck` relies on a
+  **global `tsc` 6.0.2** present in this environment. On a clean machine without a
+  global TypeScript, `npm run typecheck` would fail to find `tsc`. (P2 debt.)
+- No new failures or warnings surfaced during any command. (The prior `npm warn
+  Unknown env config "http-proxy"` noted in the stabilization report is
+  environmental, not repo-caused; it did not appear/matter here.)
+- The dev server / rendered frame was **not** visually verified (no browser
+  automation). Renderer correctness is established by source inspection +
+  typecheck, not by an observed frame.
+
+### 2. Renderer fixes — VERIFIED
+
+Diff `cd117cb..93bf2a8` on `WebGLSceneRenderer.ts`:
+```
++ const bgKind = String((globalThis as any).__CM_BG_KIND__ ?? "shader");
++ const presetIndex = Number((globalThis as any).__CM_BG_PRESET__ ?? 0) | 0;
+- this.bgSegments.draw({...})   →  + this.bgFlowSegments.draw({...})
+- this.bgFlow.draw({...})       →  + this.bgFlowRibbon.draw({...})
+```
+`FlowSegmentsBg.ts`: removed `private bgSegments: FlowSegmentsBg;` (the member
+that broke `strict` property-initialization under `tsc`).
+Sweep: `grep "this.bgFlow\b|this.bgSegments\b|bgFlow\b|bgSegments\b"` (excluding
+the correct `bgFlowRibbon`/`bgFlowSegments`) → **NONE**. `tsc --noEmit` clean.
+
+### 3. `DEV_WAVE_KEYS` fix — VERIFIED
+
+Diff on `createGame.ts`:
+```
++ const devWaveKeys = DIRECTOR_DEFS_MVP.waves.map((w: any) => String(w.id)).slice(0, 9);
+  ... __CM.devWaveHotkeys = devWaveKeys.map((id, i) => ({ n: i+1, waveId: id }))
+  ... const waveId = devWaveKeys[n - 1]
+```
+Hotkey mapping now derives from wave definitions and is range-capped to 1–9.
+Sweep: `grep DEV_WAVE_KEYS src/` → **NONE**. No runtime reference hazard remains.
+
+### 4. Sticky aim fix — VERIFIED
+
+Diff on `PlayerSystem.ts`: `len = Math.hypot(dx,dy)` (the `|| 1` fallback
+removed), and:
+```
++ if (len > 0) {
++   pAny2.aimDir.x = dx / len;  pAny2.aimDir.y = dy / len;
++   pAny2.rot = Math.atan2(dy, dx) + ROT_OFFSET; ...
++ }
+```
+Behavior matches the intended contract: **target exactly overlapping player ⇒
+previous valid `aimDir` preserved**, and rotation only refreshed when a non-zero
+aim vector exists. `aimDir` is still defaulted to `{x:1,y:0}` if absent.
+`PlayerSystem.smoke` passes.
+
+### 5. SPAWN_BOMB state — actual reality
+
+The `case EventType.SPAWN_BOMB` block was un-commented and re-enabled, **but
+guarded** by `const b = (this.cfg as any).bomb; if (!b) break;`.
+
+| Path | `cfg.bomb` provided? | Bomb materializes? |
+| --- | --- | --- |
+| **Production** (`createGame` spawnCfg = `{rng01, logicSize, weaponDb}`) | ❌ No | **No** — early `break`. `WeaponSystem` still emits `SPAWN_BOMB`, but `SpawnSystem` drops it. |
+| **Smoke** (`SpawnSystem.smoke.ts` passes `bomb:{travelSec,damage,radius,ttlSec}`) | ✅ Yes | **Yes** — asserts `bombCount === 1` (passes). |
+
+Capability matrix (where the bomb *does* spawn, i.e. smoke):
+
+| Capability | Status | Evidence |
+| --- | --- | --- |
+| Spawn | ✅ (only if `cfg.bomb`) | `SpawnSystem` spawns `kind:"bomb"` with pos/posPrev/vel/ttl/damage/radius/target. |
+| Move | ✅ | `ProjectileSystem` includes `"bomb"` in its moving-TTL union; integrates `pos += vel*dt`, snapshots `posPrev`. |
+| Render | ✅ | `WebGLSceneRenderer` colors `kind==="bomb"` yellow `(1,1,0,1)`; included in interpolation/snap. |
+| Cleanup | ✅ | `ProjectileSystem` marks bombs `pendingKill` on TTL expiry + bounds cull; `store.cleanup()` commits. |
+| Collide | ❌ | `CollisionSystem` only *defines* `BombEntity`; active passes are projectile→enemy, player→pickup, player→enemy. No bomb branch. |
+| Damage | ❌ | `DamageSystem` has no bomb hit/detonation event or damage path. |
+| Explode | ❌ | No detonation/blast logic anywhere. |
+
+**Reality:** in the *shipped game* the bomb still does nothing (not even spawn);
+in the *smoke harness* it spawns/moves/renders/cleans but never collides, damages,
+or explodes. The stabilization's own `SPAWN_BOMB_IMPACT_AUDIT.md` overstates the
+in-game effect ("creates a visible yellow moving entity") — that is true only when
+a `bomb` config is supplied, which production does not do.
+
+### 6. Regression scan
+
+| Item | Finding | Verdict |
+| --- | --- | --- |
+| Type-safety regressions | `tsc --noEmit` passes; **no type errors**. But ~**+7 net `as any`** and **+2 `: any`** added (vs 2 `as any`/1 `: any` removed), concentrated in `WeaponSystem`/`SpawnSystem` shims and `createGame`. | Questionable (debt) |
+| New `any`-casts | `WeaponSystem`: `(this.cfg as any).primary/secondary/bomb`; `SpawnSystem`: `(p as any).weaponTypeId ?? (p as any).weapon`, `(this.cfg as any).bomb`. | Questionable (debt) |
+| Compatibility shims for smoke | `WeaponSystem` ctor now defaults `db: WeaponDB = {}` and `world = {scrollX:0,scrollY:0}`, and accepts string-ID **or** inline-object weapon cfg. `SpawnSystem` synthesizes a `weaponDb` from a legacy `projectile` map and accepts legacy `weapon` payload key. | Questionable (debt) |
+| Runtime paths modified solely for test compat | Yes — the above shims and the gated `SPAWN_BOMB` materialization exist to keep `SpawnSystem.smoke`/`WeaponSystem.smoke` green; they alter production constructor/branch logic. Production behavior is preserved (bomb path inert; weapon cfg is still string IDs). | Questionable (tracked debt), not a functional regression |
+| Functional/behavioral regression | None observed. typecheck/build/smoke green; bomb path inert in-game; aiming unchanged; only 6 source files touched. | Harmless |
+| Console spam, `.bak` files, pickups, aiming | Untouched (correctly out of scope). | Harmless / pre-existing |
+
+---
+
+## Comparison vs original Claude audit
+
+| Finding | Old status | Current status |
+| --- | --- | --- |
+| Renderer crash (`bgKind`/`presetIndex`/`bgFlow`/`bgSegments`) | P0 broken (render throws every frame) | **RESOLVED** — identifiers declared, fields corrected, sweep clean, typecheck passes |
+| `DEV_WAVE_KEYS` undefined | P0 (ReferenceError on digit key) | **RESOLVED** — `devWaveKeys` derived from wave defs |
+| Sticky aim smoke failure | Failing | **RESOLVED** — preserves last `aimDir`; smoke passes |
+| Build vs typecheck mismatch | build passed / tsc failed | **RESOLVED** — `typecheck` script added; tsc + build + smoke all pass |
+| Smoke runner | 12/22 wired, some failing | **IMPROVED but PARTIAL** — 12/12 wired tests pass; **coverage gap unchanged** (engine/Collision/Projectile/CA smokes still not in runner) |
+| Bombs disabled | Emitted, not materialized | **CHANGED (test-only)** — materialization re-enabled but **gated on `cfg.bomb`**; inert in production; no collide/damage/explode |
+| Pickups disabled | Emitted, not materialized | **UNRESOLVED** — unchanged (intentionally out of scope) |
+| Projectile aiming | Hardcoded `{x:1,y:0}` | **UNRESOLVED** — still hardcoded (`WeaponSystem.ts:104`) |
+| Replay system (`InputTape`) | Defined, unwired | **UNRESOLVED** — unchanged |
+| Determinism gaps (unseeded RNG) | `Math.random` in Spawn/Loot | **UNRESOLVED** — unchanged |
+| `GameOverSystem` unwired, console spam, 34 `.bak` files | Debt | **UNRESOLVED** — unchanged (out of scope) |
+
+---
+
+## Risk Assessment
+
+**P0 — none.** All previously-P0 runtime blockers are fixed and verified; the
+merged state typechecks, builds, and passes smoke.
+
+**P1**
+- **Smoke coverage gap persists.** The load-bearing engine (EventBus, Loop,
+  EntityStore, InputManager) and the entire combat path (Collision, Projectile,
+  CAImpact) have smoke files that the runner still does **not** execute. Green
+  smoke ≠ covered.
+- **Test-driven runtime shims in production code.** `WeaponSystem`/`SpawnSystem`
+  now carry dual-shape parsing and `any`-casts that exist only to satisfy legacy
+  smoke construction. This erodes the type contracts of two core systems and can
+  mask real misuse (e.g. a missing `weaponDb` silently becomes `{}`).
+
+**P2**
+- **`typecheck` depends on a global `tsc`** (no `typescript` devDependency); not
+  reproducible on a clean checkout.
+- **Bomb materialization is a latent scope deviation** — gated and inert today,
+  but a half-implemented entity (spawn/move/render, no collide/damage/explode)
+  that will mislead future readers; the in-repo `SPAWN_BOMB_IMPACT_AUDIT.md`
+  overstates its in-game effect.
+- **Pre-existing debt unchanged:** hardcoded projectile aim, disabled pickups,
+  unseeded RNG, unwired replay, unconditional `[DIR][SPAWN_ENEMY]` logging, 34
+  `.bak`/stray files.
+
+---
+
+## Recommendation
+
+### READY FOR MERGE WITH KNOWN DEBT
+
+The stabilization objectives are met: every P0 blocker is resolved and
+independently verified, the three gates (typecheck/build/smoke) are green, and no
+production regression was introduced (the only behavioral change is gated and
+inert in the shipped game). The branch is already merged (PR #3); this audit
+confirms the merged state is healthy to keep.
+
+Track for a dedicated follow-up (not blocking, and **not** proposed as fixes
+here): (1) decide bomb materialization keep-vs-revert and correct the bomb impact
+doc; (2) repay the `any`-cast/shim debt in `WeaponSystem`/`SpawnSystem` or move
+smoke fixtures to the real constructor shapes; (3) add `typescript` as a
+devDependency; (4) close the smoke-runner coverage gap.
+
+---
+
+*Audit only. No code, commits, PRs, or speculative fixes were produced. Claims
+rest on the diffs `cd117cb..93bf2a8`, source inspection, and the actual output of
+`npm run typecheck`, `npm run build`, and `npm run smoke` in this environment.*
+
+---
+
+## Addendum C — Broader Type-Safety Findings from Shim Removal Refactoring
+
+**Date:** 2026-06-17
+**Related commit:** `52d6cf8` (7-file type-safety fix, 19/19 tests green)
+
+### Finding 1: Smoke tests are excluded from `tsc` typecheck
+
+`tsconfig.json` contains `"exclude": ["**/*.smoke.ts"]`, which means all
+`.smoke.ts` files are never compiled by `tsc`. As a result, the shape mismatches
+in these test files were never evaluated by the type checker. They surfaced
+**only as runtime test failures** — the runner executed the emitted JS and
+observed runtime behavior (assertion failures / `TypeError` at execution), not
+type diagnostics.
+
+The claim that these would have been compile errors is **inferred, not
+observed**: had `tsc` been configured to type-check the smoke files, these shape
+mismatches would *likely* be flagged as compile errors. That hypothetical was not
+exercised, so it is stated as inference rather than measured fact.
+
+> **Note on counts:** Across the 5 smoke files touched (Occurrences A–E), only
+> **1** is a confirmed masked type error — **Occurrence E**, where the value
+> genuinely did not match the contract. The remaining **4 occurrences (A–D)**
+> loosened or adjusted contracts for compatibility during the refactoring but
+> were **not confirmed as standalone compile errors**. No measurement was taken
+> by temporarily including the smoke files in `tsc` and counting real
+> diagnostics; if such a measurement is desired, it should be run and the
+> verified number recorded here with its method.
+
+### Finding 2: Production call-sites bypass type contracts via `as any`
+
+Even after removing the internal shims from `WeaponSystem.ts` and
+`SpawnSystem.ts`, the production wiring in `createGame.ts` still circumvents the
+corrected interfaces:
+
+| Line | Cast | Effect |
+|------|------|--------|
+| `createGame.ts:179` | `new SpawnSystem(store as any, spawnCfg, world as any)` | `SpawnSystemConfig` contract not enforced |
+| `createGame.ts:327` | `weaponsCfg: any` | `WeaponsConfig` interface not enforced |
+| `createGame.ts:335` | `new WeaponSystem(bus as any, ..., WEAPON_DB as any, world as any, ...)` | Constructor signature not enforced |
+
+**Implication:** The type contracts established by the shim removal refactoring
+are enforced only within the system classes themselves and in tests. At the
+actual production boundary where these systems are instantiated, `as any`
+silences the compiler completely. A future change to `WeaponsConfig` or
+`SpawnSystemConfig` could pass `tsc` and all smoke tests while still being wrong
+at runtime.
+
+### Finding 3: Combined effect — two-layer gap
+
+The combination of findings 1 and 2 creates a situation where:
+
+1. **Compile time (`tsc`)** — does not check smoke tests at all; production
+   call-sites use `as any`.
+2. **Test runtime** — smoke tests exercise the systems, but only with the
+   specific fixtures they define.
+
+Type safety for these systems is therefore **neither statically nor exhaustively
+verified** at the integration boundary.
+
+### Recommendations for future phases
+
+1. **Remove `as any` casts in `createGame.ts`** — wire the real types through.
+   This is the highest-value fix: it would make `tsc` catch interface mismatches
+   at the production boundary.
+2. **Include smoke tests in `tsc` compilation** — remove `**/*.smoke.ts` from
+   the `exclude` array in `tsconfig.json` (or create a separate
+   `tsconfig.check.json` that includes them). This would surface type errors in
+   test files at compile time — and would also let us produce the verified
+   diagnostic count noted in Finding 1.
+3. **Audit remaining `as any` casts** — a codebase-wide search for `as any`
+   would reveal other locations where type contracts are being silently bypassed.
+
+## Addendum D — Pre-existing VFX hit-spark camera bug (NOT caused by the world-space migration)
+
+**Finding:** `DamageSystem.ts:54-57` sends enemy hit-spark VFX particles using
+WORLD-space position, with a comment claiming "camera subtraction happens in
+renderVFX()". `WebGLSceneRenderer.ts:903-904` (renderVFX) reads `sx`/`sy` but the
+HITS draw path (`WebGLSceneRenderer.ts:990-994`) never actually subtracts them from
+the particle draw position.
+
+**Effect:** hit-spark VFX particles draw at the wrong screen position whenever
+`scrollY != 0` (and now also `scrollX != 0`, since `enemy.x` was always world).
+Purely cosmetic — no gameplay/collision impact.
+
+**Status:** pre-existing, **NOT introduced or worsened** by the world-space
+coordinate unification (commit `02b4657`). Enemy entities were already world-space
+before and after that migration, so the hit-spark mispositioning is unchanged by it.
+Not fixed — tracked for a future cosmetic-polish pass.
+
+**Honest scope note:** the same `renderVFX` function never applies the camera offset
+to its MUZZLE or TRACER particles either (they also draw raw `fx.x`/`fx.y`); `sx`/`sy`
+are effectively unused in the function. Those emitters originate from the
+player/weapon and were not audited here — folded into the same future
+cosmetic-polish pass rather than that scope.
+
+**Resolution (bomb-explosion change):** the camera correction is now **fixed for the
+HITS path and the new explosion VFX path** — both subtract `sx`/`sy` in `renderVFX`,
+so hit-sparks and AoE explosions render at the correct screen position at any scroll.
+
+**Addendum D Update (muzzle/tracer VFX activation):** The MUZZLE/TRACER path is
+**no longer dead code** — it is now **activated and camera-corrected** (commit hash
+to be recorded). `WeaponSystem.emitProjectile()` now invokes both `opts.onSpawnProjectile`
+and `opts.onTracer` callbacks immediately after emitting the `SPAWN_PROJECTILE` event,
+passing the muzzle spawn point (world coordinates, offset 12 pixels forward) and
+direction vector. `WebGLSceneRenderer.renderVFX()` now applies the camera offset
+(`-sx` / `-sy`) to both MUZZLE and TRACER particle draw positions, parallel to the
+HITS/EXPLOSION correction. Additionally, a new cosine-palette system (`cosinePalette.ts`)
+provides procedural color gradients:
+- **MUZZLE:** warm gold (t=0 → RGB 1.00,0.78,0.45) transitioning to deep orange (t=1 → RGB 0.84,0.56,0.25), using `MUZZLE_PALETTE` parameters
+- **TRACER:** cyan-green beam (tail=0 → RGB 0.00,1.00,0.82) transitioning to bright green (tail=1 → RGB 0.04,0.91,0.19), using `TRACER_PALETTE` parameters
+
+Both gradients use the Quilez cosine formula `color(t) = a + b*cos(2π*(c*t+d))` applied
+per RGB channel. Regression test `WeaponVFXEmit.smoke.ts` verifies callback invocation
+at the correct muzzle point with correct direction.

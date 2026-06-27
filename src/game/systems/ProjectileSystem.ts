@@ -1,141 +1,140 @@
-import { Bullet } from "../types";
-import { Config } from "../../core/Config";
-import { CAWorld } from "../../ca/CAWorld";
-import { ParticleSystem } from "./ParticleSystem";
-import { LootSystem } from "./LootSystem"; // NOVÉ
-import { Vec2 } from "../../utils/math";
+import type { EventBus } from "../../engine/core/EventBus";
+import { EventType, type CMEventMap } from "../../engine/core/events";
+import type { EntityStore } from "../../engine/ecs/EntityStore";
+import type { WorldState } from "../data/WorldState";
+
+// Bomb detonates when it arrives within this many px of its target (primary trigger).
+const ARRIVE_EPS = 4;
+
+type Vec2 = { x: number; y: number };
+
+// Minimal shape we need from moving ttl entities
+export interface MovingTTL {
+  kind: "projectile" | "particle" | "bomb" | "fx" | "enemyProjectile";
+  pos: Vec2;
+  vel: Vec2;
+  ttl: number;
+  pendingKill: boolean;
+
+  // projectile-only
+  consumed?: boolean;
+
+  // optional radius (bombs often have it)
+  radius?: number;
+
+  // render interpolation
+  posPrev?: Vec2;
+
+  // render-only FX local ages
+  fxAge?: number;
+  deathVisual?: { age?: number };
+}
+
+function safeNum(v: any, fb: number): number {
+  const n = typeof v === "number" ? v : fb;
+  return Number.isFinite(n) ? n : fb;
+}
 
 export class ProjectileSystem {
-  private bullets: Bullet[] = [];
+  constructor(
+    private bus: EventBus<CMEventMap>,
+    private store: EntityStore<any>,
+    private readonly logicW: number,
+    private readonly logicH: number,
+    private readonly world: WorldState,
+  ) {}
 
-  constructor() {}
+  update(dtSec: number): void {
+    if (!Number.isFinite(dtSec) || dtSec <= 0) return;
 
-  reset() {
-    this.bullets = [];
-  }
+    const W = this.logicW;
+    const H = this.logicH;
 
-  getBullets() {
-    return this.bullets;
-  }
+    const camX = safeNum(this.world?.scrollX, 0);
+    const camY = safeNum(this.world?.scrollY, 0);
+    const band = 140;   // slightly looser than enemies (shots can travel)
 
-  spawnBullet(kind: "w1" | "w2", pos: Vec2, aim: Vec2, level: number = 1) {
-    const ax = aim.x - pos.x;
-    const ay = aim.y - pos.y;
-    const baseAngle = Math.atan2(ay, ax);
+    // X band tolerance (world-space, around camera)
+    const xMargin = 24;
 
-    const speedW1 = 120;
-    const speedW2 = 90;
+    this.store.debugForEachAlive((_ref, e: MovingTTL) => {
+      if (!e) return;
+      if (e.kind !== "projectile" && e.kind !== "particle" && e.kind !== "bomb" && e.kind !== "fx" && e.kind !== "enemyProjectile") return;
+      if (e.pendingKill) return;
 
-    if (kind === "w1") {
-      const perpX = -Math.sin(baseAngle);
-      const perpY = Math.cos(baseAngle);
-      const offset = 3.0; 
+      // posPrev snapshot for render interpolation (BEFORE movement)
+      const a: any = e as any;
+      if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
+      else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
 
-      if (level === 1) {
-          this.createBullet(pos.x, pos.y, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-      else if (level === 2) {
-          this.createBullet(pos.x + perpX * offset, pos.y + perpY * offset, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x - perpX * offset, pos.y - perpY * offset, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-      else {
-          this.createBullet(pos.x, pos.y, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x + perpX * offset * 2, pos.y + perpY * offset * 2, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-          this.createBullet(pos.x - perpX * offset * 2, pos.y - perpY * offset * 2, baseAngle, speedW1, 1.2, 0.6, 1, "w1");
-      }
-
-    } else {
-      let count = 1 + level; 
-      const spreadStep = 0.08; 
-      const startAngle = baseAngle - (spreadStep * (count - 1) / 2);
-
-      for(let i=0; i<count; i++) {
-        const angle = startAngle + i * spreadStep;
-        this.createBullet(
-            pos.x + Math.cos(angle) * 2, 
-            pos.y + Math.sin(angle) * 2, 
-            angle, speedW2, 0.8, 1.2, 2, "w2"
-        );
-      }
-    }
-  }
-
-  private createBullet(x: number, y: number, angle: number, speed: number, life: number, r: number, dmg: number, kind: "w1"|"w2") {
-      this.bullets.push({
-        x: x,
-        y: y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life, r, dmg, kind
-      });
-  }
-
-  // PŘIDÁN LootSystem do argumentů
-  update(dtSec: number, ca: CAWorld, particles: ParticleSystem, lootSystem: LootSystem): number {
-    let scoreGained = 0;
-
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const b = this.bullets[i];
-      b.life -= dtSec;
-      if (b.life <= 0) {
-        this.bullets.splice(i, 1);
-        continue;
-      }
-      b.x += b.vx * dtSec;
-      b.y += b.vy * dtSec;
-
-      if (b.x < 0 || b.y < 0 || b.x >= Config.WORLD_W || b.y >= Config.WORLD_H) {
-        this.bullets.splice(i, 1);
-        continue;
+      // Move
+      if (e.pos && e.vel) {
+        e.pos.x += e.vel.x * dtSec;
+        e.pos.y += e.vel.y * dtSec;
       }
 
-      const x = Math.floor(b.x);
-      const y = Math.floor(b.y);
+      // Render-only FX local ages (TTL remains authoritative for cleanup)
+      if (e.kind === "fx") {
+        const fxAge = Number((e as any).fxAge ?? 0);
+        (e as any).fxAge = (Number.isFinite(fxAge) && fxAge >= 0 ? fxAge : 0) + dtSec;
 
-      if (ca.isAlive(x, y)) {
-        if (b.kind === "w1") {
-          ca.setAlive(x, y, false);
-          scoreGained += 1;
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 8, "rainbow", 30, 1.5, b.vx, b.vy, 0.8);
-          this.tryDropLoot(x + 0.5, y + 0.5, lootSystem); // ZKUSIT DROP
-          this.bullets.splice(i, 1);
-        } else if (b.kind === "w2") {
-          const R = 2.0;
-          const x0 = Math.floor(x - R);
-          const x1 = Math.ceil(x + R);
-          const y0 = Math.floor(y - R);
-          const y1 = Math.ceil(y + R);
-
-          for(let ky=y0; ky<=y1; ky++) {
-            for(let kx=x0; kx<=x1; kx++) {
-              if((kx-x)*(kx-x) + (ky-y)*(ky-y) <= R*R) {
-                if(ca.isAlive(kx, ky)) {
-                  ca.setAlive(kx, ky, false);
-                  scoreGained += 1;
-                  this.tryDropLoot(kx + 0.5, ky + 0.5, lootSystem); // ZKUSIT DROP
-                }
-              }
-            }
-          }
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 20, "#FFFFFF", 50, 2.5, b.vx, b.vy, 1.0);
-          particles.spawnDirectionalExplosion(x + 0.5, y + 0.5, 15, "#FF8800", 35, 2.0, b.vx, b.vy, 1.2);
-          this.bullets.splice(i, 1);
+        if ((e as any).deathVisual) {
+          const age = Number((e as any).deathVisual.age ?? 0);
+          (e as any).deathVisual.age = (Number.isFinite(age) && age >= 0 ? age : 0) + dtSec;
         }
       }
-    }
-    return scoreGained;
-  }
 
-  // Velmi malá šance na drop z běžné buňky
-  private tryDropLoot(x: number, y: number, lootSystem: LootSystem) {
-      // 0.2% šance (1 z 500)
-      if (Math.random() < 0.002) {
-          const r = Math.random();
-          // Většinou to bude Coin, vzácněji Health/Upgrade
-          if (r < 0.7) lootSystem.spawnLoot(x, y, "coin");
-          else if (r < 0.85) lootSystem.spawnLoot(x, y, "health");
-          else if (r < 0.95) lootSystem.spawnLoot(x, y, "upgrade_w1");
-          else lootSystem.spawnLoot(x, y, "upgrade_w2");
+      // Lifetime
+      e.ttl -= dtSec;
+
+      // BOMB detonation: proximity to target (primary) or TTL expiry (fallback).
+      // Emits a general EXPLOSION (Impact-owned) consumed by DamageSystem (AoE on
+      // enemies) and CAImpactSystem (terrain). Detected here because detonation is a
+      // movement/lifetime event of the bomb entity.
+      if (e.kind === "bomb") {
+        const b: any = e;
+        const tx = Number(b.target?.x ?? b.pos.x);
+        const ty = Number(b.target?.y ?? b.pos.y);
+        const ddx = b.pos.x - tx;
+        const ddy = b.pos.y - ty;
+        const reachedTarget = (ddx * ddx + ddy * ddy) <= (ARRIVE_EPS * ARRIVE_EPS);
+        const expired = e.ttl <= 0;
+
+        if (reachedTarget || expired) {
+          this.bus.emit(EventType.EXPLOSION, {
+            x: b.pos.x,
+            y: b.pos.y,
+            radius: Number(b.explosionRadius ?? b.radius ?? 1),
+            damage: Number(b.damage ?? 0),
+            source: reachedTarget ? "bomb" : "bomb.ttl",
+          });
+          e.pendingKill = true;
+        }
+        if (e.pendingKill) return;
+        // still flying -> skip generic TTL-kill, fall through to A+ cull
       }
+
+      // TTL kill conditions
+      if (e.kind === "projectile" || e.kind === "enemyProjectile") {
+        if ((e as any).consumed || e.ttl <= 0) e.pendingKill = true;
+      } else if (e.kind !== "bomb") {
+        // particle OR fx (bomb handled above)
+        if (e.ttl <= 0) e.pendingKill = true;
+      }
+      if (e.pendingKill) return;
+
+      // A+ CULL (projectile + bomb + enemyProjectile)
+      if (e.kind === "projectile" || e.kind === "bomb" || e.kind === "enemyProjectile") {
+        const r = safeNum((e as any).radius, e.kind === "bomb" ? 6 : 1);
+
+        // world-space X band around camera
+        if (e.pos.x < camX - r - xMargin) { e.pendingKill = true; return; }
+        if (e.pos.x > camX + W + r + xMargin) { e.pendingKill = true; return; }
+
+        // world-space Y band around camera
+        if (e.pos.y < camY - r - band) { e.pendingKill = true; return; }
+        if (e.pos.y > camY + H + r + band) { e.pendingKill = true; return; }
+      }
+    });
   }
 }

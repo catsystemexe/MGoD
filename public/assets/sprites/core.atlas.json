@@ -1,0 +1,71 @@
+{
+  "texture": "assets/sprites/core.png",
+  "grid": {
+    "cellW": 56,
+    "cellH": 56,
+    "cols": 8,
+    "marginX": 0,
+    "marginY": 0,
+    "spacingX": 0,
+    "spacingY": 0
+  },
+  "frames": {
+    "ship.player.body.0": {
+      "x": 0,
+      "y": 0,
+      "w": 56,
+      "h": 56,
+      "px": 28,
+      "py": 28
+    },
+    "ship.player.thruster.0": {
+      "x": 56,
+      "y": 0,
+      "w": 56,
+      "h": 56,
+      "px": 28,
+      "py": 28
+    },
+    "ship.player.thruster.1": {
+      "x": 112,
+      "y": 0,
+      "w": 56,
+      "h": 56,
+      "px": 28,
+      "py": 28
+    },
+    "ship.player.thruster.2": {
+      "x": 168,
+      "y": 0,
+      "w": 56,
+      "h": 56,
+      "px": 28,
+      "py": 28
+    },
+    "ship.player.thruster.3": {
+      "x": 224,
+      "y": 0,
+      "w": 56,
+      "h": 56,
+      "px": 28,
+      "py": 28
+    }
+  },
+  "anims": {
+    "ship.player.body": {
+      "frames": [
+        "ship.player.body.0"
+      ],
+      "fps": 10
+    },
+    "ship.player.thruster": {
+      "frames": [
+        "ship.player.thruster.0",
+        "ship.player.thruster.1",
+        "ship.player.thruster.2",
+        "ship.player.thruster.3"
+      ],
+      "fps": 10
+    }
+  }
+}

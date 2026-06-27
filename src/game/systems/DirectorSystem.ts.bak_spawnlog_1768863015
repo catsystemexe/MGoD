@@ -1,0 +1,461 @@
+// src/game/systems/DirectorSystem.ts
+import { EventType, type CMEventMap } from "../../engine/core/events";
+import type { AnyEvent, TickContext } from "../../engine/core/Loop";
+import type { DirectorDefs } from "../defs/DirectorTypes";
+import { makeWaveRuntime, type WaveRuntime } from "./DirectorRuntime";
+
+type BusLike = {
+  emitNext: <T extends keyof CMEventMap>(type: T, payload: CMEventMap[T]) => void;
+};
+
+type DirectorDeps = {
+  getAliveEnemies: () => number;
+  getAliveEnemiesForWave?: (waveId: string) => number; // optional but recommended
+
+  // ✅ DEV: allow director to clear enemies so forced waves can loop for target practice
+  killEnemiesForWave?: (waveId: string) => void;
+};
+
+const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+function getPatternTotalCap(def: any): number | undefined {
+  const p = def?.pattern;
+  if (!p) return undefined;
+
+  // finite slot patterns
+  if (p.kind === "grid") {
+    const cols = Number(p.cols);
+    const rows = Number(p.rows);
+    if (Number.isFinite(cols) && Number.isFinite(rows) && cols > 0 && rows > 0) return cols * rows;
+    return undefined;
+  }
+
+  if (p.kind === "ring") {
+    const n = Number(p.count);
+    if (Number.isFinite(n) && n > 0) return n;
+    return undefined;
+  }
+
+  // line/sine/rand are typically infinite unless an explicit cap exists
+  const explicit = Number(def?.totalCap ?? def?.spawnCap ?? p.totalCap ?? p.spawnCap);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+  return undefined;
+}
+
+
+export class DirectorSystem {
+  private difficulty = 1;
+  private t = 0;
+  private waves: WaveRuntime[] = [];
+  private globalMaxAlive: number;
+
+  constructor(
+    private readonly bus: BusLike,
+    defs: DirectorDefs,
+    private readonly deps: DirectorDeps,
+  ) {
+    const waveDefs: any[] = Array.isArray((defs as any)?.waves) ? (defs as any).waves : [];
+
+    // ✅ build runtime list
+    this.waves = waveDefs.map((w) => makeWaveRuntime(w));
+
+    console.log("[DIR][INIT] waves=", this.waves.length, this.waves.map((w: any) => w.id));
+
+    // testbed: manual waves default OFF (enable only via hotkeys/forceWave)
+    for (const w of this.waves) {
+      if (w.def?.trigger?.kind === "manual") w.enabled = false;
+    }
+
+    this.globalMaxAlive = defs.globalMaxAlive ?? Infinity;
+  }
+
+  // ---- HUD helper
+  getHUDInfo(): { current: number } {
+    // show LAST active (so forced waves / later timed waves are visible in HUD)
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      if (this.waves[i].active) return { current: i + 1 };
+    }
+    return { current: 0 };
+  }
+
+  // ---- reset runtime
+  reset(): void {
+    this.t = 0;
+    for (const w of this.waves) {
+      w.active = false;
+      w.t = 0;
+      w.acc = 0;
+      w.spawned = 0;
+    }
+  }
+
+  // ---- control API
+  triggerWave(id: string): void {
+    const w = this.waves.find(x => x.id === id);
+    if (!w || !w.enabled) return;
+
+    // původní chování: jen manual
+    if (w.def.trigger.kind === "manual") this.activate(w);
+  }
+
+  /**
+   * DEV: force-start wave regardless of trigger kind.
+   * Optionally reset counters so the pattern starts from the beginning.
+   */
+  forceWave(id: string, opts?: { solo?: boolean; reset?: boolean }): void {
+    const w = this.waves.find(x => x.id === id);
+    if (!w) return;
+
+    const solo = !!opts?.solo;
+    const reset = opts?.reset !== false; // default true
+
+    if (solo) {
+      for (const ww of this.waves) {
+        const on = ww.id === id;
+        ww.enabled = on;
+        ww.forced = false;
+        if (!on) this.deactivate(ww);
+      }
+    }
+
+    // ensure enabled + force
+    w.enabled = true;
+    w.forced = true;
+
+    if (reset) {
+      w.t = 0;
+      w.acc = 0;
+      w.spawned = 0;
+    }
+
+    // always start
+    this.activate(w);
+  }
+
+  stopWave(id: string): void {
+    const w = this.waves.find(x => x.id === id);
+    if (!w) return;
+    w.forced = false;
+    this.deactivate(w);
+  }
+
+  setWaveEnabled(id: string, on: boolean): void {
+    const w = this.waves.find(x => x.id === id);
+    if (!w) return;
+    w.enabled = on;
+    if (!on) this.deactivate(w);
+  }
+
+  // ---- runtime API
+  setDifficulty(mult: number): void {
+    const m = Number.isFinite(mult) ? mult : 1;
+    this.difficulty = Math.max(0.1, Math.min(10, m));
+  }
+
+  getDifficulty(): number {
+    return this.difficulty;
+  }
+
+  soloWave(id: string): void {
+    for (const w of this.waves) {
+      const on = w.id === id;
+    w.enabled = on;
+    if (!on) {
+      w.forced = false;
+      this.deactivate(w);
+    }
+  }
+  }
+  enableAll(): void {
+    for (const w of this.waves) w.enabled = true;
+  }
+
+  getWaveStates(): Array<{
+    id: string;
+    enabled: boolean;
+    active: boolean;
+    spawned: number;
+    acc: number;
+    spawnEverySec: number;
+    maxAlive: number;
+    trigger: any;
+
+    enemyTypeId: string;
+    behaviorPresetId: string;
+    patternKind: string;
+  }> {
+    return this.waves.map(w => ({
+      id: w.id,
+      enabled: w.enabled,
+      active: w.active,
+      spawned: w.spawned,
+      acc: w.acc,
+      spawnEverySec: w.def.spawnEverySec,
+      maxAlive: w.def.maxAlive,
+      trigger: w.def.trigger,
+
+      enemyTypeId: w.def.enemyTypeId,
+      behaviorPresetId: String((w.def as any).behaviorPresetId ?? ""),
+      patternKind: String(((w.def as any).pattern?.kind) ?? ""),
+    }));
+  }
+
+  // ---- update (Director phase)
+  update(ctx: TickContext, _events: Array<AnyEvent<any>> = []): void {
+    const dt = (ctx as any).dt;
+    if (!isFiniteNum(dt) || dt <= 0) return;
+
+    this.t += dt;
+
+    const aliveGlobal = this.deps.getAliveEnemies();
+    const globalCapHit = aliveGlobal >= this.globalMaxAlive;
+
+      for (const w of this.waves) {
+        if (!w.enabled && !w.forced) continue;
+
+      // 1) activation via trigger
+      if (this.shouldBeActive(w)) {
+        if (!w.active) this.activate(w);
+      } else {
+        if (w.active && w.def.trigger.kind === "time" && !w.forced) this.deactivate(w);
+      }
+
+
+
+      
+      if (!w.active) continue;
+
+      // 2) update local time
+      w.t += dt;
+
+      // 3) soft caps (slowdown before hard cap; avoid backlog bursts)
+      const aliveWave = this.deps.getAliveEnemiesForWave?.(w.id);
+      const waveAlive = (typeof aliveWave === "number") ? aliveWave : aliveGlobal;
+
+      const globalCap = this.globalMaxAlive;
+      const globalSat =
+        (typeof globalCap === "number" && Number.isFinite(globalCap) && globalCap > 0)
+          ? (aliveGlobal / globalCap)
+          : 0;
+
+      const waveCap = Math.max(1, w.def.maxAlive);
+      const waveSat = waveAlive / waveCap;
+
+      const SOFT_START = 0.70;
+      const SOFT_FULL = 1.00;
+      const MAX_SLOW = 4.0;
+
+      const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+      const smoothstep = (a: number, b: number, x: number) => {
+        const t = clamp01((x - a) / (b - a));
+        return t * t * (3 - 2 * t);
+      };
+
+      const sat = Math.max(globalSat, waveSat);
+      const slowK = smoothstep(SOFT_START, SOFT_FULL, sat);
+      const slowFactor = 1 + (MAX_SLOW - 1) * slowK;
+
+      // 4) accumulator spawn (lag-safe) with soft-cap slowdown
+      const basePeriod = Math.max(0.01, w.def.spawnEverySec / this.difficulty);
+      const period = Math.max(0.01, basePeriod * slowFactor);
+
+      w.acc += dt;
+
+      const totalCap = getPatternTotalCap(w.def as any);
+
+      // If we're at/over cap, do NOT build backlog. Keep acc just under one period.
+      // BUT: for forced waves we still allow DEV LOOP to reset/clear so target-practice can repeat.
+      if (globalCapHit || waveSat >= 1) {
+        w.acc = Math.min(w.acc, period * 0.99);
+
+        if (w.forced) {
+          const dur = Number((w.def as any).durationSec ?? 0);
+          const hasDur = Number.isFinite(dur) && dur > 0;
+
+          const finishedByCap =
+            (typeof totalCap === "number" && Number.isFinite(totalCap) && totalCap > 0)
+              ? (w.spawned >= totalCap)
+              : false;
+
+          const finishedByTime = hasDur ? (w.t >= dur) : false;
+
+          if (finishedByCap || finishedByTime) {
+            this.deps.killEnemiesForWave?.(w.id);
+            w.t = 0;
+            w.acc = 0;
+            w.spawned = 0;
+            w.spawnBudget = 0;
+          }
+        }
+
+        continue;
+      }
+
+      const MAX_SPAWNS_PER_TICK = 8;
+      let spawnedNow = 0;
+
+        while (w.acc >= period && spawnedNow < MAX_SPAWNS_PER_TICK) {
+        // ✅ if pattern defines finite slots, spawn only once per slot (no replacements)
+        if (typeof totalCap === "number" && w.spawned >= totalCap) {
+          // prevent accumulator runaway
+          w.acc = Math.min(w.acc, period * 0.99);
+          break;
+        }
+
+
+        
+        w.acc -= period;
+
+        // compute spawn for this wave/ordinal
+        const idx = w.spawned;
+      
+        const ptn: any = (w.def as any).pattern;
+        let spawn: any = undefined;
+
+        if (ptn && ptn.kind === "grid") {
+          const cols = Math.max(1, ptn.cols ?? 1);
+          const rows = Math.max(1, ptn.rows ?? 1);
+          const col = idx % cols;
+          const row = Math.floor(idx / cols) % rows;
+          spawn = {
+            x: (ptn.originX ?? 0) + col * (ptn.spacingX ?? 0),
+            y: (ptn.originY ?? 0) + row * (ptn.spacingY ?? 0),
+          };
+        } else if (ptn && ptn.kind === "line") {
+          const ox = ptn.originX ?? 0;
+          const oy = ptn.originY ?? 0;
+          const dx = ptn.spacingX ?? 12;
+          const dy = ptn.slopeY ?? 0;
+          spawn = { x: ox + idx * dx, y: oy + idx * dy };
+        } else if (ptn && ptn.kind === "sine") {
+          const ox = ptn.originX ?? 0;
+          const oy = ptn.originY ?? 0;
+          const dx = ptn.spacingX ?? 8;
+
+          const ampY = ptn.ampY ?? 12;
+          const freq = ptn.freq ?? 0.12; // cycles per spawn-step
+          const phase = ptn.phase ?? 0;
+          const driftY = ptn.driftY ?? 0;
+
+          const x = ox + idx * dx;
+          const angle = idx * (Math.PI * 2 * freq) + phase;
+          const y = oy + Math.sin(angle) * ampY + idx * driftY;
+
+          spawn = { x, y };
+        } else if (ptn && ptn.kind === "ring") {
+          const cx = ptn.centerX ?? (ptn.originX ?? 0);
+          const cy = ptn.centerY ?? (ptn.originY ?? 0);
+          const r = ptn.radius ?? 30;
+          const n = Math.max(3, ptn.count ?? 12);
+
+          const angle = (idx % n) * (Math.PI * 2 / n);
+          spawn = {
+            x: cx + Math.cos(angle) * r,
+            y: cy + Math.sin(angle) * r,
+          };
+        } else if (ptn && ptn.kind === "rand") {
+          const minX = ptn.minX ?? 0;
+          const maxX = ptn.maxX ?? 200;
+          const minY = ptn.minY ?? 0;
+          const maxY = ptn.maxY ?? 120;
+
+          const h = (n: number) => {
+            const x = Math.sin(n * 12.9898) * 43758.5453;
+            return x - Math.floor(x);
+          };
+
+          const rx = h(idx + 1);
+          const ry = h(idx + 999);
+          spawn = {
+            x: minX + rx * (maxX - minX),
+            y: minY + ry * (maxY - minY),
+          };
+        }
+
+        this.bus.emitNext(EventType.SPAWN_ENEMY, {
+          typeId: w.def.enemyTypeId,
+          waveId: w.id,
+          spawn,
+          spawnOrdinal: w.spawned,
+          behaviorPresetId: (w.def as any).behaviorPresetId,
+        } as any);
+
+        w.spawned++;
+        spawnedNow++;
+
+        // break early if cap reached after spawning (avoid backlog)
+        if (this.deps.getAliveEnemies() >= this.globalMaxAlive) {
+          w.acc = Math.min(w.acc, period * 0.99);
+          break;
+        }
+        if (this.deps.getAliveEnemiesForWave) {
+          if (this.deps.getAliveEnemiesForWave(w.id) >= w.def.maxAlive) {
+            w.acc = Math.min(w.acc, period * 0.99);
+            break;
+          }
+
+        
+        }
+
+      }
+
+      // --- DEV LOOP: if wave is forced, restart it when it finishes.
+      // For target-practice we also clear current wave enemies (if hook provided).
+      if (w.forced) {
+        const dur = Number((w.def as any).durationSec ?? 0);
+        const hasDur = Number.isFinite(dur) && dur > 0;
+
+        const finishedByCap =
+          (typeof totalCap === "number" && Number.isFinite(totalCap) && totalCap > 0)
+            ? (w.spawned >= totalCap)
+            : false;
+
+        const finishedByTime = hasDur ? (w.t >= dur) : false;
+
+        if (finishedByCap || finishedByTime) {
+          // clear existing enemies for this wave so maxAlive doesn't stall the loop
+          this.deps.killEnemiesForWave?.(w.id);
+
+          // restart counters
+          w.t = 0;
+          w.acc = 0;
+          w.spawned = 0;
+          w.spawnBudget = 0;
+        }
+      }
+
+      
+    }
+  }
+
+  private shouldBeActive(w: WaveRuntime): boolean {
+    // ✅ DEV override
+    if (w.forced) return true;
+
+    const tr = w.def.trigger;
+
+    if (tr.kind === "manual") {
+      return w.active;
+    }
+
+    const start = tr.startSec ?? 0;
+    const end = tr.endSec;
+
+    if (this.t < start) return false;
+    if (typeof end === "number" && this.t >= end) return false;
+    return true;
+  }
+
+  private activate(w: WaveRuntime): void {
+    w.active = true;
+    w.t = 0;
+    w.acc = 0;
+  }
+
+  private deactivate(w: WaveRuntime): void {
+    w.active = false;
+    w.t = 0;
+    w.acc = 0;
+  }
+}

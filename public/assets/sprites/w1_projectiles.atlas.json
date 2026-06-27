@@ -1,0 +1,12 @@
+{
+  "texture": "/assets/sprites/w1_projectiles.png",
+  "frames": {
+    "projectile.w1.0": { "x": 0, "y": 0, "w": 32, "h": 16, "px": 16, "py": 8 },
+    "projectile.w1.1": { "x": 32, "y": 0, "w": 32, "h": 16, "px": 16, "py": 8 },
+    "projectile.w1.2": { "x": 64, "y": 0, "w": 32, "h": 16, "px": 16, "py": 8 },
+    "projectile.w1.3": { "x": 96, "y": 0, "w": 32, "h": 16, "px": 16, "py": 8 }
+  },
+  "anims": {
+    "projectile.w1": { "fps": 18, "frames": ["projectile.w1.0", "projectile.w1.1", "projectile.w1.2", "projectile.w1.3"] }
+  }
+}

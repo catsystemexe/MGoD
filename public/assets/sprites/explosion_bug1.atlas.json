@@ -1,0 +1,13 @@
+{
+  "texture": "/assets/sprites/explosion_bug1.png",
+  "frames": {
+    "fx.explosion.bug1.0": { "x": 0,   "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 },
+    "fx.explosion.bug1.1": { "x": 64,  "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 },
+    "fx.explosion.bug1.2": { "x": 128, "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 },
+    "fx.explosion.bug1.3": { "x": 192, "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 },
+    "fx.explosion.bug1.4": { "x": 256, "y": 0, "w": 64, "h": 64, "px": 32, "py": 32 }
+  },
+  "anims": {
+    "fx.explosion.bug1": { "fps": 24, "frames": ["fx.explosion.bug1.0","fx.explosion.bug1.1","fx.explosion.bug1.2","fx.explosion.bug1.3","fx.explosion.bug1.4"] , "loop" : false }
+  }
+}

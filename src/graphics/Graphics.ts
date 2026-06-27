@@ -1,0 +1,209 @@
+import { getGL } from "./gl";
+import { RenderTarget } from "./RenderTarget";
+import { computeDisplay, type DisplayInfo } from "./DisplayRenderer";
+import { createBlitProgram, type BlitProgram } from "./BlitProgram";
+import { createPostProcessPass, type PostProcessPass } from "./PostProcessPass";
+
+export type GraphicsMode = "classic_896x504";
+export const MODE_RES: Record<GraphicsMode, { w: number; h: number }> = {
+  classic_896x504: { w: 896, h: 504 },
+};
+
+
+export class Graphics {
+  readonly mode: GraphicsMode;
+  readonly logicW: number;
+  readonly logicH: number;
+
+  private gl: WebGL2RenderingContext;
+  private scene: RenderTarget;
+  private enemies: RenderTarget;
+  private blit: BlitProgram;
+  private postProcess: PostProcessPass;
+    private display: DisplayInfo | null = null;
+
+    // debug: detect display drift without spamming console each frame
+    private _dbgDisplaySig = "";
+    private _dbgFrame = 0;
+
+      constructor(private canvas: HTMLCanvasElement, mode: GraphicsMode = "classic_896x504") {
+    this.mode = mode;
+    this.logicW = MODE_RES[mode].w;
+    this.logicH = MODE_RES[mode].h;
+
+    this.gl = getGL(canvas);
+      this.scene = new RenderTarget(this.gl, this.logicW, this.logicH, "nearest");
+      this.enemies = new RenderTarget(this.gl, this.logicW, this.logicH, "linear");
+      this.blit = createBlitProgram(this.gl);
+      this.postProcess = createPostProcessPass(this.gl);
+    // default state
+    const gl = this.gl;
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  }
+
+  /** Public access to the owned WebGL2 context (single source of truth). */
+  getGL(): WebGL2RenderingContext {
+    return this.gl;
+  }
+
+  resize(cssW: number, cssH: number, dpr: number): void {
+    const gl = this.gl;
+    // fyzická velikost canvasu
+    const physW = Math.max(1, Math.floor(cssW * dpr));
+    const physH = Math.max(1, Math.floor(cssH * dpr));
+
+    this.canvas.width = physW;
+    this.canvas.height = physH;
+    this.canvas.style.width = cssW + "px";
+    this.canvas.style.height = cssH + "px";
+
+    this.display = computeDisplay(this.logicW, this.logicH, cssW, cssH, dpr);
+
+    // viewport se nastavuje až v present()
+    gl.viewport(0, 0, physW, physH);
+  }
+
+  /**
+   * Render world + HUD do SceneRT.
+   * SceneRT is bound + viewport set to logicW x logicH.
+   * Optional draw() callback can render world content into SceneRT.
+   */
+  renderScene(draw?: (gl: WebGL2RenderingContext) => void): void {
+    const gl = this.gl;
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fb);
+    gl.viewport(0, 0, this.scene.w, this.scene.h);
+
+    // clear black
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    
+    // debug border via scissor
+    gl.enable(gl.SCISSOR_TEST);
+
+    // top
+    gl.scissor(0, this.scene.h - 1, this.scene.w, 1);
+    gl.clearColor(0.2, 0.2, 0.2, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // bottom
+    gl.scissor(0, 0, this.scene.w, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // left
+    gl.scissor(0, 0, 1, this.scene.h);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // right
+    gl.scissor(this.scene.w - 1, 0, 1, this.scene.h);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.disable(gl.SCISSOR_TEST);
+
+    // world draw hook (draw into SceneRT)
+    if (draw) draw(gl);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+
+  /**
+   * Render ENEMIES do EnemyRT (transparent background).
+   * EnemyRT is bound + viewport set to logicW x logicH.
+   */
+  renderEnemies(draw?: (gl: WebGL2RenderingContext) => void): void {
+    const gl = this.gl;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.enemies.fb);
+    gl.viewport(0, 0, this.enemies.w, this.enemies.h);
+
+    // clear transparent
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    if (draw) draw(gl);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  
+  /**
+   * Present SceneRT -> screen s integer scale + viewport.
+   *
+   * Display Reality Layer toggle: when `opts.postProcess !== false` (default ON)
+   * the CRT post-process program is used; otherwise the plain passthrough blit.
+   * Only the program/uniforms differ — letterbox, viewport and clears below are
+   * identical in both paths.
+   */
+  present(opts?: { postProcess?: boolean; timeSec?: number; caIntensity?: number }): void {
+    const gl = this.gl;
+    const d = this.display;
+    if (!d) return;
+    
+    // Debug: log only when display parameters actually change (prevents perf/jitter on iOS)
+    // Also helps detect "drift" caused by fluctuating cssH/dpr (browser UI bars).
+    this._dbgFrame++;
+    const sig =
+      `${d.cssW}x${d.cssH}@${d.dpr} ` +
+      `scale=${d.scale} ` +
+      `vp=(${d.viewportX},${d.viewportY},${d.viewportW},${d.viewportH}) ` +
+      `canvas=(${this.canvas.width},${this.canvas.height})`;
+
+    if (sig !== this._dbgDisplaySig) {
+      this._dbgDisplaySig = sig;
+      console.warn("[GFX] display changed:", sig);
+    }
+    
+    // letterbox clear (black)
+     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // C64 BLUE (proper)
+    gl.clearColor(5/ 255, 5 / 255, 5 / 255, 1);
+     gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // viewport do kterého se vykreslí pixel-perfect obraz
+    gl.viewport(d.viewportX, d.viewportY, d.viewportW, d.viewportH);
+
+    // Pick program: post-process (default) vs passthrough blit.
+    const usePost = opts?.postProcess !== false;
+    const pass = usePost ? this.postProcess : this.blit;
+
+    gl.useProgram(pass.prog);
+    gl.bindVertexArray(pass.vao);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.scene.tex);
+    gl.uniform1i(pass.uTex, 0);
+
+    if (usePost) {
+      // uResolution = logic-res of the sampled SceneRT (one scanline per row).
+      gl.uniform1f(this.postProcess.uTime, opts?.timeSec ?? 0);
+      gl.uniform2f(this.postProcess.uRes, this.scene.w, this.scene.h);
+      gl.uniform1f(this.postProcess.uCaInt, opts?.caIntensity ?? 0.0022);
+    }
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindVertexArray(null);
+    gl.useProgram(null);
+  }
+
+  /** Present rect in *device pixels* (same space as canvas.width/height) */
+  getPresentRect() {
+    const d = this.display;
+    if (!d) {
+      return { x: 0, y: 0, w: this.canvas.width, h: this.canvas.height, scale: 1 };
+    }
+    return {
+      x: d.viewportX,
+      y: d.viewportY,
+      w: d.viewportW,
+      h: d.viewportH,
+      scale: (d as any).scale ?? 1,
+    };
+  }
+}

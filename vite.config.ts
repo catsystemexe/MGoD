@@ -3,15 +3,16 @@ import { defineConfig } from "vite";
 export default defineConfig({
   server: {
     host: "0.0.0.0",
-    port: 5173,
+    port: Number(process.env.PORT ?? 80),
     strictPort: true,
 
-    // 🔥 vypnout HMR (kvůli reload loop na iPadu / Replitu)
-    hmr: false,
-
-    // ✅ povolit Replit doménu (Brave / security)
+    // Replit preview hosty (subdomain wildcard)
     allowedHosts: [
-      "1308b564-0904-4ca4-a992-6715d78015ee-00-1gx2x9giuiegj.riker.replit.dev"
-    ]
-  }
+      ".replit.dev",
+      ".replit.app",
+      ".repl.co",
+      "localhost",
+      "127.0.0.1",
+    ],
+  },
 });

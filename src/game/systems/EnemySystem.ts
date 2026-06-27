@@ -1,211 +1,171 @@
-import { Enemy, Bullet, PlayerState } from "../types";
-import { PATTERNS } from "../patterns";
-import { CAWorld } from "../../ca/CAWorld";
-import { Config } from "../../core/Config";
-import { ParticleSystem } from "./ParticleSystem";
-import { LootSystem } from "./LootSystem"; // NOVÉ
-import { Vec2 } from "../../utils/math";
+// src/game/systems/EnemySystem.ts
+import type { EntityStore } from "../../engine/ecs/EntityStore";
+import type { TickContext } from "../../engine/core/Loop";
+import { EnemyBehaviorDB } from "../enemies/EnemyBehaviorDB";
+import { isEnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
+import type { EnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
+import { ENEMY_DEFS } from "../defs/EnemyDefs";
+import { updateAttack } from "../enemies/AttackController";
+
+const DEV = Boolean((globalThis as any).__DEV__);
+
+const isFiniteNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+const safeNum = (n: unknown, fallback = 0) => (isFiniteNum(n) ? n : fallback);
+
+function smoothTo(cur: number, target: number, easeSec: number, dt: number): number {
+  // exponential smoothing: alpha = 1 - exp(-dt / tau)
+  const tau = Math.max(0.0001, Number.isFinite(easeSec) ? easeSec : 0.12);
+  const a = 1 - Math.exp(-dt / tau);
+  const c = Number.isFinite(cur) ? cur : 0;
+  const t = Number.isFinite(target) ? target : c;
+  return c + (t - c) * a;
+}
 
 export class EnemySystem {
-  private enemies: Enemy[] = [];
-  private spawnTimer = 0;
-  private idCounter = 0;
+  constructor(
+    private readonly store: EntityStore<any>,
+    private readonly logicW: number,
+    private readonly logicH: number,
+    private readonly world: { scrollY: number },
+  ) {}
 
-  public spawnRate = 3.0; 
-  public maxEnemies = 5;
-  public enabledTypes: ("skiff" | "miner")[] = ["miner"];
-  public active = false; 
+  update(ctx: TickContext): void {
+    const dt = safeNum((ctx as any).dt, 0);
+    if (dt <= 0) return;
+    const W = this.logicW;
+    const H = this.logicH;
 
-  constructor() {}
-
-  reset() {
-    this.enemies = [];
-    this.spawnTimer = 0;
-    this.idCounter = 0;
-    this.active = false;
-  }
-
-  setDifficulty(rate: number, max: number, types: ("skiff" | "miner")[]) {
-    this.spawnRate = rate;
-    this.maxEnemies = max;
-    this.enabledTypes = types;
-    this.active = true;
-  }
-
-  stopSpawning() {
-    this.active = false;
-  }
-
-  getCount(): number {
-    return this.enemies.length;
-  }
-
-  // PŘIDÁN LootSystem do argumentů
-  update(dtSec: number, player: PlayerState, ca: CAWorld, particles: ParticleSystem, bullets: Bullet[], lootSystem: LootSystem): number {
-    let scoreGained = 0;
-
-    if (this.active && this.enemies.length < this.maxEnemies) {
-        this.spawnTimer += dtSec;
-        if (this.spawnTimer >= this.spawnRate) {
-            this.spawnEnemy(player.cur);
-            this.spawnTimer = 0;
-        }
-    }
-
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      
-      // Separation
-      let sepX = 0; let sepY = 0;
-      for (const other of this.enemies) {
-          if (other === e) continue;
-          const dx = e.x - other.x;
-          const dy = e.y - other.y;
-          const d2 = dx*dx + dy*dy;
-          if (d2 < 100 && d2 > 0.1) {
-              const d = Math.sqrt(d2);
-              sepX += (dx / d) * 50 * dtSec;
-              sepY += (dy / d) * 50 * dtSec;
-          }
+    let playerPos = { x: 0, y: 0 };
+    this.store.debugForEachAlive((_ref, e: any) => {
+      if (e?.kind === "player" && !e.pendingKill && e.pos) {
+        playerPos = { x: Number(e.pos.x ?? 0), y: Number(e.pos.y ?? 0) };
       }
-      e.vx += sepX; e.vy += sepY;
-
-      // Movement
-      const dx = player.cur.x - e.x;
-      const dy = player.cur.y - e.y;
-      const dist = Math.sqrt(dx*dx + dy*dy) || 1; 
-
-      if (e.type === "skiff") {
-        if (dist > 5) { 
-            e.vx += (dx / dist) * 20 * dtSec; 
-            e.vy += (dy / dist) * 20 * dtSec;
-        }
-        e.vx *= 0.98; e.vy *= 0.98;
-      } else {
-        e.vx += (Math.random() - 0.5) * 50 * dtSec;
-        e.vy += (Math.random() - 0.5) * 50 * dtSec;
-        e.vx *= 0.95; e.vy *= 0.95;
-      }
-
-      e.x += e.vx * dtSec;
-      e.y += e.vy * dtSec;
-      
-      if (!Number.isFinite(e.x)) e.x = player.cur.x + 100;
-      if (!Number.isFinite(e.y)) e.y = player.cur.y + 100;
-
-      // Action
-      e.actionTimer -= dtSec;
-      if (e.actionTimer <= 0) {
-        const cx = Math.floor(e.x);
-        const cy = Math.floor(e.y);
-        
-        if (e.type === "skiff") {
-          this.stampPattern(ca, cx, cy, PATTERNS.GLIDER);
-          particles.spawnParticles(e.x, e.y, 5, "#00FF00", 20, 1);
-          e.actionInterval = 2.0;
-        } else {
-          this.stampPattern(ca, cx, cy, PATTERNS.BLINKER);
-          particles.spawnParticles(e.x, e.y, 5, "#FFFF00", 10, 1);
-          e.actionInterval = 4.0;
-        }
-        e.actionTimer = e.actionInterval;
-      }
-
-      // Collision
-      for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
-        const b = bullets[bIdx];
-        const bdx = b.x - e.x;
-        const bdy = b.y - e.y;
-        if (bdx*bdx + bdy*bdy < (e.maxHp * 2)) { 
-           e.hp -= b.dmg;
-           bullets.splice(bIdx, 1); 
-           particles.spawnParticles(e.x, e.y, 3, "#FFFFFF", 30, 1);
-
-           if (e.hp <= 0) {
-             scoreGained += (e.type === "skiff" ? 50 : 30);
-             particles.spawnDirectionalExplosion(e.x, e.y, 15, e.color, 40, 2, e.vx, e.vy, 3.14);
-             
-             // --- LOOT DROP LOGIC ---
-             const rand = Math.random();
-             if (rand < 0.4) { // 40% chance drop
-                 if (rand < 0.1) lootSystem.spawnLoot(e.x, e.y, "health");
-                 else if (rand < 0.15) lootSystem.spawnLoot(e.x, e.y, "upgrade_w1");
-                 else if (rand < 0.20) lootSystem.spawnLoot(e.x, e.y, "upgrade_w2");
-                 else lootSystem.spawnLoot(e.x, e.y, "coin");
-             }
-
-             this.enemies.splice(i, 1);
-             break; 
-           }
-        }
-      }
-    }
-
-    return scoreGained;
-  }
-
-  render(ctx: CanvasRenderingContext2D, cam: Vec2, cellSize: number) {
-    const dpr = window.devicePixelRatio || 1;
-    const logicalW = ctx.canvas.width / dpr;
-    const logicalH = ctx.canvas.height / dpr;
-    const halfW = logicalW / 2;
-    const halfH = logicalH / 2;
-
-    ctx.save();
-    for (const e of this.enemies) {
-      if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
-
-      const screenX = Math.floor((e.x - cam.x) * cellSize + halfW);
-      const screenY = Math.floor((e.y - cam.y) * cellSize + halfH);
-
-      ctx.fillStyle = e.color;
-      
-      if (e.type === "skiff") {
-        ctx.beginPath();
-        ctx.moveTo(screenX, screenY - 6);
-        ctx.lineTo(screenX + 5, screenY + 6);
-        ctx.lineTo(screenX - 5, screenY + 6);
-        ctx.fill();
-      } else {
-        ctx.fillRect(screenX - 5, screenY - 5, 10, 10);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
-      }
-    }
-    ctx.restore();
-  }
-
-  private spawnEnemy(playerPos: Vec2) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 90; 
-    const ex = playerPos.x + Math.cos(angle) * dist;
-    const ey = playerPos.y + Math.sin(angle) * dist;
-
-    const type = this.enabledTypes[Math.floor(Math.random() * this.enabledTypes.length)] || "miner";
-
-    this.enemies.push({
-      id: this.idCounter++,
-      type: type,
-      x: ex,
-      y: ey,
-      vx: 0, vy: 0,
-      hp: type === "skiff" ? 3 : 5,
-      maxHp: type === "skiff" ? 3 : 5,
-      actionTimer: 2.0,
-      actionInterval: type === "skiff" ? 2.5 : 4.0,
-      color: type === "skiff" ? "#00FF00" : "#FF00FF"
     });
-  }
 
-  private stampPattern(ca: CAWorld, cx: number, cy: number, pat: any) {
-    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+    const scrollX = safeNum((this.world as any)?.scrollX, 0);
 
-    for (let y = 0; y < pat.h; y++) {
-      for (let x = 0; x < pat.w; x++) {
-        if (pat.data[y * pat.w + x] === 1) {
-          ca.setAlive(cx + x - 1, cy + y - 1, true);
+    this.store.debugForEachAlive((ref, e: any) => {
+      if (!e || e.kind !== "enemy") return;
+      if (e.pendingKill) return;
+
+      // mandatory components
+      if (!e.pos) {
+        console.error("[EnemySystem] enemy without pos -> kill", e);
+        this.store.markKill(ref);
+        return;
+      }
+      if (!e.vel) e.vel = { x: 0, y: 0 };
+      if (!e.bState) e.bState = { t: 0 };
+
+      // sanitize BEFORE behavior
+      e.pos.x = safeNum(e.pos.x, 0);
+      e.pos.y = safeNum(e.pos.y, 0);
+      e.vel.x = safeNum(e.vel.x, 0);
+      e.vel.y = safeNum(e.vel.y, 0);
+
+      // --- posPrev snapshot for render interpolation (must be BEFORE behavior + movement)
+      const a = e as any;
+      if (!a.posPrev) a.posPrev = { x: e.pos.x, y: e.pos.y };
+      else { a.posPrev.x = e.pos.x; a.posPrev.y = e.pos.y; }
+
+      // --- HIT FLASH timer (seconds) ---
+      {
+        const hf = Number(e.hitFlashT ?? 0);
+        if (Number.isFinite(hf) && hf > 0) e.hitFlashT = Math.max(0, hf - dt);
+        else e.hitFlashT = 0;
+      }
+
+      // --- AI overlay smoothing (future-ready; no effect on vel yet) ---
+      {
+        const hasAi = e.ai && typeof e.ai === "object";
+        if (hasAi) {
+          const curW = Number(e.aiWeight ?? 0);
+          const tgtW = Number(e.aiWeightTarget ?? curW);
+          const easeSec = Number(e.aiEaseSec ?? 0.12);
+          const w = smoothTo(curW, tgtW, easeSec, dt);
+          e.aiWeight = w;
+          if (!Number.isFinite(e.aiWeightTarget)) e.aiWeightTarget = w;
         }
       }
-    }
+
+      // behavior id (TS-safe)
+      const bid: EnemyBehaviorId = isEnemyBehaviorId(e.behaviorId) ? e.behaviorId : "none";
+      if (DEV && bid === "none" && e.behaviorId && !isEnemyBehaviorId(e.behaviorId)) {
+        console.warn("[EnemySystem] unknown behaviorId -> none:", e.behaviorId, "type:", e.typeId);
+      }
+      e.behaviorId = bid;
+
+      const behavior = EnemyBehaviorDB[bid];
+
+      // run behavior safely
+      try {
+        // 1) update internal state
+        behavior?.update?.(e, ctx);
+
+        // 2) V1: if behavior provides target, derive velocity here (single authority)
+        if (behavior?.getTarget) {
+          const t = behavior.getTarget(e, ctx);
+          if (t && Number.isFinite(t.x) && Number.isFinite(t.y)) {
+            const px = safeNum(e.pos?.x, 0);
+            const py = safeNum(e.pos?.y, 0);
+            e.vel = e.vel || { x: 0, y: 0 };
+            e.vel.x = (t.x - px) / dt;
+            e.vel.y = (t.y - py) / dt;
+          }
+        }
+      } catch (err) {
+        console.error("[EnemyBehavior crash]", bid, err, e);
+        this.store.markKill(ref);
+        return;
+      }
+
+      // sanitize AFTER behavior (repair)
+      if (!isFiniteNum(e.pos?.x) || !isFiniteNum(e.pos?.y)) {
+        if (DEV) console.error("[EnemyBehavior] invalid pos -> reset", bid, e.pos, e);
+        e.pos.x = safeNum(e.pos?.x, 0);
+        e.pos.y = safeNum(e.pos?.y, 0);
+      }
+      if (!isFiniteNum(e.vel?.x) || !isFiniteNum(e.vel?.y)) {
+        if (DEV) console.error("[EnemyBehavior] invalid vel -> zero", bid, e.vel, e);
+        e.vel.x = 0;
+        e.vel.y = 0;
+      }
+
+      // FAILSAFE: pokud behavior nic nenastaví a enemy je nad obrazem, tlač ho dolů
+      if (e.pos.y < -1 && e.vel.y === 0) {
+        e.vel.y = 40;
+      }
+
+      // integrate movement (single authority)
+      e.pos.x += e.vel.x * dt;
+      e.pos.y += e.vel.y * dt;
+
+      // attack controller (data-driven enemy shooting)
+      const def = ENEMY_DEFS[e.typeId];
+      if (def?.attackProfile) {
+        updateAttack({
+          ent: e,
+          profile: def.attackProfile,
+          playerPos,
+          store: this.store,
+          scrollX,
+          logicW: W,
+          dt,
+        });
+      }
+
+      // offscreen cull
+      // offscreen cull
+      const r = safeNum(e.radius, 4);
+      const camX = safeNum((this.world as any)?.scrollX, 0);const camY = safeNum((this.world as any)?.scrollY, 0);
+      const band = 120; // px tolerance above/below viewport
+        const xBand = 160; // px tolerance left/right (allows offscreen spawns)
+
+        // kill far outside bands
+        if (e.pos.y < camY - r - band) this.store.markKill(ref);
+        if (e.pos.y > camY + H + r + band) this.store.markKill(ref);
+        if (e.pos.x < camX - r - xBand) this.store.markKill(ref);
+        if (e.pos.x > camX + W + r + xBand) this.store.markKill(ref);
+    });
   }
 }

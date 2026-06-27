@@ -1,0 +1,34 @@
+{
+  "aimed_slow": {
+    "id": "aimed_slow",
+    "pattern": "aimed",
+    "fireRateMs": 1600,
+    "damage": 1,
+    "projectileSpeed": 220,
+    "projectileRadius": 4,
+    "windupMs": 500,
+    "onlyWhenVisible": true
+  },
+  "single_basic": {
+    "id": "single_basic",
+    "pattern": "single",
+    "fireRateMs": 1200,
+    "damage": 1,
+    "projectileSpeed": 200,
+    "projectileRadius": 4,
+    "windupMs": 150,
+    "onlyWhenVisible": true
+  },
+  "spread_basic": {
+    "id": "spread_basic",
+    "pattern": "spread",
+    "fireRateMs": 2000,
+    "damage": 1,
+    "projectileSpeed": 180,
+    "projectileRadius": 4,
+    "windupMs": 400,
+    "spreadCount": 3,
+    "spreadAngleDeg": 30,
+    "onlyWhenVisible": true
+  }
+}
