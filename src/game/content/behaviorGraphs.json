@@ -1,0 +1,27 @@
+{
+  "turret_fsm": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.basic",
+        "transitions": [
+          { "when": { "kind": "xLessThan", "x": 900 }, "goto": "attack" }
+        ]
+      },
+      "attack": {
+        "movementPresetId": "none.basic",
+        "attackProfileId": "spread_basic",
+        "transitions": [
+          { "when": { "kind": "timeInState", "seconds": 8 }, "goto": "retreat" }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.basic",
+        "transitions": [
+          { "when": { "kind": "offscreen", "side": "left" }, "goto": "despawn" }
+        ]
+      },
+      "despawn": {}
+    }
+  }
+}
