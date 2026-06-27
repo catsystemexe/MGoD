@@ -39,6 +39,11 @@ function applyStateBehavior(e: any, movementPresetId?: string): void {
   e.behavior = preset.params ?? {};
   e.bState = { t: 0 };
   if (attack) e.bState.attack = attack;
+  if (nextBehaviorId === "none" && e.vel) {
+    e.vel.x = 0;
+    e.vel.y = 0;
+  }
+
   e.fsmAppliedMovementPresetId = movementPresetId;
 
   behavior?.init?.(e);
