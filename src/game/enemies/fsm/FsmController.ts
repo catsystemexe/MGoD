@@ -31,7 +31,7 @@ function evalTrigger(
     case "hpBelow":
       return getHpRatio(ent) < trigger.ratio;
     case "xLessThan":
-      return getX(ent) < trigger.x;
+      return getX(ent) - ctx.scrollX < trigger.x;
     case "offscreen":
       return isOffscreen(ent, ctx, trigger.side);
     default:

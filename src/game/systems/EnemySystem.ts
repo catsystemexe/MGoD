@@ -129,6 +129,37 @@ export class EnemySystem {
           logicW: W,
           dt,
         });
+
+        if (e.typeId === "turret_fsm_test") {
+          console.log("[FSM]", {
+            type: e.typeId,
+            state: fsmResult.current,
+            switched: fsmResult.switched,
+            age: e.fsm?.age,
+            x: e.pos?.x,
+            velX: e.vel?.x,
+            movement: fsmResult.state.movementPresetId,
+            attack: fsmResult.state.attackProfileId,
+            applied: e.fsmAppliedMovementPresetId,
+            graphId,
+          });
+        }
+
+
+        
+        if (e.typeId === "turret_fsm_test") {
+          console.log("[FSM]", {
+            state: fsmResult.current,
+            switched: fsmResult.switched,
+            x: e.pos?.x,
+            vel: e.vel,
+            movement: fsmResult.state.movementPresetId,
+            attack: fsmResult.state.attackProfileId,
+          });
+        }
+
+
+        
         applyStateBehavior(e, fsmResult.state.movementPresetId);
         fsmAttackProfile = fsmResult.state.attackProfileId
           ? getAttackProfile(fsmResult.state.attackProfileId)
