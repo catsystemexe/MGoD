@@ -251,7 +251,9 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
             ent.waveId = waveId;
-
+            if (typeof (p as any).devManualSpawnId === "number") {
+              ent.devManualSpawnId = (p as any).devManualSpawnId;
+            }
 
             delete ent.spriteId;
             ent.animId = "";
