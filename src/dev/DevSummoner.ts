@@ -15,7 +15,7 @@ function formatNum(value: unknown, digits = 0): string {
 function describeTrigger(trigger: any): string {
   if (!trigger) return "none";
   if (trigger.kind === "xLessThan") return `screenX < ${formatNum(trigger.x)}`;
-  if (trigger.kind === "timeInState") return `timeInState > ${formatNum(trigger.seconds)} s`;
+  if (trigger.kind === "timeInState") return `timeInState > ${formatNum(trigger.seconds)}s`;
   if (trigger.kind === "hpBelow") return `hp < ${formatNum(Number(trigger.ratio) * 100)}%`;
   if (trigger.kind === "offscreen") return `offscreen ${String(trigger.side ?? "?")}`;
   return String(trigger.kind ?? "unknown");
@@ -23,6 +23,40 @@ function describeTrigger(trigger: any): string {
 
 function describeNextTransition(state: any): string {
   return describeTrigger(state?.transitions?.[0]?.when);
+}
+
+function describeStateMovement(state: any): string {
+  return String(state?.movementPresetId ?? "none");
+}
+
+function describeStateAttack(state: any): string {
+  return String(state?.attackProfileId ?? "none");
+}
+
+function renderFsmGraphView(graphId: string, currentStateId: string): string {
+  const graph = graphId ? BEHAVIOR_GRAPHS[graphId] : undefined;
+  if (!graph?.states) return "FSM Graph\n────────────\nnone";
+
+  const lines = ["FSM Graph", "────────────"];
+  for (const [stateId, state] of Object.entries(graph.states)) {
+    const prefix = stateId === currentStateId ? "▶ " : "  ";
+    lines.push(`${prefix}${stateId}`);
+    lines.push(`  movement: ${describeStateMovement(state)}`);
+    lines.push(`  attack: ${describeStateAttack(state)}`);
+
+    const transitions = (state as any)?.transitions;
+    if (Array.isArray(transitions) && transitions.length > 0) {
+      for (const transition of transitions) {
+        lines.push(`  next: ${describeTrigger(transition?.when)} → ${String(transition?.goto ?? "?")}`);
+      }
+    } else {
+      lines.push("  next: none");
+    }
+    lines.push("");
+  }
+
+  while (lines[lines.length - 1] === "") lines.pop();
+  return lines.join("\n");
 }
 
 function getEnemyHpLabel(enemy: any): string {
@@ -194,6 +228,7 @@ export class DevSummoner {
 
     const runtime = getFsmRuntimeDebug(selected);
     const position = getEnemyPositionDebug(selected, Number((this.world as any)?.scrollX ?? 0));
+    const graphView = renderFsmGraphView(runtime.graphId, runtime.stateId);
     out.textContent = [
       "Runtime",
       "────────────",
@@ -236,6 +271,8 @@ export class DevSummoner {
       "",
       "Graph:",
       runtime.graphId || "none",
+      "",
+      graphView,
     ].join("\n");
   }
 
