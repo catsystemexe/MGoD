@@ -12,6 +12,14 @@ function formatNum(value: unknown, digits = 0): string {
   return Number.isFinite(n) ? n.toFixed(digits) : "?";
 }
 
+function esc(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+
 function describeTrigger(trigger: any): string {
   if (!trigger) return "none";
   if (trigger.kind === "xLessThan") return `screenX < ${formatNum(trigger.x)}`;
@@ -35,28 +43,28 @@ function describeStateAttack(state: any): string {
 
 function renderFsmGraphView(graphId: string, currentStateId: string): string {
   const graph = graphId ? BEHAVIOR_GRAPHS[graphId] : undefined;
-  if (!graph?.states) return "FSM Graph\n────────────\nnone";
+  if (!graph?.states) return `<div><b>FSM Graph</b><br>none</div>`;
 
-  const lines = ["FSM Graph", "────────────"];
+  const blocks: string[] = [`<div style="margin-top:6px;font-weight:bold;font-size:12px;">FSM Graph</div>`];
+
   for (const [stateId, state] of Object.entries(graph.states)) {
-    const prefix = stateId === currentStateId ? "▶ " : "  ";
-    lines.push(`${prefix}${stateId}`);
-    lines.push(`  movement: ${describeStateMovement(state)}`);
-    lines.push(`  attack: ${describeStateAttack(state)}`);
+    const active = stateId === currentStateId;
+    const title = `${active ? "▶ " : ""}${esc(stateId)}`;
 
     const transitions = (state as any)?.transitions;
-    if (Array.isArray(transitions) && transitions.length > 0) {
-      for (const transition of transitions) {
-        lines.push(`  next: ${describeTrigger(transition?.when)} → ${String(transition?.goto ?? "?")}`);
-      }
-    } else {
-      lines.push("  next: none");
-    }
-    lines.push("");
+    const next = Array.isArray(transitions) && transitions.length > 0
+    ? transitions.map((t: any) => describeTrigger(t?.when)).join(" | ")
+    : "none";
+
+    blocks.push(`<div style="margin-top:3px;padding:3px 5px;background:rgba(255,255,255,0.08);border-radius:3px;font-size:11px;line-height:1.15;">
+<div style="font-weight:bold;background:rgba(255,255,255,0.10);padding:1px 3px;margin:-1px -3px 2px -3px;border-radius:2px;">${title}</div>
+<div><b>mov:</b> ${esc(describeStateMovement(state))}</div>
+<div><b>atk:</b> ${esc(describeStateAttack(state))}</div>
+<div><b>next:</b> ${esc(next)}</div>
+</div>`);
   }
 
-  while (lines[lines.length - 1] === "") lines.pop();
-  return lines.join("\n");
+  return blocks.join("");
 }
 
 function getEnemyHpLabel(enemy: any): string {
@@ -111,9 +119,13 @@ export class DevSummoner {
     panel.style.cssText = [
       "position:fixed","top:8px","right:8px","z-index:9999",
       "background:rgba(0,0,0,0.75)","border:1px solid #444",
-      "color:#eee","font:12px monospace","padding:8px",
-      "border-radius:4px","display:flex","flex-direction:column","gap:6px",
-      "min-width:230px",
+      "color:#eee","font:12px monospace","padding:3px",
+      "border-radius:2px","display:flex","flex-direction:column","gap:3px",
+      "width:220px",
+      "min-width:220px",
+      "max-width:220px",
+      "box-sizing:border-box",
+      "overflow:hidden",
     ].join(";");
 
     const title = document.createElement("pre");
@@ -200,12 +212,17 @@ export class DevSummoner {
     });
     spawnSection.appendChild(btn);
 
-    const labPanel = document.createElement("pre");
+    const labPanel = document.createElement("div");
     labPanel.id = "ds-enemy-lab-debug";
     labPanel.style.cssText = [
-      "margin:0","padding:6px","min-width:210px",
-      "background:rgba(255,255,255,0.06)","border:1px solid rgba(255,255,255,0.12)",
-      "border-radius:4px","white-space:pre-wrap",
+      "margin:0",
+      "padding:4px",
+      "background:rgba(255,255,255,0.06)",
+      "border:0px solid rgba(255,255,255,0.12)",
+      "border-radius:0px",
+      "font:12px monospace",
+      "line-height:2",
+      "box-sizing:border-box"
     ].join(";");
     labPanel.textContent = EMPTY_ENEMY_LAB;
     panel.appendChild(labPanel);
@@ -217,7 +234,7 @@ export class DevSummoner {
   }
 
   private refreshEnemyLab(): void {
-    const out = this.panel?.querySelector("#ds-enemy-lab-debug") as HTMLPreElement | null;
+    const out = this.panel?.querySelector("#ds-enemy-lab-debug") as HTMLElement | null;
     if (!out) return;
 
     const selected = this.findSelectedFsmEnemy();
@@ -229,51 +246,24 @@ export class DevSummoner {
     const runtime = getFsmRuntimeDebug(selected);
     const position = getEnemyPositionDebug(selected, Number((this.world as any)?.scrollX ?? 0));
     const graphView = renderFsmGraphView(runtime.graphId, runtime.stateId);
-    out.textContent = [
-      "Runtime",
-      "────────────",
-      "Type:",
-      String(selected.typeId ?? "?"),
-      "",
-      "HP:",
-      getEnemyHpLabel(selected),
-      "",
-      "State:",
-      runtime.stateId,
-      "",
-      "Age:",
-      `${formatNum(runtime.age, 2)} s`,
-      "",
-      "Next:",
-      runtime.next,
-      "",
-      "Position",
-      "────────────",
-      "screenX:",
-      formatNum(position.screenX),
-      "",
-      "screenY:",
-      formatNum(position.screenY),
-      "",
-      "worldX:",
-      formatNum(position.worldX),
-      "",
-      "worldY:",
-      formatNum(position.worldY),
-      "",
-      "Behavior",
-      "────────────",
-      "Movement:",
-      runtime.movement,
-      "",
-      "Attack:",
-      runtime.attack,
-      "",
-      "Graph:",
-      runtime.graphId || "none",
-      "",
-      graphView,
-    ].join("\n");
+
+    out.innerHTML = `<div style="display:grid;grid-template-columns:1fr auto;column-gap:10px;row-gap:2px;align-items:start;">
+<div style="white-space:nowrap;">
+<b>Type:</b> ${esc(String(selected.typeId ?? "?"))}<br>
+<b>Beh:</b> ${esc(runtime.movement)}<br>
+<b>Atk:</b> ${esc(runtime.attack)}<br>
+<b>HP:</b> ${esc(getEnemyHpLabel(selected))}<br>
+<b>State:</b> ${esc(runtime.stateId)}<br>
+<b>Age:</b> ${esc(formatNum(runtime.age, 2))} s
+</div>
+<div style="white-space:nowrap;">
+<b>scrX:</b> ${esc(formatNum(position.screenX))}<br>
+<b>scrY:</b> ${esc(formatNum(position.screenY))}<br>
+<b>wX:</b> ${esc(formatNum(position.worldX))}<br>
+<b>wY:</b> ${esc(formatNum(position.worldY))}
+</div>
+</div>
+<div style="margin-top:6px;">${graphView}</div>`;
   }
 
   private findSelectedFsmEnemy(): any | null {

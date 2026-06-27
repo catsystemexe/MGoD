@@ -228,7 +228,7 @@
       }
     },
      {
-      "id": "turret_fsm_test",
+      "id": "turrt_test",
       "hp": 6,
       "radius": 18,
       "scoreOnKill": 25,
