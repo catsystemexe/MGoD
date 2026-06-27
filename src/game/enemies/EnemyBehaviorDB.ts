@@ -6,14 +6,10 @@ import { noneBehavior } from "./behaviors/none";
 import { straightBehavior } from "./behaviors/straight";
 import { sineBehavior } from "./behaviors/sine";
 import { invadersBehavior } from "./behaviors/invaders";
-import { zigzagBehavior } from "./behaviors/zigzag";
-import { orbitBehavior } from "./behaviors/orbit";
 
 export const EnemyBehaviorDB: Record<EnemyBehaviorId, EnemyBehavior> = {
   none: noneBehavior,
   straight: straightBehavior,
   sine: sineBehavior,
   invaders: invadersBehavior,
-  zigzag: zigzagBehavior,
-  orbit: orbitBehavior,
 };

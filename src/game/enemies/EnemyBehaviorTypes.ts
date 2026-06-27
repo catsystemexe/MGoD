@@ -18,9 +18,7 @@ export type EnemyBehaviorId =
   "none" |
   "straight" |
   "sine" |
-  "invaders" |
-  "orbit" |
-  "zigzag";
+  "invaders";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
 export type EnemyBehaviorParams = Record<string, any>;
@@ -55,8 +53,6 @@ export const ENEMY_BEHAVIOR_IDS = [
   "straight",
   "sine",
   "invaders",
-  "zigzag",
-   "orbit" 
 ] as const;
 
 export function isEnemyBehaviorId(x: unknown): x is EnemyBehaviorId {
