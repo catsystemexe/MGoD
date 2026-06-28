@@ -295,5 +295,131 @@
       },
       "despawn": {}
     }
+  },
+  "fsm.smart_ranger": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.basic",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "control"
+          }
+        ]
+      },
+      "control": {
+        "movementPresetId": "smart.range.medium",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_orbit_half": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "smart.range.close",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.25
+            },
+            "goto": "orbit"
+          }
+        ]
+      },
+      "orbit": {
+        "movementPresetId": "smart.orbit.half",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.6
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_orbit_repeat": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "smart.range.medium",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.25
+            },
+            "goto": "orbit"
+          }
+        ]
+      },
+      "orbit": {
+        "movementPresetId": "smart.orbit.repeat",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
   }
 }
