@@ -111,11 +111,17 @@ function getFsmRuntimeDebug(enemy: any) {
   };
 }
 
-function createSelectLabel(text: string): HTMLLabelElement {
+function createSelectLabel(text: string, prominence: "primary" | "secondary" = "primary"): HTMLLabelElement {
   const label = document.createElement("label");
-  label.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  label.style.cssText = "display:flex;flex-direction:column;gap:2px;min-width:0;";
   const span = document.createElement("span");
   span.textContent = text;
+  span.style.cssText = [
+    "font-weight:700",
+    "opacity:" + (prominence === "primary" ? "0.95" : "0.82"),
+    "line-height:1.05",
+    "white-space:nowrap",
+  ].join(";");
   label.appendChild(span);
   return label;
 }
@@ -465,7 +471,7 @@ export class DevSummoner {
     modeRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
     const modeLabel = document.createElement("span");
     modeLabel.textContent = "Spawn Mode";
-    modeLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+    modeLabel.style.cssText = "font-weight:700;opacity:0.95;white-space:nowrap;line-height:1.05;";
     const modeSegment = document.createElement("div");
     modeSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
     const enemyModeButton = document.createElement("button");
@@ -493,7 +499,7 @@ export class DevSummoner {
     const enemyControls = document.createElement("div");
     enemyControls.style.cssText = "display:flex;flex-direction:column;gap:4px;";
     const groupControls = document.createElement("div");
-    groupControls.style.cssText = "display:none;flex-direction:column;gap:4px;";
+    groupControls.style.cssText = "display:none;flex-direction:column;gap:3px;";
     spawnSection.appendChild(enemyControls);
     spawnSection.appendChild(groupControls);
 
@@ -507,12 +513,13 @@ export class DevSummoner {
     enemyControls.appendChild(enemySelect);
 
     const groupTypeRow = document.createElement("div");
-    groupTypeRow.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:end;";
+    groupTypeRow.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:end;min-width:0;";
     const groupEnemyWrap = createSelectLabel("Type");
     const groupEnemySelect = document.createElement("select");
     groupEnemySelect.id = "ds-group-enemy";
     groupEnemySelect.style.cssText = "width:100%;min-width:0;box-sizing:border-box;";
     for (const id of Object.keys(ENEMY_DEFS)) appendOption(groupEnemySelect, id);
+    groupEnemyWrap.style.minWidth = "0";
     groupEnemyWrap.appendChild(groupEnemySelect);
     groupTypeRow.appendChild(groupEnemyWrap);
 
@@ -521,7 +528,7 @@ export class DevSummoner {
     countSegment.id = "ds-group-count";
     countSegment.setAttribute("role", "spinbutton");
     countSegment.setAttribute("aria-label", "Group count");
-    countSegment.style.cssText = "display:grid;grid-template-columns:28px 34px 28px;gap:0;align-items:stretch;";
+    countSegment.style.cssText = "display:grid;grid-template-columns:26px 24px 26px;gap:2px;align-items:center;align-self:end;min-width:82px;";
     const countDecButton = document.createElement("button");
     const countValue = document.createElement("span");
     const countIncButton = document.createElement("button");
@@ -532,9 +539,9 @@ export class DevSummoner {
     countDecButton.setAttribute("aria-label", "Decrease group count");
     countIncButton.setAttribute("aria-label", "Increase group count");
     countValue.textContent = String(groupCount);
-    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;border-top:1px solid #555;border-bottom:1px solid #555;background:#111;color:#eee;min-height:24px;box-sizing:border-box;";
+    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:24px;box-sizing:border-box;font-weight:700;";
     const styleCountButton = (button: HTMLButtonElement) => {
-      button.style.cssText = "font:12px monospace;padding:2px 6px;border:1px solid #555;background:#111;color:#bbb;cursor:pointer;box-sizing:border-box;min-width:28px;min-height:24px;";
+      button.style.cssText = "font:12px monospace;padding:2px 6px;border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.06);color:#ddd;cursor:pointer;box-sizing:border-box;min-width:26px;min-height:24px;border-radius:2px;";
     };
     const refreshGroupCount = () => {
       groupCount = normalizeGroupCount(groupCount);
@@ -547,9 +554,8 @@ export class DevSummoner {
     countIncButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, 1); refreshGroupCount(); });
     styleCountButton(countDecButton);
     styleCountButton(countIncButton);
-    countDecButton.style.borderRadius = "2px 0 0 2px";
-    countIncButton.style.borderRadius = "0 2px 2px 0";
-    countIncButton.style.borderLeft = "0";
+    countDecButton.style.borderRadius = "2px";
+    countIncButton.style.borderRadius = "2px";
     countSegment.appendChild(countDecButton);
     countSegment.appendChild(countValue);
     countSegment.appendChild(countIncButton);
@@ -606,11 +612,15 @@ export class DevSummoner {
 
     const makeParamStepper = (label: string, key: GroupParamKey, defaultValue: number) => {
       let value = defaultValue;
-      const wrap = createSelectLabel(label);
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:grid;grid-template-columns:42px 1fr;gap:4px;align-items:center;min-width:0;";
+      const labelNode = document.createElement("span");
+      labelNode.textContent = label;
+      labelNode.style.cssText = "font-weight:700;opacity:0.82;line-height:1.05;white-space:nowrap;";
       const segment = document.createElement("div");
       segment.setAttribute("role", "spinbutton");
       segment.setAttribute("aria-label", `Group ${label}`);
-      segment.style.cssText = "display:grid;grid-template-columns:28px minmax(34px,1fr) 28px;gap:0;align-items:stretch;";
+      segment.style.cssText = "display:grid;grid-template-columns:24px minmax(24px,1fr) 24px;gap:2px;align-items:center;min-width:0;";
       const decButton = document.createElement("button");
       const valueLabel = document.createElement("span");
       const incButton = document.createElement("button");
@@ -620,12 +630,11 @@ export class DevSummoner {
       incButton.textContent = "+";
       decButton.setAttribute("aria-label", `Decrease ${label}`);
       incButton.setAttribute("aria-label", `Increase ${label}`);
-      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;border-top:1px solid #555;border-bottom:1px solid #555;background:#111;color:#eee;min-height:24px;box-sizing:border-box;";
+      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:24px;box-sizing:border-box;font-weight:700;";
       styleCountButton(decButton);
       styleCountButton(incButton);
-      decButton.style.borderRadius = "2px 0 0 2px";
-      incButton.style.borderRadius = "0 2px 2px 0";
-      incButton.style.borderLeft = "0";
+      decButton.style.minWidth = "24px";
+      incButton.style.minWidth = "24px";
       const refresh = () => {
         value = normalizeGroupStepperValue(key, value, cohesionChoice.value);
         const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
@@ -642,6 +651,7 @@ export class DevSummoner {
       segment.appendChild(decButton);
       segment.appendChild(valueLabel);
       segment.appendChild(incButton);
+      wrap.appendChild(labelNode);
       wrap.appendChild(segment);
       refresh();
       return { wrap, refresh, get value() { return value; } };
@@ -652,17 +662,18 @@ export class DevSummoner {
     const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
     const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
     const paramRow1 = document.createElement("div");
-    paramRow1.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    paramRow1.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:center;";
     paramRow1.appendChild(spacingStepper.wrap);
     paramRow1.appendChild(depthStepper.wrap);
     groupControls.appendChild(paramRow1);
     const paramRow2 = document.createElement("div");
-    paramRow2.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    paramRow2.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:center;";
     paramRow2.appendChild(responseStepper.wrap);
     paramRow2.appendChild(catchStepper.wrap);
     groupControls.appendChild(paramRow2);
     const refreshGroupParamVisibility = () => {
-      depthStepper.wrap.style.display = formationChoice.value === "wedge" ? "flex" : "none";
+      depthStepper.wrap.style.visibility = formationChoice.value === "wedge" ? "visible" : "hidden";
+      depthStepper.wrap.setAttribute("aria-hidden", String(formationChoice.value !== "wedge"));
       spacingStepper.refresh();
       depthStepper.refresh();
       responseStepper.refresh();
@@ -681,7 +692,7 @@ export class DevSummoner {
       movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
       const movementClassLabel = document.createElement("span");
       movementClassLabel.textContent = labelText;
-      movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+      movementClassLabel.style.cssText = "font-weight:700;opacity:0.95;white-space:nowrap;line-height:1.05;";
       const movementClassSegment = document.createElement("div");
       movementClassSegment.id = `${prefix}-movement-class`;
       movementClassSegment.setAttribute("role", "radiogroup");
@@ -690,8 +701,8 @@ export class DevSummoner {
       const dumbButton = document.createElement("button");
       const smartButton = document.createElement("button");
       let movementClass: MovementClassId = "dumb";
-      const primitiveWrap = createSelectLabel(primitiveLabel);
-      const presetWrap = createSelectLabel("Preset");
+      const primitiveWrap = createSelectLabel(primitiveLabel, "secondary");
+      const presetWrap = createSelectLabel("Preset", "secondary");
       primitiveWrap.appendChild(primitiveSelect.root);
       presetWrap.appendChild(presetSelect.root);
       const movementPresetRow = document.createElement("div");
@@ -799,7 +810,7 @@ export class DevSummoner {
     screenYWrap.appendChild(screenYRow);
     enemyControls.appendChild(screenYWrap);
 
-    const groupYWrap = createSelectLabel("Y");
+    const groupYWrap = createSelectLabel("Y", "secondary");
     const groupYInput = document.createElement("input");
     groupYInput.id = "ds-group-screen-y";
     groupYInput.type = "number";
@@ -820,7 +831,7 @@ export class DevSummoner {
 
     const btn = document.createElement("button");
     btn.textContent = "RELEASE";
-    btn.style.cssText = "cursor:pointer;margin-top:2px;";
+    btn.style.cssText = "cursor:pointer;margin-top:1px;font-weight:700;min-height:26px;";
     const refreshModeButtons = () => {
       enemyModeButton.type = "button";
       groupModeButton.type = "button";
