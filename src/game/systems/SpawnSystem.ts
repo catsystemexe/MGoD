@@ -234,8 +234,8 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           const forcedPresetId =
             (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
 
-          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.basic") as any) as EnemyBehaviorPresetId;
-          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.basic"];
+          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.hold") as any) as EnemyBehaviorPresetId;
+          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.hold"];
 
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
@@ -251,7 +251,9 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
             ent.kind = "enemy";
             ent.typeId = p.typeId as EnemyTypeId;
             ent.waveId = waveId;
-
+            if (typeof (p as any).devManualSpawnId === "number") {
+              ent.devManualSpawnId = (p as any).devManualSpawnId;
+            }
 
             delete ent.spriteId;
             ent.animId = "";

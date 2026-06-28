@@ -41,7 +41,7 @@ function spawnEnemy(store: EntityStore<any>): EntityRef {
     e.vel = { x: 0, y: 0 };
     e.radius = 18;
     e.hp = 5;
-    e.behaviorId = "sine.basic";
+    e.behaviorId = "sine.soft";
     e.attackProfile = { id: "test" };
     e.scoreOnKill = 100;
     e.owner = { slot: 123, gen: 456 };

@@ -24,7 +24,7 @@ export type WaveDef = {
     originY: number;
   };
 
-  behaviorPresetId?: string; // optional override (e.g. "invaders.basic")
+  behaviorPresetId?: string; // optional override (e.g. "invaders.pack")
 
   // future knobs (optional)
   weight?: number;

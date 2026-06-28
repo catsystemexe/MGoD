@@ -30,7 +30,7 @@ export const EnemyBehaviorPresets: Record<EnemyBehaviorPresetId, EnemyBehaviorPr
   if (!Array.isArray(list)) {
     console.error("[EnemyBehaviorPresets] CONTENT.behaviorPresets is not an array:", (CONTENT as any)?.behaviorPresets);
     // hard fallback
-    out["none.basic"] = { id: "none.basic", behaviorId: "none", params: {} };
+    out["none.hold"] = { id: "none.hold", behaviorId: "none", params: {} };
     return out;
   }
 
@@ -49,8 +49,8 @@ export const EnemyBehaviorPresets: Record<EnemyBehaviorPresetId, EnemyBehaviorPr
   }
 
   // ensure required default exists
-  if (!out["none.basic"]) {
-    out["none.basic"] = { id: "none.basic", behaviorId: "none", params: {} };
+  if (!out["none.hold"]) {
+    out["none.hold"] = { id: "none.hold", behaviorId: "none", params: {} };
   }
 
   console.log("[EnemyBehaviorPresets] loaded:", Object.keys(out));
