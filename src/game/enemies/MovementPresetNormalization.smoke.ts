@@ -9,7 +9,7 @@ import { alignBehavior } from "./behaviors/align";
 import { evadeBehavior } from "./behaviors/evade";
 import { rangeBehavior } from "./behaviors/range";
 import { orbitTargetBehavior } from "./behaviors/orbitTarget";
-import { buildMovementGroups, createDevSummonerGroupSpawnPayload, createDevSummonerSpawnPayload, getPrimitiveFromPresetId, normalizeGroupCount } from "../../dev/DevSummoner";
+import { buildMovementGroups, createDevSummonerGroupSpawnPayload, createDevSummonerSpawnPayload, getPrimitiveFromPresetId, normalizeGroupCount, stepGroupCount } from "../../dev/DevSummoner";
 import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS } from "./EnemyGroups";
 import type { SmartBehaviorContext } from "./behaviors/smartContext";
 
@@ -593,6 +593,11 @@ function assertDevSummonerGroupPayload(): void {
   assert(normalizeGroupCount(-1) === 2, "group count must clamp low values");
   assert(normalizeGroupCount(11.9) === 10, "group count must clamp high values and floor decimals");
   assert(normalizeGroupCount("bad") === 5, "group count must default invalid values to 5");
+  assert(normalizeGroupCount(undefined) === 5, "group count must default to 5");
+  assert(stepGroupCount(5, -1) === 4, "group count decrement must step down by one");
+  assert(stepGroupCount(5, 1) === 6, "group count increment must step up by one");
+  assert(stepGroupCount(2, -1) === 2, "group count decrement must clamp at 2");
+  assert(stepGroupCount(10, 1) === 10, "group count increment must clamp at 10");
   assert(ENEMY_GROUP_FORMATION_IDS.join(",") === "line.horizontal,wedge", "group formation options must match foundation IDs");
   assert(ENEMY_GROUP_COHESION_IDS.join(",") === "rigid,elastic", "group cohesion options must match foundation IDs");
 

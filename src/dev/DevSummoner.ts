@@ -327,6 +327,10 @@ export function normalizeGroupCount(value: unknown): number {
   return Math.min(10, Math.max(2, n));
 }
 
+export function stepGroupCount(value: unknown, delta: -1 | 1): number {
+  return normalizeGroupCount(normalizeGroupCount(value) + delta);
+}
+
 function isValidEnemyTypeId(typeId: string): boolean {
   return !!ENEMY_DEFS[typeId];
 }
@@ -472,46 +476,104 @@ export class DevSummoner {
     }
     enemyControls.appendChild(enemySelect);
 
-    const groupEnemyWrap = createSelectLabel("Enemy Type");
+    const groupTypeRow = document.createElement("div");
+    groupTypeRow.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:end;";
+    const groupEnemyWrap = createSelectLabel("Type");
     const groupEnemySelect = document.createElement("select");
     groupEnemySelect.id = "ds-group-enemy";
+    groupEnemySelect.style.cssText = "width:100%;min-width:0;box-sizing:border-box;";
     for (const id of Object.keys(ENEMY_DEFS)) appendOption(groupEnemySelect, id);
     groupEnemyWrap.appendChild(groupEnemySelect);
-    groupControls.appendChild(groupEnemyWrap);
+    groupTypeRow.appendChild(groupEnemyWrap);
 
-    const countWrap = createSelectLabel("Count");
-    const countInput = document.createElement("input");
-    countInput.id = "ds-group-count";
-    countInput.type = "number";
-    countInput.min = "2";
-    countInput.max = "10";
-    countInput.step = "1";
-    countInput.value = "5";
-    countInput.style.cssText = "width:100%;box-sizing:border-box;";
-    countInput.addEventListener("change", () => { countInput.value = String(normalizeGroupCount(countInput.value)); });
-    countWrap.appendChild(countInput);
-    groupControls.appendChild(countWrap);
+    let groupCount = 5;
+    const countSegment = document.createElement("div");
+    countSegment.id = "ds-group-count";
+    countSegment.setAttribute("role", "spinbutton");
+    countSegment.setAttribute("aria-label", "Group count");
+    countSegment.style.cssText = "display:grid;grid-template-columns:28px 34px 28px;gap:0;align-items:stretch;";
+    const countDecButton = document.createElement("button");
+    const countValue = document.createElement("span");
+    const countIncButton = document.createElement("button");
+    countDecButton.type = "button";
+    countIncButton.type = "button";
+    countDecButton.textContent = "−";
+    countIncButton.textContent = "+";
+    countDecButton.setAttribute("aria-label", "Decrease group count");
+    countIncButton.setAttribute("aria-label", "Increase group count");
+    countValue.textContent = String(groupCount);
+    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;border-top:1px solid #555;border-bottom:1px solid #555;background:#111;color:#eee;min-height:24px;box-sizing:border-box;";
+    const styleCountButton = (button: HTMLButtonElement) => {
+      button.style.cssText = "font:12px monospace;padding:2px 6px;border:1px solid #555;background:#111;color:#bbb;cursor:pointer;box-sizing:border-box;min-width:28px;min-height:24px;";
+    };
+    const refreshGroupCount = () => {
+      groupCount = normalizeGroupCount(groupCount);
+      countValue.textContent = String(groupCount);
+      countSegment.setAttribute("aria-valuemin", "2");
+      countSegment.setAttribute("aria-valuemax", "10");
+      countSegment.setAttribute("aria-valuenow", String(groupCount));
+    };
+    countDecButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, -1); refreshGroupCount(); });
+    countIncButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, 1); refreshGroupCount(); });
+    styleCountButton(countDecButton);
+    styleCountButton(countIncButton);
+    countDecButton.style.borderRadius = "2px 0 0 2px";
+    countIncButton.style.borderRadius = "0 2px 2px 0";
+    countIncButton.style.borderLeft = "0";
+    countSegment.appendChild(countDecButton);
+    countSegment.appendChild(countValue);
+    countSegment.appendChild(countIncButton);
+    refreshGroupCount();
+    groupTypeRow.appendChild(countSegment);
+    groupControls.appendChild(groupTypeRow);
 
     const groupOptionRow = document.createElement("div");
     groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
-    const formationWrap = createSelectLabel("Formation");
-    const formationSelect = document.createElement("select");
-    formationSelect.id = "ds-group-formation";
-    const formationLabels: Record<FormationId, string> = { "line.horizontal": "Horizontal Line", wedge: "Wedge" };
-    for (const id of ENEMY_GROUP_FORMATION_IDS) appendOption(formationSelect, id, formationLabels[id]);
-    formationWrap.appendChild(formationSelect);
-    const cohesionWrap = createSelectLabel("Cohesion");
-    const cohesionSelect = document.createElement("select");
-    cohesionSelect.id = "ds-group-cohesion";
-    const cohesionLabels: Record<CohesionId, string> = { rigid: "Rigid", elastic: "Elastic" };
-    for (const id of ENEMY_GROUP_COHESION_IDS) appendOption(cohesionSelect, id, cohesionLabels[id]);
-    cohesionWrap.appendChild(cohesionSelect);
+    const makeSegmentedChoice = <T extends string>(label: string, ariaLabel: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
+      let value = defaultValue;
+      const wrap = createSelectLabel(label);
+      const segment = document.createElement("div");
+      segment.setAttribute("role", "radiogroup");
+      segment.setAttribute("aria-label", ariaLabel);
+      segment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+      const buttons = options.map((option, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = option.label;
+        button.setAttribute("role", "radio");
+        button.addEventListener("click", () => {
+          value = option.value;
+          refresh();
+        });
+        segment.appendChild(button);
+        if (index > 0) button.style.borderLeft = "0";
+        button.style.borderRadius = index === 0 ? "2px 0 0 2px" : index === options.length - 1 ? "0 2px 2px 0" : "0";
+        return { button, value: option.value };
+      });
+      const refresh = () => {
+        buttons.forEach((option, index) => {
+          const active = value === option.value;
+          option.button.setAttribute("aria-checked", String(active));
+          option.button.setAttribute("aria-pressed", String(active));
+          styleSegmentButton(option.button, active);
+          if (index > 0) option.button.style.borderLeft = "0";
+          option.button.style.borderRadius = index === 0 ? "2px 0 0 2px" : index === buttons.length - 1 ? "0 2px 2px 0" : "0";
+        });
+      };
+      refresh();
+      wrap.appendChild(segment);
+      return { wrap, get value() { return value; } };
+    };
+    const formationChoice = makeSegmentedChoice<FormationId>("Form", "Group formation", ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: id === "line.horizontal" ? "Line" : "Wedge" })), "line.horizontal");
+    const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
+    const formationWrap = formationChoice.wrap;
+    const cohesionWrap = cohesionChoice.wrap;
     groupOptionRow.appendChild(formationWrap);
     groupOptionRow.appendChild(cohesionWrap);
     groupControls.appendChild(groupOptionRow);
 
     const movementGroups = buildMovementGroups();
-    const makeMovementControls = (prefix: string, labelText: string) => {
+    const makeMovementControls = (prefix: string, labelText: string, primitiveLabel = "Primitive") => {
       const primitiveSelect = createCompactSelect(`${prefix}-movement-primitive`);
       const presetSelect = createCompactSelect(`${prefix}-movement-preset`);
       this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
@@ -528,7 +590,7 @@ export class DevSummoner {
       const dumbButton = document.createElement("button");
       const smartButton = document.createElement("button");
       let movementClass: MovementClassId = "dumb";
-      const primitiveWrap = createSelectLabel("Primitive");
+      const primitiveWrap = createSelectLabel(primitiveLabel);
       const presetWrap = createSelectLabel("Preset");
       primitiveWrap.appendChild(primitiveSelect.root);
       presetWrap.appendChild(presetSelect.root);
@@ -595,7 +657,7 @@ export class DevSummoner {
     const enemyMovement = makeMovementControls("ds", "Movement");
     enemyControls.appendChild(enemyMovement.movementClassRow);
     enemyControls.appendChild(enemyMovement.movementPresetRow);
-    const groupMovement = makeMovementControls("ds-group", "Group Movement");
+    const groupMovement = makeMovementControls("ds-group", "Move", "Prim");
     groupControls.appendChild(groupMovement.movementClassRow);
     groupControls.appendChild(groupMovement.movementPresetRow);
 
@@ -637,7 +699,7 @@ export class DevSummoner {
     screenYWrap.appendChild(screenYRow);
     enemyControls.appendChild(screenYWrap);
 
-    const groupYWrap = createSelectLabel("Spawn Y");
+    const groupYWrap = createSelectLabel("Y");
     const groupYInput = document.createElement("input");
     groupYInput.id = "ds-group-screen-y";
     groupYInput.type = "number";
@@ -684,18 +746,19 @@ export class DevSummoner {
         const anchorY = Number(groupYInput.value);
         const payload = createDevSummonerGroupSpawnPayload({
           enemyTypeId: groupEnemySelect.value,
-          count: countInput.value,
+          count: groupCount,
           anchorX: this.logicW - 40,
           anchorY,
-          formationId: formationSelect.value,
+          formationId: formationChoice.value,
           movementPresetId: groupMovement.presetSelect.value,
-          cohesionId: cohesionSelect.value,
+          cohesionId: cohesionChoice.value,
         });
         if (!payload) {
           console.warn("[DevSummoner] invalid group spawn payload");
           return;
         }
-        countInput.value = String(payload.count);
+        groupCount = payload.count;
+        refreshGroupCount();
         groupYInput.value = String(payload.anchor.y);
         this.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, payload);
         return;
