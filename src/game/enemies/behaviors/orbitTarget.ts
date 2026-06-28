@@ -30,8 +30,11 @@ export const orbitTargetBehavior: EnemyBehavior = {
     st.arcRadians = positive(p.arcRadians, Math.PI * 2, 0.001);
     st.direction = directionSign(p.direction);
     st.repeat = p.repeat === true;
+    st.pingPong = p.pingPong === true;
     st.radialResponse = positive(p.radialResponse, 2.6, 0.001);
     st.maxRadialSpeed = positive(p.maxRadialSpeed, 90, 0);
+    st.centerResponse = positive(p.centerResponse, 0, 0);
+    st.maxCenterSpeed = positive(p.maxCenterSpeed, Number.POSITIVE_INFINITY, 0);
     st.targetOffsetX = num(p.targetOffsetX, 0);
     st.targetOffsetY = num(p.targetOffsetY, 0);
     st.fallbackSpeedX = num(p.fallbackSpeedX, -80);
@@ -41,6 +44,8 @@ export const orbitTargetBehavior: EnemyBehavior = {
     st.currentRadiusY = st.radiusY;
     st.lastPlayerX = 0;
     st.lastPlayerY = 0;
+    st.centerX = 0;
+    st.centerY = 0;
   },
 
   update: (e: any, ctx: SmartBehaviorContext) => {
@@ -64,11 +69,13 @@ export const orbitTargetBehavior: EnemyBehavior = {
       };
     }
 
-    const centerX = player.x + num(st.targetOffsetX, 0);
-    const centerY = player.y + num(st.targetOffsetY, 0);
+    const desiredCenterX = player.x + num(st.targetOffsetX, 0);
+    const desiredCenterY = player.y + num(st.targetOffsetY, 0);
     if (st.initialized !== true) {
-      const dx = currentX - centerX;
-      const dy = currentY - centerY;
+      st.centerX = desiredCenterX;
+      st.centerY = desiredCenterY;
+      const dx = currentX - desiredCenterX;
+      const dy = currentY - desiredCenterY;
       const rx = positive(st.radiusX, 96, 1);
       const ry = positive(st.radiusY, 72, 1);
       const initialDistance = Math.hypot(dx, dy);
@@ -76,18 +83,43 @@ export const orbitTargetBehavior: EnemyBehavior = {
       st.startAngle = Number.isFinite(angle) ? angle : 0;
       st.currentRadiusX = initialDistance <= 0.0001 ? 0 : Math.max(1, Math.abs(dx / Math.cos(st.startAngle)) || Math.abs(dx) || rx);
       st.currentRadiusY = initialDistance <= 0.0001 ? 0 : Math.max(1, Math.abs(dy / Math.sin(st.startAngle)) || Math.abs(dy) || ry);
-      st.lastPlayerX = centerX;
-      st.lastPlayerY = centerY;
+      st.lastPlayerX = desiredCenterX;
+      st.lastPlayerY = desiredCenterY;
       st.initialized = true;
       return { x: currentX, y: currentY };
     }
+
+    let centerX = desiredCenterX;
+    let centerY = desiredCenterY;
+    const centerResponse = positive(st.centerResponse, 0, 0);
+    if (centerResponse > 0) {
+      const previousCenterX = num(st.centerX, desiredCenterX);
+      const previousCenterY = num(st.centerY, desiredCenterY);
+      const alpha = 1 - Math.exp(-centerResponse * dt);
+      const requestedDx = (desiredCenterX - previousCenterX) * alpha;
+      const requestedDy = (desiredCenterY - previousCenterY) * alpha;
+      const requestedDistance = Math.hypot(requestedDx, requestedDy);
+      const maxCenterStep = positive(st.maxCenterSpeed, Number.POSITIVE_INFINITY, 0) * dt;
+      const scale = requestedDistance > maxCenterStep && requestedDistance > 0 ? maxCenterStep / requestedDistance : 1;
+      centerX = previousCenterX + requestedDx * scale;
+      centerY = previousCenterY + requestedDy * scale;
+    }
+    st.centerX = centerX;
+    st.centerY = centerY;
 
     const elapsed = Math.max(0, num(st.t, 0));
     const angularSpeed = positive(st.angularSpeed, Math.PI, 0.001);
     const arc = positive(st.arcRadians, Math.PI * 2, 0.001);
     const rawDelta = angularSpeed * elapsed;
-    const angleDelta = st.repeat === true ? rawDelta % arc : Math.min(rawDelta, arc);
-    const angle = num(st.startAngle, 0) + directionSign(st.direction) * angleDelta;
+    let signedAngleDelta: number;
+    if (st.pingPong === true) {
+      const period = arc * 2;
+      const wrapped = ((rawDelta % period) + period) % period;
+      signedAngleDelta = wrapped <= arc ? wrapped : period - wrapped;
+    } else {
+      signedAngleDelta = st.repeat === true ? rawDelta % arc : Math.min(rawDelta, arc);
+    }
+    const angle = num(st.startAngle, 0) + directionSign(st.direction) * signedAngleDelta;
 
     const targetRx = positive(st.radiusX, 96, 1);
     const targetRy = positive(st.radiusY, 72, 1);
