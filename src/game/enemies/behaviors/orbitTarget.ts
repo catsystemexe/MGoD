@@ -17,6 +17,22 @@ function finitePlayer(ctx: SmartBehaviorContext | undefined): { x: number; y: nu
   return Number.isFinite(x) && Number.isFinite(y) ? { x: x as number, y: y as number } : null;
 }
 
+function normalizeAngle(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function clampAngleToArc(angle: number, center: number, arc: number): number {
+  const halfArc = arc / 2;
+  const relative = normalizeAngle(angle - center);
+  return center + clamp(relative, -halfArc, halfArc);
+}
+
+function pingPongPhase(phase: number, arc: number): number {
+  const period = arc * 2;
+  const wrapped = ((phase % period) + period) % period;
+  return wrapped <= arc ? wrapped : period - wrapped;
+}
+
 export const orbitTargetBehavior: EnemyBehavior = {
   init: (e: any) => {
     e.bState ??= {};
@@ -28,6 +44,8 @@ export const orbitTargetBehavior: EnemyBehavior = {
     st.radiusY = positive(p.radiusY, 72, 1);
     st.angularSpeed = positive(p.angularSpeed, Math.PI, 0.001);
     st.arcRadians = positive(p.arcRadians, Math.PI * 2, 0.001);
+    st.hasArcCenter = Number.isFinite(p.arcCenterAngle);
+    st.arcCenterAngle = num(p.arcCenterAngle, 0);
     st.direction = directionSign(p.direction);
     st.repeat = p.repeat === true;
     st.pingPong = p.pingPong === true;
@@ -40,6 +58,7 @@ export const orbitTargetBehavior: EnemyBehavior = {
     st.fallbackSpeedX = num(p.fallbackSpeedX, -80);
     st.fallbackSpeedY = num(p.fallbackSpeedY, 0);
     st.startAngle = 0;
+    st.startPhase = 0;
     st.currentRadiusX = st.radiusX;
     st.currentRadiusY = st.radiusY;
     st.lastPlayerX = 0;
@@ -79,10 +98,16 @@ export const orbitTargetBehavior: EnemyBehavior = {
       const rx = positive(st.radiusX, 96, 1);
       const ry = positive(st.radiusY, 72, 1);
       const initialDistance = Math.hypot(dx, dy);
-      const angle = initialDistance <= 0.0001 ? deterministicInitialAngle(e) : Math.atan2(dy / ry, dx / rx);
-      st.startAngle = Number.isFinite(angle) ? angle : 0;
-      st.currentRadiusX = initialDistance <= 0.0001 ? 0 : Math.max(1, Math.abs(dx / Math.cos(st.startAngle)) || Math.abs(dx) || rx);
-      st.currentRadiusY = initialDistance <= 0.0001 ? 0 : Math.max(1, Math.abs(dy / Math.sin(st.startAngle)) || Math.abs(dy) || ry);
+      const rawAngle = initialDistance <= 0.0001 ? deterministicInitialAngle(e) : Math.atan2(dy / ry, dx / rx);
+      const angle = Number.isFinite(rawAngle) ? rawAngle : 0;
+      const arc = positive(st.arcRadians, Math.PI * 2, 0.001);
+      const hasArcCenter = st.hasArcCenter === true;
+      st.startAngle = hasArcCenter ? clampAngleToArc(angle, num(st.arcCenterAngle, 0), arc) : angle;
+      st.startPhase = hasArcCenter ? st.startAngle - (num(st.arcCenterAngle, 0) - arc / 2) : 0;
+      const projected = Math.abs(normalizeAngle(st.startAngle - angle)) > 0.0001;
+      st.projectedEntry = projected;
+      st.currentRadiusX = initialDistance <= 0.0001 || projected ? 0 : Math.max(1, Math.abs(dx / Math.cos(st.startAngle)) || Math.abs(dx) || rx);
+      st.currentRadiusY = initialDistance <= 0.0001 || projected ? 0 : Math.max(1, Math.abs(dy / Math.sin(st.startAngle)) || Math.abs(dy) || ry);
       st.lastPlayerX = desiredCenterX;
       st.lastPlayerY = desiredCenterY;
       st.initialized = true;
@@ -111,15 +136,24 @@ export const orbitTargetBehavior: EnemyBehavior = {
     const angularSpeed = positive(st.angularSpeed, Math.PI, 0.001);
     const arc = positive(st.arcRadians, Math.PI * 2, 0.001);
     const rawDelta = angularSpeed * elapsed;
-    let signedAngleDelta: number;
-    if (st.pingPong === true) {
-      const period = arc * 2;
-      const wrapped = ((rawDelta % period) + period) % period;
-      signedAngleDelta = wrapped <= arc ? wrapped : period - wrapped;
+    let angle: number;
+    if (st.hasArcCenter === true) {
+      const arcStart = num(st.arcCenterAngle, 0) - arc / 2;
+      if (st.pingPong === true) {
+        angle = arcStart + pingPongPhase(num(st.startPhase, 0) + directionSign(st.direction) * rawDelta, arc);
+      } else {
+        const phase = st.repeat === true ? (num(st.startPhase, 0) + directionSign(st.direction) * rawDelta) % arc : clamp(num(st.startPhase, 0) + directionSign(st.direction) * rawDelta, 0, arc);
+        angle = arcStart + ((phase % arc) + arc) % arc;
+      }
     } else {
-      signedAngleDelta = st.repeat === true ? rawDelta % arc : Math.min(rawDelta, arc);
+      let signedAngleDelta: number;
+      if (st.pingPong === true) {
+        signedAngleDelta = pingPongPhase(rawDelta, arc);
+      } else {
+        signedAngleDelta = st.repeat === true ? rawDelta % arc : Math.min(rawDelta, arc);
+      }
+      angle = num(st.startAngle, 0) + directionSign(st.direction) * signedAngleDelta;
     }
-    const angle = num(st.startAngle, 0) + directionSign(st.direction) * signedAngleDelta;
 
     const targetRx = positive(st.radiusX, 96, 1);
     const targetRy = positive(st.radiusY, 72, 1);
@@ -132,9 +166,21 @@ export const orbitTargetBehavior: EnemyBehavior = {
 
     st.lastPlayerX = centerX;
     st.lastPlayerY = centerY;
-    return {
+    const target = {
       x: centerX + positive(st.currentRadiusX, targetRx, 0) * Math.cos(angle),
       y: centerY + positive(st.currentRadiusY, targetRy, 0) * Math.sin(angle),
     };
+    if (st.projectedEntry === true) {
+      const dx = target.x - currentX;
+      const dy = target.y - currentY;
+      const distance = Math.hypot(dx, dy);
+      const maxEntryStep = Math.max(maxRadialStep, 0.0001);
+      if (distance > maxEntryStep) {
+        const scale = maxEntryStep / distance;
+        return { x: currentX + dx * scale, y: currentY + dy * scale };
+      }
+      st.projectedEntry = false;
+    }
+    return target;
   },
 };

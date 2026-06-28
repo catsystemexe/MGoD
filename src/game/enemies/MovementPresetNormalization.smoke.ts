@@ -152,6 +152,10 @@ function assertFiniteTarget(target: { x: number; y: number } | null | undefined,
   assert(Number.isFinite(target.y), `${label} target.y must be finite`);
 }
 
+function angleFromPlayer(target: { x: number; y: number }, playerY: number): number {
+  return Math.atan2(target.y - playerY, target.x - 40);
+}
+
 function assertLoopBehavior(): void {
   assert(EnemyBehaviorDB.loop === loopBehavior, "loop behavior ID must be registered");
 
@@ -319,23 +323,45 @@ function assertSmartBehaviors(): void {
   approx(orbitInitialTarget.y, 120, 0.00001);
 
   assert(orbitHalf.params.pingPong === true, "orbit.half must request ping-pong half arcs");
+  assert(Number(orbitHalf.params.arcCenterAngle) === 0, "orbit.half must center its arc in front of the player");
+  assert(Number(orbitHalf.params.angularSpeed) === 1.1, "orbit.half angular speed must be exactly half of the prior 2.2");
   assert(Number(orbitHalf.params.radiusX) >= 180, "orbit.half radiusX must be visibly outside the ship");
   assert(Number(orbitHalf.params.radiusY) >= 120, "orbit.half radiusY must be visibly outside the ship");
+  const halfDuration = Number(orbitHalf.params.arcRadians) / Number(orbitHalf.params.angularSpeed);
   const half = initSmart(orbitTargetBehavior, orbitHalf.params, 120, 0, 260);
   stepSmart(orbitTargetBehavior, half, 0, 120);
-  const halfDuration = Number(orbitHalf.params.arcRadians) / Number(orbitHalf.params.angularSpeed);
-  const halfEnd = stepSmart(orbitTargetBehavior, half, halfDuration, 120);
+  const halfEnd = stepSmart(orbitTargetBehavior, half, halfDuration / 2, 120);
   const halfAfterReverse = stepSmart(orbitTargetBehavior, half, 1 / 60, 120);
-  const halfReturn = stepSmart(orbitTargetBehavior, half, halfDuration - 1 / 60, 120);
+  const halfMid = stepSmart(orbitTargetBehavior, half, halfDuration / 2 - 1 / 60, 120);
+  const halfReturn = stepSmart(orbitTargetBehavior, half, halfDuration / 2, 120);
   const halfRepeatStart = stepSmart(orbitTargetBehavior, half, 1 / 60, 120);
+  assertFiniteTarget(halfMid, "orbit half midpoint");
   assertFiniteTarget(halfEnd, "orbit half completed");
-  assert(halfEnd.x < 40, "orbit half first arc must reach the opposite terminal side");
-  assert(halfAfterReverse.x > halfEnd.x, "orbit half must reverse direction after the terminal point");
-  assert(Math.abs(halfAfterReverse.x - halfEnd.x) < 12, "orbit half reversal must remain position-continuous");
-  assert(halfReturn.x > 40 + Number(orbitHalf.params.radiusX) * 0.65, "orbit half return arc must reach the starting side");
+  assert(halfMid.x > 40 + Number(orbitHalf.params.radiusX) * 0.8, "orbit half midpoint must be directly in front of the player");
+  approx(halfMid.y, 120, 0.00001);
+  assert(halfEnd.x >= 40 - 0.00001, "orbit half terminal must not cross behind the player");
+  approx(halfEnd.x, 40, 0.00001);
+  assert(Math.abs(halfEnd.y - 120) > Number(orbitHalf.params.radiusY) * 0.8, "orbit half terminal must be above or below the player");
+  assert(halfAfterReverse.x > halfEnd.x, "orbit half must reverse direction after the front-arc terminal point");
+  assert(Math.hypot(halfAfterReverse.x - halfEnd.x, halfAfterReverse.y - halfEnd.y) < 12, "orbit half reversal must remain position-continuous");
+  assert(halfReturn.x >= 40 - 0.00001, "orbit half return must stay in the player-front half-plane");
+  assert(Math.abs(halfReturn.y - 120) > Number(orbitHalf.params.radiusY) * 0.8, "orbit half return terminal must be above or below the player");
   assert(Math.hypot(halfReturn.x - halfRepeatStart.x, halfReturn.y - halfRepeatStart.y) < 20, "orbit half repeated cycles must not snap");
-  const halfRadius = Math.hypot(halfReturn.x - 40, halfReturn.y - 120);
-  assert(Number.isFinite(halfRadius) && halfRadius > Number(orbitHalf.params.radiusY) * 0.8, "orbit half radius must remain finite and stable");
+  for (const target of [halfMid, halfEnd, halfAfterReverse, halfReturn, halfRepeatStart]) {
+    assert(target.x >= 40 - 0.00001, "orbit half target must remain in the player-front half-plane");
+    assert(angleFromPlayer(target, 120) >= -Math.PI / 2 - 0.00001, "orbit half target angle must not pass below the front arc");
+    assert(angleFromPlayer(target, 120) <= Math.PI / 2 + 0.00001, "orbit half target angle must not pass above the front arc");
+  }
+  const halfBehind = initSmart(orbitTargetBehavior, orbitHalf.params, 120, 0, -60);
+  const halfBehindInitial = stepSmart(orbitTargetBehavior, halfBehind, 0, 120);
+  const halfBehindFirst = stepSmart(orbitTargetBehavior, halfBehind, 1 / 60, 120);
+  const halfBehindSecond = stepSmart(orbitTargetBehavior, halfBehind, 1 / 60, 120);
+  assertFiniteTarget(halfBehindFirst, "orbit half behind-player first target");
+  assert(halfBehindInitial.x < 40, "orbit half behind-player setup must start behind the player");
+  assert(halfBehindFirst.x >= halfBehindInitial.x, "orbit half behind-player entry must move toward the front arc");
+  assert(Math.hypot(halfBehindFirst.x - halfBehindInitial.x, halfBehindFirst.y - halfBehindInitial.y) < 45, "orbit half behind-player first step must be bounded");
+  assert(Math.hypot(halfBehindSecond.x - halfBehindFirst.x, halfBehindSecond.y - halfBehindFirst.y) < 45, "orbit half behind-player second step must remain continuous");
+
 
   assert(Number(orbitRepeat.params.radiusX) === 220, "orbit.repeat radiusX must be approximately 2x the prior 110");
   assert(Number(orbitRepeat.params.radiusY) === 144, "orbit.repeat radiusY must be approximately 2x the prior 72");
