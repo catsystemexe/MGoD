@@ -4,7 +4,11 @@ import { EnemyBehaviorPresets } from "./EnemyBehaviorPresets";
 import { straightBehavior } from "./behaviors/straight";
 import { sineBehavior } from "./behaviors/sine";
 import { loopBehavior } from "./behaviors/loop";
-import { createDevSummonerSpawnPayload } from "../../dev/DevSummoner";
+import { trackBehavior } from "./behaviors/track";
+import { alignBehavior } from "./behaviors/align";
+import { evadeBehavior } from "./behaviors/evade";
+import { buildMovementGroups, createDevSummonerSpawnPayload, getPrimitiveFromPresetId } from "../../dev/DevSummoner";
+import type { SmartBehaviorContext } from "./behaviors/smartContext";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`[MovementPresetNormalization] ${msg}`);
@@ -77,6 +81,10 @@ function assertCanonicalLibrary(): void {
     "zigzag.sharp",
     "loop.single",
     "loop.repeat",
+    "smart.track.soft",
+    "smart.track.aggressive",
+    "smart.align.attack",
+    "smart.evade.axis",
     "invaders.pack",
   ];
   for (const id of expected) assert(EnemyBehaviorPresets[id], `expected canonical preset ${id}`);
@@ -187,6 +195,176 @@ function assertLoopBehavior(): void {
   approx(first.y, second.y, 0.00001);
 }
 
+function initSmart(behavior: typeof trackBehavior, params: Record<string, unknown>, y = 50, spawnOrdinal = 0) {
+  const ent: any = { pos: { x: 100, y }, behavior: params, bState: { t: 0 }, spawnOrdinal };
+  behavior.init?.(ent);
+  return ent;
+}
+
+function stepSmart(
+  behavior: typeof trackBehavior,
+  ent: any,
+  dt: number,
+  playerY?: number | null,
+  logicH = 480,
+): { x: number; y: number } {
+  const ctx: SmartBehaviorContext = { dt, logicH, playerPos: playerY == null ? null : { x: 40, y: playerY } };
+  behavior.update?.(ent, ctx);
+  const target = behavior.getTarget?.(ent, ctx);
+  assertFiniteTarget(target, "smart target");
+  ent.pos.x = target.x;
+  ent.pos.y = target.y;
+  return target;
+}
+
+function assertSmartBehaviors(): void {
+  assert(EnemyBehaviorDB.track === trackBehavior, "track behavior ID must be registered");
+  assert(EnemyBehaviorDB.align === alignBehavior, "align behavior ID must be registered");
+  assert(EnemyBehaviorDB.evade === evadeBehavior, "evade behavior ID must be registered");
+
+  const soft = EnemyBehaviorPresets["smart.track.soft"];
+  const aggressive = EnemyBehaviorPresets["smart.track.aggressive"];
+  const align = EnemyBehaviorPresets["smart.align.attack"];
+  const evade = EnemyBehaviorPresets["smart.evade.axis"];
+  assert(soft?.behaviorId === "track", "smart.track.soft must use track behavior");
+  assert(aggressive?.behaviorId === "track", "smart.track.aggressive must use track behavior");
+  assert(align?.behaviorId === "align", "smart.align.attack must use align behavior");
+  assert(evade?.behaviorId === "evade", "smart.evade.axis must use evade behavior");
+
+  const softEnt = initSmart(trackBehavior, soft.params, 50);
+  const aggressiveEnt = initSmart(trackBehavior, aggressive.params, 50);
+  const softTarget = stepSmart(trackBehavior, softEnt, 1 / 60, 250);
+  const aggressiveTarget = stepSmart(trackBehavior, aggressiveEnt, 1 / 60, 250);
+  assert(softTarget.y > 50 && softTarget.y < 250, "track.soft must move gradually toward player Y");
+  assert(aggressiveTarget.y > softTarget.y, "track.aggressive must respond more strongly than soft");
+
+  const missingPlayerEnt = initSmart(trackBehavior, soft.params, 50);
+  const missingPlayerTarget = stepSmart(trackBehavior, missingPlayerEnt, 1 / 60, undefined);
+  assertFiniteTarget(missingPlayerTarget, "track missing-player fallback");
+  approx(missingPlayerTarget.y, 50);
+
+  const alignEnt = initSmart(alignBehavior, align.params, 50);
+  let lastDistance = Math.abs(250 - alignEnt.pos.y);
+  for (let i = 0; i < 120; i += 1) {
+    const target = stepSmart(alignBehavior, alignEnt, 1 / 60, 250);
+    const distance = Math.abs(250 - target.y);
+    assert(distance <= lastDistance + 0.00001, "align.attack must not oscillate away from target");
+    assert(target.y <= 250, "align.attack must not snap or overshoot past player Y");
+    lastDistance = distance;
+  }
+  assert(lastDistance <= Number(align.params.toleranceY), "align.attack must reach tolerance");
+
+  const evadeA = initSmart(evadeBehavior, evade.params, 100, 2);
+  const firstEvade = stepSmart(evadeBehavior, evadeA, 1 / 60, 100);
+  const secondEvade = stepSmart(evadeBehavior, evadeA, 1 / 60, 100);
+  assert(firstEvade.y < 100, "evade.axis must choose deterministic tie-break direction");
+  assert(secondEvade.y < firstEvade.y, "evade.axis must not flip direction during one evade");
+
+  const evadeB = initSmart(evadeBehavior, evade.params, 100, 2);
+  const repeatEvade = stepSmart(evadeBehavior, evadeB, 1 / 60, 100);
+  approx(firstEvade.y, repeatEvade.y, 0.00001);
+
+  const reentryA = initSmart(trackBehavior, soft.params, 50);
+  const reentryB = initSmart(trackBehavior, soft.params, 50);
+  const reentryTargetA = stepSmart(trackBehavior, reentryA, 1 / 60, 250);
+  const reentryTargetB = stepSmart(trackBehavior, reentryB, 1 / 60, 250);
+  approx(reentryTargetA.x, reentryTargetB.x, 0.00001);
+  approx(reentryTargetA.y, reentryTargetB.y, 0.00001);
+}
+
+function assertMissingPlayerFallbacks(): void {
+  const ctx: SmartBehaviorContext = { dt: 1 / 60, logicH: 480, playerPos: null };
+  assert(!("world" in ctx), "smart behavior context must not expose world");
+
+  const trackPreset = EnemyBehaviorPresets["smart.track.aggressive"];
+  const trackEnt = initSmart(trackBehavior, trackPreset.params, 120);
+  trackBehavior.update?.(trackEnt, ctx as any);
+  const trackTarget = trackBehavior.getTarget?.(trackEnt, ctx as any);
+  assertFiniteTarget(trackTarget, "track null-player fallback");
+  approx(trackTarget.y, 120);
+  assert(trackTarget.y !== 0, "track missing-player fallback must not steer toward Y=0");
+
+  const alignPreset = EnemyBehaviorPresets["smart.align.attack"];
+  const alignEnt = initSmart(alignBehavior, alignPreset.params, 140);
+  alignBehavior.update?.(alignEnt, ctx as any);
+  const alignTarget = alignBehavior.getTarget?.(alignEnt, ctx as any);
+  assertFiniteTarget(alignTarget, "align null-player fallback");
+  approx(alignTarget.y, 140);
+  assert(alignTarget.y !== 0, "align missing-player fallback must not steer toward Y=0");
+
+  const evadePreset = EnemyBehaviorPresets["smart.evade.axis"];
+  const evadeEnt = initSmart(evadeBehavior, evadePreset.params, 160);
+  evadeBehavior.update?.(evadeEnt, ctx as any);
+  const evadeTarget = evadeBehavior.getTarget?.(evadeEnt, ctx as any);
+  assertFiniteTarget(evadeTarget, "evade null-player fallback");
+  approx(evadeTarget.y, 160);
+  assert(evadeTarget.y !== 0, "evade missing-player fallback must not steer toward Y=0");
+}
+
+function assertEvadeCooldown(): void {
+  const evade = EnemyBehaviorPresets["smart.evade.axis"];
+  const ent = initSmart(evadeBehavior, evade.params, 100, 2);
+  const ctx: SmartBehaviorContext = { dt: 1 / 60, logicH: 480, playerPos: { x: 40, y: 100 } };
+
+  evadeBehavior.update?.(ent, ctx as any);
+  assert(Number(ent.bState.evadeTimeLeft) > 0, "evade must activate inside trigger band");
+  assert(Number(ent.bState.cooldownLeft) === 0, "evade cooldown must not start at trigger time");
+  const firstTarget = evadeBehavior.getTarget?.(ent, ctx as any);
+  assertFiniteTarget(firstTarget, "evade active first target");
+  ent.pos.y = firstTarget.y;
+  const activeDir = Math.sign(Number(ent.bState.evadeDir));
+
+  let guard = 0;
+  while (Number(ent.bState.evadeTimeLeft) > 0 && guard < 120) {
+    evadeBehavior.update?.(ent, ctx as any);
+    const target = evadeBehavior.getTarget?.(ent, ctx as any);
+    assertFiniteTarget(target, "evade active target");
+    ent.pos.y = target.y;
+    assert(Math.sign(Number(ent.bState.evadeDir)) === activeDir, "evade direction must remain stable while active");
+    guard += 1;
+  }
+  assert(guard < 120, "evade must finish within bounded smoke iterations");
+  assert(Number(ent.bState.evadeTimeLeft) === 0, "evade active duration must complete");
+  assert(Number(ent.bState.cooldownLeft) > 0, "evade cooldown must begin after active evade completes");
+
+  const cooldownBefore = Number(ent.bState.cooldownLeft);
+  evadeBehavior.update?.(ent, ctx as any);
+  assert(Number(ent.bState.evadeTimeLeft) === 0, "evade must not immediately retrigger during cooldown");
+  assert(Number(ent.bState.cooldownLeft) < cooldownBefore, "evade cooldown must decrement while inactive");
+
+  guard = 0;
+  while (Number(ent.bState.cooldownLeft) > 0 && guard < 120) {
+    evadeBehavior.update?.(ent, ctx as any);
+    guard += 1;
+  }
+  assert(guard < 120, "evade cooldown must expire within bounded smoke iterations");
+  ent.pos.y = 100;
+  evadeBehavior.update?.(ent, ctx as any);
+  assert(Number(ent.bState.evadeTimeLeft) > 0, "evade may retrigger deterministically after cooldown expires");
+  assert(Math.sign(Number(ent.bState.evadeDir)) === activeDir, "evade retrigger direction must remain deterministic for the same relative position");
+}
+
+function assertSmartFsmContent(): void {
+  for (const id of ["fsm.smart_tracker", "fsm.smart_aligner", "fsm.smart_evader"]) {
+    assert(BEHAVIOR_GRAPHS[id], `expected test FSM graph ${id}`);
+  }
+  const enemies = new Set(CONTENT.enemyTypes.map((enemy) => enemy.id));
+  for (const id of ["fsm_smart_tracker", "fsm_smart_aligner", "fsm_smart_evader"]) {
+    assert(enemies.has(id), `expected test enemy ${id}`);
+  }
+}
+
+function assertMovementGrouping(): void {
+  const groups = buildMovementGroups();
+  assert(groups.smart.track.includes("smart.track.soft"), "smart.track.soft must appear under Smart/Track");
+  assert(groups.smart.track.includes("smart.track.aggressive"), "smart.track.aggressive must appear under Smart/Track");
+  assert(groups.smart.align.includes("smart.align.attack"), "smart.align.attack must appear under Smart/Align");
+  assert(groups.smart.evade.includes("smart.evade.axis"), "smart.evade.axis must appear under Smart/Evade");
+  assert(groups.dumb.straight.includes("straight.basic"), "Dumb straight presets must remain under Dumb");
+  assert(getPrimitiveFromPresetId("smart.track.soft") === "track", "smart primitive extraction must skip class prefix");
+  assert(getPrimitiveFromPresetId("straight.basic") === "straight", "dumb primitive extraction must use first segment");
+}
+
 function assertDevSummonerPayload(): void {
   const payload = createDevSummonerSpawnPayload({
     typeId: "red",
@@ -218,5 +396,10 @@ assertCanonicalLibrary();
 assertStraightInterpolation();
 assertLoopBehavior();
 assertSineYAxisWaves();
+assertSmartBehaviors();
+assertMissingPlayerFallbacks();
+assertEvadeCooldown();
+assertSmartFsmContent();
+assertMovementGrouping();
 assertDevSummonerPayload();
 console.log("[MovementPresetNormalization] ok");

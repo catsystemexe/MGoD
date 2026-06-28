@@ -12,7 +12,7 @@ type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
 
-const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "invaders", "none"] as const;
+const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "invaders", "none"] as const;
 const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
 
 function formatNum(value: unknown, digits = 0): string {
@@ -128,6 +128,9 @@ function appendOption(select: HTMLSelectElement, value: string, text = value, di
 function formatPrimitiveLabel(primitive: string): string {
   if (primitive === "none") return "Hold";
   if (primitive === "loop") return "Loop";
+  if (primitive === "track") return "Track";
+  if (primitive === "align") return "Align";
+  if (primitive === "evade") return "Evade";
   return primitive;
 }
 
@@ -292,8 +295,9 @@ function createCompactSelect(id: string): {
   };
 }
 
-function getPrimitiveFromPresetId(presetId: string): string {
-  return presetId.split(".")[0] || presetId;
+export function getPrimitiveFromPresetId(presetId: string): string {
+  const parts = presetId.split(".");
+  return presetId.startsWith("smart.") ? (parts[1] || presetId) : (parts[0] || presetId);
 }
 
 
@@ -312,7 +316,7 @@ export function createDevSummonerSpawnPayload(input: {
   };
 }
 
-function buildMovementGroups(): MovementGroups {
+export function buildMovementGroups(): MovementGroups {
   const groups: MovementGroups = { dumb: {}, smart: {} };
 
   for (const presetId of Object.keys(EnemyBehaviorPresets)) {
@@ -382,31 +386,68 @@ export class DevSummoner {
     spawnSection.appendChild(enemySelect);
 
     const movementGroups = buildMovementGroups();
-    const movementClassSelect = document.createElement("select");
-    movementClassSelect.id = "ds-movement-class";
     const primitiveSelect = createCompactSelect("ds-movement-primitive");
     const presetSelect = createCompactSelect("ds-movement-preset");
     this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
 
-    const movementClassWrap = createSelectLabel("Movement Class");
+    const movementClassRow = document.createElement("div");
+    movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+    const movementClassLabel = document.createElement("span");
+    movementClassLabel.textContent = "Movement";
+    movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+    const movementClassSegment = document.createElement("div");
+    movementClassSegment.id = "ds-movement-class";
+    movementClassSegment.setAttribute("role", "radiogroup");
+    movementClassSegment.setAttribute("aria-label", "Movement class");
+    movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+    const dumbButton = document.createElement("button");
+    const smartButton = document.createElement("button");
+    let movementClass: MovementClassId = "dumb";
     const primitiveWrap = createSelectLabel("Primitive");
     const presetWrap = createSelectLabel("Preset");
-    movementClassWrap.appendChild(movementClassSelect);
     primitiveWrap.appendChild(primitiveSelect.root);
     presetWrap.appendChild(presetSelect.root);
     const movementPresetRow = document.createElement("div");
     movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
     movementPresetRow.appendChild(primitiveWrap);
     movementPresetRow.appendChild(presetWrap);
-    spawnSection.appendChild(movementClassWrap);
+    movementClassRow.appendChild(movementClassLabel);
+    movementClassRow.appendChild(movementClassSegment);
+    spawnSection.appendChild(movementClassRow);
     spawnSection.appendChild(movementPresetRow);
 
+    const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
     const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
-    appendOption(movementClassSelect, "dumb", "Dumb");
-    appendOption(movementClassSelect, "smart", hasSmartPresets ? "Smart" : "Smart (none)", !hasSmartPresets);
+    const styleMovementClassButton = (button: HTMLButtonElement, active: boolean, disabled: boolean) => {
+      button.style.cssText = [
+        "font:12px monospace",
+        "padding:2px 6px",
+        "border:1px solid #555",
+        "background:" + (active ? "#26384f" : "#111"),
+        "color:" + (disabled ? "#777" : active ? "#fff" : "#bbb"),
+        "cursor:" + (disabled ? "not-allowed" : "pointer"),
+        "box-sizing:border-box",
+        "min-width:0",
+      ].join(";");
+    };
+    const refreshMovementClassButtons = () => {
+      for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
+        const active = movementClass === value;
+        button.type = "button";
+        button.textContent = value === "dumb" ? "Dumb" : "Smart";
+        button.disabled = !enabled;
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", String(active));
+        styleMovementClassButton(button, active, !enabled);
+      }
+      dumbButton.style.borderRadius = "2px 0 0 2px";
+      smartButton.style.borderLeft = "0";
+      smartButton.style.borderRadius = "0 2px 2px 0";
+    };
+    movementClassSegment.appendChild(dumbButton);
+    movementClassSegment.appendChild(smartButton);
 
     const repopulatePresetSelect = () => {
-      const movementClass = movementClassSelect.value as MovementClassId;
       const primitive = primitiveSelect.value;
       const presets = movementGroups[movementClass]?.[primitive] ?? [];
       if (presets.length === 0) {
@@ -417,7 +458,6 @@ export class DevSummoner {
     };
 
     const repopulatePrimitiveSelect = () => {
-      const movementClass = movementClassSelect.value as MovementClassId;
       const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
       if (primitives.length === 0) {
         primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
@@ -431,7 +471,16 @@ export class DevSummoner {
       repopulatePresetSelect();
     };
 
-    movementClassSelect.addEventListener("change", repopulatePrimitiveSelect);
+    const setMovementClass = (next: MovementClassId) => {
+      if (next === "dumb" && !hasDumbPresets) return;
+      if (next === "smart" && !hasSmartPresets) return;
+      movementClass = next;
+      refreshMovementClassButtons();
+      repopulatePrimitiveSelect();
+    };
+    dumbButton.addEventListener("click", () => setMovementClass("dumb"));
+    smartButton.addEventListener("click", () => setMovementClass("smart"));
+    refreshMovementClassButtons();
     primitiveSelect.addEventListener("change", repopulatePresetSelect);
     repopulatePrimitiveSelect();
 

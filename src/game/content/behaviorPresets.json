@@ -175,6 +175,47 @@
         "freq": 0.8,
         "phaseStep": 0.45
       }
+    },
+    {
+      "id": "smart.track.soft",
+      "behaviorId": "track",
+      "params": {
+        "speedX": -110,
+        "response": 2.4,
+        "maxSpeedY": 70,
+        "deadZoneY": 12
+      }
+    },
+    {
+      "id": "smart.track.aggressive",
+      "behaviorId": "track",
+      "params": {
+        "speedX": -145,
+        "response": 5.8,
+        "maxSpeedY": 155,
+        "deadZoneY": 6
+      }
+    },
+    {
+      "id": "smart.align.attack",
+      "behaviorId": "align",
+      "params": {
+        "speedX": -70,
+        "alignSpeedY": 130,
+        "toleranceY": 8
+      }
+    },
+    {
+      "id": "smart.evade.axis",
+      "behaviorId": "evade",
+      "params": {
+        "speedX": -115,
+        "triggerBandY": 44,
+        "evadeSpeedY": 150,
+        "evadeDuration": 0.75,
+        "cooldown": 0.45,
+        "paddingY": 24
+      }
     }
   ]
 }
