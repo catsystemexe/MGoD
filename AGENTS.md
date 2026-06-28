@@ -733,7 +733,89 @@ Do not automatically repair this failure during unrelated tasks.
 
 9. Git and branch workflow
 
-9.1 Start every session with repository inspection
+9.1 Branch hierarchy
+
+The repository uses this branch hierarchy:
+
+main
+└── work
+    └── X — thematic working branch
+        └── Y — Codex task branch
+
+main
+
+main is the protected long-term vault branch.
+
+Rules:
+
+* Do not develop directly on main.
+* Do not create ordinary Codex task branches from main.
+* Do not target main with a Codex task pull request.
+* Do not merge into main.
+* Only the maintainer performs deliberate milestone merges from work into main.
+
+Unless explicitly instructed otherwise, Codex must treat main as read-only.
+
+work
+
+work represents the current integrated state of the developing project.
+
+Rules:
+
+* Do not perform ordinary Codex implementation directly on work.
+* Do not create task pull requests from Y directly into work.
+* Completed thematic branches X are merged into work manually by the maintainer.
+* Codex may inspect work when establishing the origin or freshness of a thematic branch, but must not modify it unless explicitly instructed.
+
+Thematic branch X
+
+X is the working branch for one larger thematic area.
+
+Examples:
+
+feature/enemy-fsm
+feature/sprite-layer
+feature/explosion-system
+
+Rules:
+
+* X should originate from the current work branch.
+* Replit uses X for runtime testing, visual inspection, and maintainer adjustments.
+* Codex uses X as the base branch for each focused session.
+* Codex must not normally implement directly on X.
+* Each Codex session creates a separate task branch Y from the current state of X.
+* Pull requests from Codex task branches must target X.
+* The maintainer manually merges the completed thematic branch X into work.
+
+Codex task branch Y
+
+Y is a short-lived branch for one focused Codex session.
+
+Preferred naming:
+
+codex/<short-task-description>
+
+Rules:
+
+* Create Y from the current thematic branch X.
+* One Y branch represents one focused task.
+* A session may contain inspection, implementation, validation, and corrections, provided they all serve the same task.
+* At the end of the session, create or prepare a pull request from Y into X.
+* Never target work or main from Y unless explicitly instructed.
+* After merge into X, Y may be deleted.
+
+Expected task flow:
+
+current X
+→ create Y from X
+→ implement and validate on Y
+→ PR Y into X
+→ maintainer reviews and merges
+→ Replit pulls updated X
+
+⸻
+
+9.2 Start every session with repository inspection
 
 Run:
 
@@ -742,22 +824,52 @@ git log -5 --oneline --decorate
 git branch -vv
 git remote -v
 
-For branch-sensitive work, inspect more history if needed:
+For branch-sensitive work, also inspect:
 
 git log -12 --oneline --decorate
 
 Before editing, establish:
 
-* current branch,
+* current local branch,
 * working-tree state,
-* upstream state,
 * available remotes,
-* likely integration branch,
+* upstream state,
+* current thematic branch X,
+* current task branch Y,
+* whether Y was created from the latest state of X,
 * intended pull-request base.
+
+The intended pull-request base for a normal Codex session is X.
+
+Do not infer the PR base from:
+
+* the GitHub default branch,
+* the local branch named work,
+* main,
+* previously used feature branches.
 
 ⸻
 
-9.2 Working-tree safety
+9.3 Required branch verification
+
+Before implementation, Codex must verify that:
+
+1. the current task is associated with a named thematic branch X,
+2. X contains all previously merged task work required by the task,
+3. the task branch Y originates from the current state of X,
+4. the final PR will target X.
+
+If X cannot be identified confidently:
+
+* do not target main,
+* do not target work,
+* report the ambiguity before creating a PR.
+
+When the user explicitly identifies X, that instruction is authoritative.
+
+⸻
+
+9.4 Working-tree safety
 
 Never overwrite unknown or user-owned changes.
 
@@ -776,51 +888,88 @@ Do not delete or rewrite files merely to make the working tree clean.
 If unrelated changes already exist:
 
 * identify them,
-* avoid touching them,
-* scope your diff carefully,
-* report any unavoidable overlap.
+* avoid modifying them,
+* keep the task diff isolated,
+* report unavoidable overlap.
 
 ⸻
 
-9.3 Integration branch
+9.5 Codex and Replit coordination
 
-Do not assume main or master is the integration branch.
+Codex and Replit must not write concurrently to the same branch.
 
-In the current local workflow, work is likely the integration branch.
+Normal ownership:
 
-However, verify this for every task.
+Codex writes to Y.
+Replit works with X.
 
-If no remote or upstream is configured:
+During an active Codex session:
 
-* do not invent one,
-* do not claim a PR was created,
-* report the limitation,
-* still prepare a correct commit and proposed PR base.
+* Codex is the sole writer to Y.
+* Replit may continue using X.
+* Replit must not push changes into Y.
+* Replit will not see unmerged Y changes unless the maintainer intentionally checks out Y for temporary testing.
+
+After PR merge Y → X:
+
+* Replit pulls the updated X,
+* runtime and visual testing continue on X,
+* maintainer corrections may be committed directly to X,
+* the next Codex session must create a new Y from the updated X.
+
+If Replit or another tool externally modifies Y during an active Codex session, the session must not automatically reset, rebase, or overwrite the branch.
+
+Codex must first inspect divergence and preserve both sides.
+
+The preferred recovery is a new Codex session from the updated branch state.
 
 ⸻
 
-9.4 Task branches
+9.6 Synchronization rules
 
-When branch creation is available, use a focused task branch.
+Before creating a task branch from X, verify that local X reflects the intended GitHub state.
 
-Preferred pattern:
+Where a normal remote and upstream are available, prefer:
 
-codex/<short-task-description>
+git fetch origin
+git switch <X>
+git pull --ff-only
 
-A generated suffix is acceptable when required by the environment.
+Use --ff-only for routine synchronization.
 
-The branch should start from the current intended integration branch.
+Do not create an implicit merge commit through an ordinary pull.
+
+If fast-forward is not possible:
+
+* stop automatic synchronization,
+* inspect divergence,
+* do not reset or rebase without explicit instruction,
+* report the exact state.
+
+A Codex environment may use an isolated checkout without a normal Git remote.
+
+In that case:
+
+* do not claim that fetch or pull was performed,
+* do not invent upstream information,
+* work from the provided snapshot,
+* clearly report any limitation affecting PR or synchronization.
 
 ⸻
 
-9.5 Commit policy
+9.7 Commit policy
 
-Default rule:
+Default:
 
 one focused task
-one focused commit
+one focused Codex task branch Y
+one focused pull request Y → X
 
-Use conventional-style prefixes where practical:
+A session should normally create one focused commit.
+
+Additional corrective commits are acceptable when required by testing during the same task.
+
+Preferred commit prefixes:
 
 feat(scope): description
 fix(scope): description
@@ -836,15 +985,30 @@ Do not create:
 * formatting-only noise mixed with logic,
 * speculative follow-up changes.
 
-If the requested implementation already exists and no patch is required, do not create a commit solely to satisfy the workflow.
+If the requested implementation already exists and no patch is needed, do not create a commit solely to satisfy the workflow.
 
 ⸻
 
-9.6 Pull-request policy
+9.8 Pull-request policy
 
-The PR base must be the current integration branch, not automatically the repository default branch.
+For an ordinary Codex task:
 
-A PR description should contain:
+head: Y
+base: X
+
+Never use these ordinary task routes:
+
+Y → work
+Y → main
+
+The maintainer controls the higher-level integrations:
+
+X → work
+work → main
+
+Codex must not create, merge, or retarget these higher-level pull requests unless explicitly requested.
+
+A Codex task PR should contain:
 
 ## Motivation
 ## Scope
@@ -853,9 +1017,15 @@ A PR description should contain:
 ## Risks
 ## Non-goals
 
-Do not merge the PR unless explicitly requested.
+Before presenting or creating a PR, verify and report:
 
-Do not retarget a PR without confirming the intended integration branch.
+* head branch Y,
+* base branch X,
+* whether the branch is pushed,
+* whether validation was completed,
+* any pre-existing failures.
+
+Do not merge the PR unless explicitly requested.
 
 ⸻
 
