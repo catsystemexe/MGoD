@@ -18,6 +18,7 @@ export type EnemyBehaviorId =
   "none" |
   "straight" |
   "sine" |
+  "zigzag" |
   "invaders";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
@@ -52,6 +53,7 @@ export const ENEMY_BEHAVIOR_IDS = [
   "none",
   "straight",
   "sine",
+  "zigzag",
   "invaders",
 ] as const;
 
