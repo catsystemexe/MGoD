@@ -207,7 +207,8 @@
       "params": {
         "radiusX": 190,
         "radiusY": 124,
-        "angularSpeed": 2.2,
+        "angularSpeed": 1.1,
+        "arcCenterAngle": 0,
         "arcRadians": 3.141592653589793,
         "direction": 1,
         "repeat": false,
