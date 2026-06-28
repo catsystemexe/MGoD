@@ -46,7 +46,7 @@
     "initial": "enter",
     "states": {
       "enter": {
-        "movementPresetId": "sine.hover",
+        "movementPresetId": "sine.soft",
         "transitions": [
           {
             "when": {
@@ -71,7 +71,7 @@
         ]
       },
       "retreat": {
-        "movementPresetId": "sine.evade",
+        "movementPresetId": "sine.hyper",
         "transitions": [
           {
             "when": {
@@ -107,6 +107,48 @@
             "when": {
               "kind": "timeInState",
               "seconds": 3
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.zigzag": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "zigzag.sharp",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 700
+            },
+            "goto": "hold"
+          }
+        ]
+      },
+      "hold": {
+        "movementPresetId": "none.hold",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 2
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "diagonal.up",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
             },
             "goto": "despawn"
           }

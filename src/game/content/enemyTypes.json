@@ -323,6 +323,24 @@
         "sdf": { "shape": "triangle", "size": 0.7 }
       }
     }
+    ,
+     {
+      "id": "fsm_zigzag",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.zigzag",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#ff8844",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    }
+
     
   ]
 }
