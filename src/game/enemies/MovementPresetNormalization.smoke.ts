@@ -318,15 +318,27 @@ function assertSmartBehaviors(): void {
   approx(orbitInitialTarget.x, 260, 0.00001);
   approx(orbitInitialTarget.y, 120, 0.00001);
 
+  assert(orbitHalf.params.pingPong === true, "orbit.half must request ping-pong half arcs");
+  assert(Number(orbitHalf.params.radiusX) >= 180, "orbit.half radiusX must be visibly outside the ship");
+  assert(Number(orbitHalf.params.radiusY) >= 120, "orbit.half radiusY must be visibly outside the ship");
   const half = initSmart(orbitTargetBehavior, orbitHalf.params, 120, 0, 260);
   stepSmart(orbitTargetBehavior, half, 0, 120);
   const halfDuration = Number(orbitHalf.params.arcRadians) / Number(orbitHalf.params.angularSpeed);
-  const halfEnd = stepSmart(orbitTargetBehavior, half, halfDuration + 0.5, 120);
-  const halfAfter = stepSmart(orbitTargetBehavior, half, 0.5, 120);
+  const halfEnd = stepSmart(orbitTargetBehavior, half, halfDuration, 120);
+  const halfAfterReverse = stepSmart(orbitTargetBehavior, half, 1 / 60, 120);
+  const halfReturn = stepSmart(orbitTargetBehavior, half, halfDuration - 1 / 60, 120);
+  const halfRepeatStart = stepSmart(orbitTargetBehavior, half, 1 / 60, 120);
   assertFiniteTarget(halfEnd, "orbit half completed");
-  approx(halfAfter.x, halfEnd.x, 2);
-  approx(halfAfter.y, halfEnd.y, 2);
+  assert(halfEnd.x < 40, "orbit half first arc must reach the opposite terminal side");
+  assert(halfAfterReverse.x > halfEnd.x, "orbit half must reverse direction after the terminal point");
+  assert(Math.abs(halfAfterReverse.x - halfEnd.x) < 12, "orbit half reversal must remain position-continuous");
+  assert(halfReturn.x > 40 + Number(orbitHalf.params.radiusX) * 0.65, "orbit half return arc must reach the starting side");
+  assert(Math.hypot(halfReturn.x - halfRepeatStart.x, halfReturn.y - halfRepeatStart.y) < 20, "orbit half repeated cycles must not snap");
+  const halfRadius = Math.hypot(halfReturn.x - 40, halfReturn.y - 120);
+  assert(Number.isFinite(halfRadius) && halfRadius > Number(orbitHalf.params.radiusY) * 0.8, "orbit half radius must remain finite and stable");
 
+  assert(Number(orbitRepeat.params.radiusX) === 220, "orbit.repeat radiusX must be approximately 2x the prior 110");
+  assert(Number(orbitRepeat.params.radiusY) === 144, "orbit.repeat radiusY must be approximately 2x the prior 72");
   const repeatDuration = Number(orbitRepeat.params.arcRadians) / Number(orbitRepeat.params.angularSpeed);
   const repeatOne = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 0, 40 + Number(orbitRepeat.params.radiusX));
   stepSmart(orbitTargetBehavior, repeatOne, 0, 120);
@@ -346,7 +358,42 @@ function assertSmartBehaviors(): void {
   const afterMove = stepSmart(orbitTargetBehavior, moving, 1 / 60, 180);
   assert(afterMove.y > beforeMove.y, "moving player must translate orbit center");
 
-  assert(Number(orbitWide.params.radiusX) > Number(orbitRepeat.params.radiusX) + 40, "orbit.wide radius must be visibly larger than repeat");
+  assert(Number(orbitWide.params.radiusX) > Number(orbitRepeat.params.radiusX) + 80, "orbit.wide radius must be visibly larger than repeat");
+  assert(Number(orbitWide.params.centerResponse) > 0, "orbit.wide must configure delayed center tracking");
+  assert(Number(orbitWide.params.maxCenterSpeed) > 0, "orbit.wide must bound center movement speed");
+
+  const wide = initSmart(orbitTargetBehavior, orbitWide.params, 120, 0, 40 + Number(orbitWide.params.radiusX));
+  const wideInitial = stepSmart(orbitTargetBehavior, wide, 0, 120);
+  const wideBeforeMove = { x: Number(wide.bState.centerX), y: Number(wide.bState.centerY) };
+  const wideMoved = stepSmart(orbitTargetBehavior, wide, 1 / 60, 260);
+  const wideAfterMove = { x: Number(wide.bState.centerX), y: Number(wide.bState.centerY) };
+  assertFiniteTarget(wideInitial, "orbit wide initial");
+  assertFiniteTarget(wideMoved, "orbit wide moved player");
+  assert(wideAfterMove.y > wideBeforeMove.y, "orbit.wide center must converge toward moved player");
+  assert(wideAfterMove.y < 260, "orbit.wide center must not instantly equal moved player");
+  assert(wideAfterMove.y - wideBeforeMove.y <= Number(orbitWide.params.maxCenterSpeed) / 60 + 0.00001, "orbit.wide center movement must be bounded");
+  assert(Math.hypot(wideMoved.x - wideInitial.x, wideMoved.y - wideInitial.y) < 20, "orbit.wide moved player target must not spike");
+  let laggingWide = wideMoved;
+  for (let i = 0; i < 60; i += 1) {
+    laggingWide = stepSmart(orbitTargetBehavior, wide, 1 / 60, 320);
+  }
+  assert(Number(wide.bState.centerY) < 320 - 20, "orbit.wide sustained player movement must create relative lag");
+  assert(Math.abs(laggingWide.y - 320) > 20, "orbit.wide target must remain separated from sustained player movement");
+
+  const wideReentryA = initSmart(orbitTargetBehavior, orbitWide.params, 120, 3, 40 + Number(orbitWide.params.radiusX));
+  const wideReentryB = initSmart(orbitTargetBehavior, orbitWide.params, 120, 3, 40 + Number(orbitWide.params.radiusX));
+  const wideReentryInitialA = stepSmart(orbitTargetBehavior, wideReentryA, 0, 120);
+  const wideReentryInitialB = stepSmart(orbitTargetBehavior, wideReentryB, 0, 120);
+  const wideReentryMovedA = stepSmart(orbitTargetBehavior, wideReentryA, 1 / 60, 260);
+  const wideReentryMovedB = stepSmart(orbitTargetBehavior, wideReentryB, 1 / 60, 260);
+  approx(wideReentryInitialA.x, wideReentryInitialB.x, 0.00001);
+  approx(wideReentryInitialA.y, wideReentryInitialB.y, 0.00001);
+  approx(wideReentryMovedA.x, wideReentryMovedB.x, 0.00001);
+  approx(wideReentryMovedA.y, wideReentryMovedB.y, 0.00001);
+
+  const wideMissing = initSmart(orbitTargetBehavior, orbitWide.params, 140, 0, 260);
+  const wideMissingTarget = stepSmart(orbitTargetBehavior, wideMissing, 1 / 60, null);
+  assertFiniteTarget(wideMissingTarget, "orbit wide null-player fallback");
 
   const cwParams = { ...orbitRepeat.params, direction: 1 };
   const ccwParams = { ...orbitRepeat.params, direction: -1 };
