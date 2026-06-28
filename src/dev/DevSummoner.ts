@@ -4,9 +4,12 @@ import type { WorldState } from "../game/data/WorldState";
 import { ENEMY_DEFS } from "../game/defs/EnemyDefs";
 import { EnemyBehaviorPresets } from "../game/enemies/EnemyBehaviorPresets";
 import { BEHAVIOR_GRAPHS } from "../game/content/CONTENT";
+import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS } from "../game/enemies/EnemyGroups";
+import type { CohesionId, FormationId } from "../game/enemies/EnemyGroups";
 
 const EMPTY_ENEMY_LAB = "No FSM enemy selected/spawned.";
 type MovementClassId = "dumb" | "smart";
+type SpawnMode = "enemy" | "group";
 
 type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
@@ -318,6 +321,52 @@ export function createDevSummonerSpawnPayload(input: {
   };
 }
 
+export function normalizeGroupCount(value: unknown): number {
+  const raw = Number(value);
+  const n = Number.isFinite(raw) ? Math.floor(raw) : 5;
+  return Math.min(10, Math.max(2, n));
+}
+
+function isValidEnemyTypeId(typeId: string): boolean {
+  return !!ENEMY_DEFS[typeId];
+}
+
+function isValidFormationId(id: string): id is FormationId {
+  return (ENEMY_GROUP_FORMATION_IDS as readonly string[]).includes(id);
+}
+
+function isValidCohesionId(id: string): id is CohesionId {
+  return (ENEMY_GROUP_COHESION_IDS as readonly string[]).includes(id);
+}
+
+function isValidMovementPresetId(id: string): boolean {
+  return !!EnemyBehaviorPresets[id];
+}
+
+export function createDevSummonerGroupSpawnPayload(input: {
+  enemyTypeId: string;
+  count: unknown;
+  anchorX: number;
+  anchorY: number;
+  formationId: string;
+  movementPresetId: string;
+  cohesionId: string;
+}): CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP] | null {
+  if (!isValidEnemyTypeId(input.enemyTypeId)) return null;
+  if (!isValidFormationId(input.formationId)) return null;
+  if (!isValidCohesionId(input.cohesionId)) return null;
+  if (!isValidMovementPresetId(input.movementPresetId)) return null;
+  if (!Number.isFinite(input.anchorX) || !Number.isFinite(input.anchorY)) return null;
+  return {
+    enemyTypeId: input.enemyTypeId,
+    count: normalizeGroupCount(input.count),
+    anchor: { x: input.anchorX, y: input.anchorY },
+    formationId: input.formationId,
+    movementPresetId: input.movementPresetId,
+    cohesionId: input.cohesionId,
+  };
+}
+
 export function buildMovementGroups(): MovementGroups {
   const groups: MovementGroups = { dumb: {}, smart: {} };
 
@@ -378,49 +427,23 @@ export class DevSummoner {
     spawnTitle.style.cssText = "font-weight:bold;opacity:0.9;";
     spawnSection.appendChild(spawnTitle);
 
-    const enemySelect = document.createElement("select");
-    enemySelect.id = "ds-enemy";
-    for (const id of Object.keys(ENEMY_DEFS)) {
-      const opt = document.createElement("option");
-      opt.value = id; opt.textContent = id;
-      enemySelect.appendChild(opt);
-    }
-    spawnSection.appendChild(enemySelect);
+    const modeRow = document.createElement("div");
+    modeRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+    const modeLabel = document.createElement("span");
+    modeLabel.textContent = "Spawn Mode";
+    modeLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+    const modeSegment = document.createElement("div");
+    modeSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+    const enemyModeButton = document.createElement("button");
+    const groupModeButton = document.createElement("button");
+    modeSegment.appendChild(enemyModeButton);
+    modeSegment.appendChild(groupModeButton);
+    modeRow.appendChild(modeLabel);
+    modeRow.appendChild(modeSegment);
+    spawnSection.appendChild(modeRow);
 
-    const movementGroups = buildMovementGroups();
-    const primitiveSelect = createCompactSelect("ds-movement-primitive");
-    const presetSelect = createCompactSelect("ds-movement-preset");
-    this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
-
-    const movementClassRow = document.createElement("div");
-    movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
-    const movementClassLabel = document.createElement("span");
-    movementClassLabel.textContent = "Movement";
-    movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
-    const movementClassSegment = document.createElement("div");
-    movementClassSegment.id = "ds-movement-class";
-    movementClassSegment.setAttribute("role", "radiogroup");
-    movementClassSegment.setAttribute("aria-label", "Movement class");
-    movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
-    const dumbButton = document.createElement("button");
-    const smartButton = document.createElement("button");
-    let movementClass: MovementClassId = "dumb";
-    const primitiveWrap = createSelectLabel("Primitive");
-    const presetWrap = createSelectLabel("Preset");
-    primitiveWrap.appendChild(primitiveSelect.root);
-    presetWrap.appendChild(presetSelect.root);
-    const movementPresetRow = document.createElement("div");
-    movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
-    movementPresetRow.appendChild(primitiveWrap);
-    movementPresetRow.appendChild(presetWrap);
-    movementClassRow.appendChild(movementClassLabel);
-    movementClassRow.appendChild(movementClassSegment);
-    spawnSection.appendChild(movementClassRow);
-    spawnSection.appendChild(movementPresetRow);
-
-    const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
-    const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
-    const styleMovementClassButton = (button: HTMLButtonElement, active: boolean, disabled: boolean) => {
+    let spawnMode: SpawnMode = "enemy";
+    const styleSegmentButton = (button: HTMLButtonElement, active: boolean, disabled = false) => {
       button.style.cssText = [
         "font:12px monospace",
         "padding:2px 6px",
@@ -432,59 +455,149 @@ export class DevSummoner {
         "min-width:0",
       ].join(";");
     };
-    const refreshMovementClassButtons = () => {
-      for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
-        const active = movementClass === value;
-        button.type = "button";
-        button.textContent = value === "dumb" ? "Dumb" : "Smart";
-        button.disabled = !enabled;
-        button.setAttribute("role", "radio");
-        button.setAttribute("aria-checked", String(active));
-        styleMovementClassButton(button, active, !enabled);
-      }
-      dumbButton.style.borderRadius = "2px 0 0 2px";
-      smartButton.style.borderLeft = "0";
-      smartButton.style.borderRadius = "0 2px 2px 0";
-    };
-    movementClassSegment.appendChild(dumbButton);
-    movementClassSegment.appendChild(smartButton);
 
-    const repopulatePresetSelect = () => {
-      const primitive = primitiveSelect.value;
-      const presets = movementGroups[movementClass]?.[primitive] ?? [];
-      if (presets.length === 0) {
-        presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
-        return;
-      }
-      presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), presetSelect.value);
-    };
+    const enemyControls = document.createElement("div");
+    enemyControls.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    const groupControls = document.createElement("div");
+    groupControls.style.cssText = "display:none;flex-direction:column;gap:4px;";
+    spawnSection.appendChild(enemyControls);
+    spawnSection.appendChild(groupControls);
 
-    const repopulatePrimitiveSelect = () => {
-      const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
-      if (primitives.length === 0) {
-        primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+    const enemySelect = document.createElement("select");
+    enemySelect.id = "ds-enemy";
+    for (const id of Object.keys(ENEMY_DEFS)) {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = id;
+      enemySelect.appendChild(opt);
+    }
+    enemyControls.appendChild(enemySelect);
+
+    const groupEnemyWrap = createSelectLabel("Enemy Type");
+    const groupEnemySelect = document.createElement("select");
+    groupEnemySelect.id = "ds-group-enemy";
+    for (const id of Object.keys(ENEMY_DEFS)) appendOption(groupEnemySelect, id);
+    groupEnemyWrap.appendChild(groupEnemySelect);
+    groupControls.appendChild(groupEnemyWrap);
+
+    const countWrap = createSelectLabel("Count");
+    const countInput = document.createElement("input");
+    countInput.id = "ds-group-count";
+    countInput.type = "number";
+    countInput.min = "2";
+    countInput.max = "10";
+    countInput.step = "1";
+    countInput.value = "5";
+    countInput.style.cssText = "width:100%;box-sizing:border-box;";
+    countInput.addEventListener("change", () => { countInput.value = String(normalizeGroupCount(countInput.value)); });
+    countWrap.appendChild(countInput);
+    groupControls.appendChild(countWrap);
+
+    const groupOptionRow = document.createElement("div");
+    groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    const formationWrap = createSelectLabel("Formation");
+    const formationSelect = document.createElement("select");
+    formationSelect.id = "ds-group-formation";
+    const formationLabels: Record<FormationId, string> = { "line.horizontal": "Horizontal Line", wedge: "Wedge" };
+    for (const id of ENEMY_GROUP_FORMATION_IDS) appendOption(formationSelect, id, formationLabels[id]);
+    formationWrap.appendChild(formationSelect);
+    const cohesionWrap = createSelectLabel("Cohesion");
+    const cohesionSelect = document.createElement("select");
+    cohesionSelect.id = "ds-group-cohesion";
+    const cohesionLabels: Record<CohesionId, string> = { rigid: "Rigid", elastic: "Elastic" };
+    for (const id of ENEMY_GROUP_COHESION_IDS) appendOption(cohesionSelect, id, cohesionLabels[id]);
+    cohesionWrap.appendChild(cohesionSelect);
+    groupOptionRow.appendChild(formationWrap);
+    groupOptionRow.appendChild(cohesionWrap);
+    groupControls.appendChild(groupOptionRow);
+
+    const movementGroups = buildMovementGroups();
+    const makeMovementControls = (prefix: string, labelText: string) => {
+      const primitiveSelect = createCompactSelect(`${prefix}-movement-primitive`);
+      const presetSelect = createCompactSelect(`${prefix}-movement-preset`);
+      this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
+      const movementClassRow = document.createElement("div");
+      movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+      const movementClassLabel = document.createElement("span");
+      movementClassLabel.textContent = labelText;
+      movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+      const movementClassSegment = document.createElement("div");
+      movementClassSegment.id = `${prefix}-movement-class`;
+      movementClassSegment.setAttribute("role", "radiogroup");
+      movementClassSegment.setAttribute("aria-label", labelText);
+      movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+      const dumbButton = document.createElement("button");
+      const smartButton = document.createElement("button");
+      let movementClass: MovementClassId = "dumb";
+      const primitiveWrap = createSelectLabel("Primitive");
+      const presetWrap = createSelectLabel("Preset");
+      primitiveWrap.appendChild(primitiveSelect.root);
+      presetWrap.appendChild(presetSelect.root);
+      const movementPresetRow = document.createElement("div");
+      movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
+      movementPresetRow.appendChild(primitiveWrap);
+      movementPresetRow.appendChild(presetWrap);
+      movementClassRow.appendChild(movementClassLabel);
+      movementClassRow.appendChild(movementClassSegment);
+      const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
+      const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
+      const refreshMovementClassButtons = () => {
+        for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
+          const active = movementClass === value;
+          button.type = "button";
+          button.textContent = value === "dumb" ? "Dumb" : "Smart";
+          button.disabled = !enabled;
+          button.setAttribute("role", "radio");
+          button.setAttribute("aria-checked", String(active));
+          styleSegmentButton(button, active, !enabled);
+        }
+        dumbButton.style.borderRadius = "2px 0 0 2px";
+        smartButton.style.borderLeft = "0";
+        smartButton.style.borderRadius = "0 2px 2px 0";
+      };
+      movementClassSegment.appendChild(dumbButton);
+      movementClassSegment.appendChild(smartButton);
+      const repopulatePresetSelect = () => {
+        const primitive = primitiveSelect.value;
+        const presets = movementGroups[movementClass]?.[primitive] ?? [];
+        if (presets.length === 0) {
+          presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+          return;
+        }
+        const preferredPreset = prefix === "ds-group" && presets.includes("straight.basic") ? "straight.basic" : presetSelect.value;
+        presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), preferredPreset);
+      };
+      const repopulatePrimitiveSelect = () => {
+        const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
+        if (primitives.length === 0) {
+          primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+          repopulatePresetSelect();
+          return;
+        }
+        const preferredPrimitive = prefix === "ds-group" && primitives.includes("straight") ? "straight" : primitiveSelect.value;
+        primitiveSelect.setOptions(primitives.map((primitive) => ({ value: primitive, label: formatPrimitiveLabel(primitive) })), preferredPrimitive);
         repopulatePresetSelect();
-        return;
-      }
-      primitiveSelect.setOptions(primitives.map((primitive) => ({
-        value: primitive,
-        label: formatPrimitiveLabel(primitive),
-      })));
-      repopulatePresetSelect();
-    };
-
-    const setMovementClass = (next: MovementClassId) => {
-      if (next === "dumb" && !hasDumbPresets) return;
-      if (next === "smart" && !hasSmartPresets) return;
-      movementClass = next;
+      };
+      const setMovementClass = (next: MovementClassId) => {
+        if (next === "dumb" && !hasDumbPresets) return;
+        if (next === "smart" && !hasSmartPresets) return;
+        movementClass = next;
+        refreshMovementClassButtons();
+        repopulatePrimitiveSelect();
+      };
+      dumbButton.addEventListener("click", () => setMovementClass("dumb"));
+      smartButton.addEventListener("click", () => setMovementClass("smart"));
+      primitiveSelect.addEventListener("change", repopulatePresetSelect);
       refreshMovementClassButtons();
       repopulatePrimitiveSelect();
+      return { movementClassRow, movementPresetRow, presetSelect, setMovementClass };
     };
-    dumbButton.addEventListener("click", () => setMovementClass("dumb"));
-    smartButton.addEventListener("click", () => setMovementClass("smart"));
-    refreshMovementClassButtons();
-    primitiveSelect.addEventListener("change", repopulatePresetSelect);
-    repopulatePrimitiveSelect();
+
+    const enemyMovement = makeMovementControls("ds", "Movement");
+    enemyControls.appendChild(enemyMovement.movementClassRow);
+    enemyControls.appendChild(enemyMovement.movementPresetRow);
+    const groupMovement = makeMovementControls("ds-group", "Group Movement");
+    groupControls.appendChild(groupMovement.movementClassRow);
+    groupControls.appendChild(groupMovement.movementPresetRow);
 
     const screenYWrap = document.createElement("label");
     screenYWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
@@ -522,18 +635,76 @@ export class DevSummoner {
     screenYRow.appendChild(screenYInput);
     screenYWrap.appendChild(screenYLabel);
     screenYWrap.appendChild(screenYRow);
-    spawnSection.appendChild(screenYWrap);
+    enemyControls.appendChild(screenYWrap);
+
+    const groupYWrap = createSelectLabel("Spawn Y");
+    const groupYInput = document.createElement("input");
+    groupYInput.id = "ds-group-screen-y";
+    groupYInput.type = "number";
+    groupYInput.min = "0";
+    groupYInput.max = String(Math.max(0, this.logicH));
+    groupYInput.step = "1";
+    groupYInput.value = "260";
+    groupYInput.style.cssText = "width:100%;box-sizing:border-box;";
+    const setGroupY = (value: unknown) => {
+      const maxY = Math.max(0, this.logicH);
+      const raw = Number(value);
+      const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
+      groupYInput.value = String(y);
+    };
+    groupYInput.addEventListener("change", () => setGroupY(groupYInput.value));
+    groupYWrap.appendChild(groupYInput);
+    groupControls.appendChild(groupYWrap);
 
     const btn = document.createElement("button");
     btn.textContent = "RELEASE";
     btn.style.cssText = "cursor:pointer;margin-top:2px;";
+    const refreshModeButtons = () => {
+      enemyModeButton.type = "button";
+      groupModeButton.type = "button";
+      enemyModeButton.textContent = "Enemy";
+      groupModeButton.textContent = "Group";
+      enemyModeButton.setAttribute("aria-pressed", String(spawnMode === "enemy"));
+      groupModeButton.setAttribute("aria-pressed", String(spawnMode === "group"));
+      styleSegmentButton(enemyModeButton, spawnMode === "enemy");
+      styleSegmentButton(groupModeButton, spawnMode === "group");
+      enemyModeButton.style.borderRadius = "2px 0 0 2px";
+      groupModeButton.style.borderLeft = "0";
+      groupModeButton.style.borderRadius = "0 2px 2px 0";
+      enemyControls.style.display = spawnMode === "enemy" ? "flex" : "none";
+      groupControls.style.display = spawnMode === "group" ? "flex" : "none";
+      btn.textContent = spawnMode === "enemy" ? "RELEASE" : "Spawn Group";
+    };
+    enemyModeButton.addEventListener("click", () => { spawnMode = "enemy"; refreshModeButtons(); });
+    groupModeButton.addEventListener("click", () => { spawnMode = "group"; refreshModeButtons(); });
+    refreshModeButtons();
     btn.addEventListener("click", () => {
       this.latestManualSpawnId += 1;
+      if (spawnMode === "group") {
+        const anchorY = Number(groupYInput.value);
+        const payload = createDevSummonerGroupSpawnPayload({
+          enemyTypeId: groupEnemySelect.value,
+          count: countInput.value,
+          anchorX: this.logicW - 40,
+          anchorY,
+          formationId: formationSelect.value,
+          movementPresetId: groupMovement.presetSelect.value,
+          cohesionId: cohesionSelect.value,
+        });
+        if (!payload) {
+          console.warn("[DevSummoner] invalid group spawn payload");
+          return;
+        }
+        countInput.value = String(payload.count);
+        groupYInput.value = String(payload.anchor.y);
+        this.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, payload);
+        return;
+      }
       this.bus.emitNext(EventType.SPAWN_ENEMY, createDevSummonerSpawnPayload({
         typeId: enemySelect.value,
         spawnX: this.logicW - 40,
         spawnY: Number(screenY.value),
-        behaviorPresetId: presetSelect.value,
+        behaviorPresetId: enemyMovement.presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
       }) as any);
     });

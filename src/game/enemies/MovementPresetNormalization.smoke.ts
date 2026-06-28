@@ -9,7 +9,8 @@ import { alignBehavior } from "./behaviors/align";
 import { evadeBehavior } from "./behaviors/evade";
 import { rangeBehavior } from "./behaviors/range";
 import { orbitTargetBehavior } from "./behaviors/orbitTarget";
-import { buildMovementGroups, createDevSummonerSpawnPayload, getPrimitiveFromPresetId } from "../../dev/DevSummoner";
+import { buildMovementGroups, createDevSummonerGroupSpawnPayload, createDevSummonerSpawnPayload, getPrimitiveFromPresetId, normalizeGroupCount } from "../../dev/DevSummoner";
+import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS } from "./EnemyGroups";
 import type { SmartBehaviorContext } from "./behaviors/smartContext";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -588,6 +589,38 @@ function assertDevSummonerPayload(): void {
   assert(!(payload as any).movementClass, "DevSummoner payload must not include movement class metadata");
 }
 
+function assertDevSummonerGroupPayload(): void {
+  assert(normalizeGroupCount(-1) === 2, "group count must clamp low values");
+  assert(normalizeGroupCount(11.9) === 10, "group count must clamp high values and floor decimals");
+  assert(normalizeGroupCount("bad") === 5, "group count must default invalid values to 5");
+  assert(ENEMY_GROUP_FORMATION_IDS.join(",") === "line.horizontal,wedge", "group formation options must match foundation IDs");
+  assert(ENEMY_GROUP_COHESION_IDS.join(",") === "rigid,elastic", "group cohesion options must match foundation IDs");
+
+  const payload = createDevSummonerGroupSpawnPayload({
+    enemyTypeId: "red",
+    count: "6.8",
+    anchorX: 856,
+    anchorY: 260,
+    formationId: "wedge",
+    movementPresetId: "smart.track.soft",
+    cohesionId: "elastic",
+  });
+  assert(payload, "valid group payload must be constructed");
+  assert(payload.enemyTypeId === "red", "group payload must include canonical enemy type");
+  assert(payload.count === 6, "group payload must normalize count");
+  assert(payload.anchor.x === 856 && payload.anchor.y === 260, "group payload must include finite anchor");
+  assert(payload.formationId === "wedge", "group payload must include canonical formation ID");
+  assert(payload.movementPresetId === "smart.track.soft", "group payload must include anchor movement preset ID");
+  assert(payload.cohesionId === "elastic", "group payload must include canonical cohesion ID");
+  assert(!(payload as any).behaviorPresetId, "grouped members must not receive an independent behavior preset from UI payload");
+
+  assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "missing", count: 5, anchorX: 1, anchorY: 2, formationId: "wedge", movementPresetId: "straight.basic", cohesionId: "rigid" }) === null, "invalid enemy type must not emit group payload");
+  assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: Number.NaN, anchorY: 2, formationId: "wedge", movementPresetId: "straight.basic", cohesionId: "rigid" }) === null, "invalid anchor must not emit group payload");
+  assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "grid", movementPresetId: "straight.basic", cohesionId: "rigid" }) === null, "invalid formation must not emit group payload");
+  assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "wedge", movementPresetId: "missing", cohesionId: "rigid" }) === null, "invalid movement preset must not emit group payload");
+  assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "wedge", movementPresetId: "straight.basic", cohesionId: "loose" }) === null, "invalid cohesion must not emit group payload");
+}
+
 function assertSineYAxisWaves(): void {
   for (const id of ["sine.soft", "sine.wide", "sine.tight", "sine.evade", "sine.hover"]) {
     const preset = EnemyBehaviorPresets[id];
@@ -611,4 +644,5 @@ assertEvadeCooldown();
 assertSmartFsmContent();
 assertMovementGrouping();
 assertDevSummonerPayload();
+assertDevSummonerGroupPayload();
 console.log("[MovementPresetNormalization] ok");
