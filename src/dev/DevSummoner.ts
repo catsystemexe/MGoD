@@ -10,6 +10,11 @@ type MovementClassId = "dumb" | "smart";
 
 type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
+type CompactSelectOption = { value: string; label: string; disabled?: boolean };
+
+const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "invaders", "none"] as const;
+const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
+
 function formatNum(value: unknown, digits = 0): string {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : "?";
@@ -120,6 +125,171 @@ function appendOption(select: HTMLSelectElement, value: string, text = value, di
   select.appendChild(opt);
 }
 
+function formatPrimitiveLabel(primitive: string): string {
+  return primitive === "none" ? "Hold" : primitive;
+}
+
+function sortPrimitiveIds(primitives: string[]): string[] {
+  return [...primitives].sort((a, b) => {
+    const ai = KNOWN_PRIMITIVE_INDEX.get(a);
+    const bi = KNOWN_PRIMITIVE_INDEX.get(b);
+    if (ai !== undefined && bi !== undefined) return ai - bi;
+    if (ai !== undefined) return -1;
+    if (bi !== undefined) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function createCompactSelect(id: string): {
+  root: HTMLDivElement;
+  button: HTMLButtonElement;
+  value: string;
+  disabled: boolean;
+  setOptions(options: CompactSelectOption[], nextValue?: string): void;
+  addEventListener(type: "change", listener: () => void): void;
+  destroy(): void;
+} {
+  const root = document.createElement("div");
+  root.id = id;
+  root.style.cssText = "position:relative;width:100%;";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.style.cssText = [
+    "width:100%",
+    "box-sizing:border-box",
+    "text-align:left",
+    "font:12px monospace",
+    "padding:2px 18px 2px 4px",
+    "background:#111",
+    "color:#eee",
+    "border:1px solid #555",
+    "border-radius:2px",
+    "cursor:pointer",
+  ].join(";");
+  root.appendChild(button);
+
+  const list = document.createElement("div");
+  list.setAttribute("role", "listbox");
+  list.style.cssText = [
+    "display:none",
+    "position:absolute",
+    "left:0",
+    "right:0",
+    "top:100%",
+    "z-index:10000",
+    "max-height:132px",
+    "overflow:auto",
+    "background:#111",
+    "border:1px solid #666",
+    "border-radius:2px",
+    "box-shadow:0 3px 8px rgba(0,0,0,0.45)",
+  ].join(";");
+  root.appendChild(list);
+
+  let options: CompactSelectOption[] = [];
+  let value = "";
+  const listeners: Array<() => void> = [];
+
+  const close = () => {
+    list.style.display = "none";
+    button.setAttribute("aria-expanded", "false");
+  };
+  const open = () => {
+    if (button.disabled) return;
+    list.style.display = "block";
+    button.setAttribute("aria-expanded", "true");
+  };
+  const selectedLabel = () => options.find((option) => option.value === value)?.label ?? "(none)";
+
+  const choose = (nextValue: string) => {
+    if (value === nextValue) {
+      close();
+      return;
+    }
+    value = nextValue;
+    button.textContent = selectedLabel();
+    close();
+    for (const listener of listeners) listener();
+  };
+
+  const renderOptions = () => {
+    list.replaceChildren();
+    for (const option of options) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(option.value === value));
+      item.disabled = !!option.disabled;
+      item.textContent = option.label;
+      item.style.cssText = [
+        "display:block",
+        "width:100%",
+        "box-sizing:border-box",
+        "text-align:left",
+        "font:12px monospace",
+        "padding:3px 5px",
+        "background:" + (option.value === value ? "#26384f" : "#111"),
+        "color:#eee",
+        "border:0",
+        "cursor:pointer",
+      ].join(";");
+      item.addEventListener("click", () => choose(option.value));
+      list.appendChild(item);
+    }
+  };
+
+  button.addEventListener("click", () => {
+    if (list.style.display === "none") open();
+    else close();
+  });
+  button.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      close();
+      return;
+    }
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Enter" && ev.key !== " ") return;
+    ev.preventDefault();
+    if (ev.key === "Enter" || ev.key === " ") {
+      open();
+      return;
+    }
+    const enabled = options.filter((option) => !option.disabled);
+    if (!enabled.length) return;
+    const currentIndex = Math.max(0, enabled.findIndex((option) => option.value === value));
+    const delta = ev.key === "ArrowDown" ? 1 : -1;
+    choose(enabled[(currentIndex + delta + enabled.length) % enabled.length].value);
+  });
+  const handleDocumentClick = (ev: MouseEvent) => {
+    if (!root.contains(ev.target as Node)) close();
+  };
+  document.addEventListener("click", handleDocumentClick);
+
+  return {
+    root,
+    button,
+    get value() { return value; },
+    get disabled() { return button.disabled; },
+    set disabled(next: boolean) { button.disabled = next; },
+    setOptions(nextOptions: CompactSelectOption[], nextValue?: string) {
+      options = nextOptions;
+      value = nextValue && options.some((option) => option.value === nextValue) ? nextValue : (options.find((option) => !option.disabled)?.value ?? options[0]?.value ?? "");
+      button.disabled = options.length === 0 || options.every((option) => option.disabled);
+      button.textContent = selectedLabel();
+      renderOptions();
+      close();
+    },
+    addEventListener(_type: "change", listener: () => void) {
+      listeners.push(listener);
+    },
+    destroy() {
+      document.removeEventListener("click", handleDocumentClick);
+    },
+  };
+}
+
 function getPrimitiveFromPresetId(presetId: string): string {
   return presetId.split(".")[0] || presetId;
 }
@@ -145,6 +315,7 @@ export class DevSummoner {
   private panel: HTMLElement | null = null;
   private latestManualSpawnId = 0;
   private refreshTimer: number | null = null;
+  private primitiveSelectCleanup: (() => void) | null = null;
 
   constructor(
     private bus: EventBus<CMEventMap>,
@@ -195,8 +366,8 @@ export class DevSummoner {
     const movementGroups = buildMovementGroups();
     const movementClassSelect = document.createElement("select");
     movementClassSelect.id = "ds-movement-class";
-    const primitiveSelect = document.createElement("select");
-    primitiveSelect.id = "ds-movement-primitive";
+    const primitiveSelect = createCompactSelect("ds-movement-primitive");
+    this.primitiveSelectCleanup = () => primitiveSelect.destroy();
     const presetSelect = document.createElement("select");
     presetSelect.id = "ds-movement-preset";
 
@@ -204,7 +375,7 @@ export class DevSummoner {
     const primitiveWrap = createSelectLabel("Primitive");
     const presetWrap = createSelectLabel("Preset");
     movementClassWrap.appendChild(movementClassSelect);
-    primitiveWrap.appendChild(primitiveSelect);
+    primitiveWrap.appendChild(primitiveSelect.root);
     presetWrap.appendChild(presetSelect);
     spawnSection.appendChild(movementClassWrap);
     spawnSection.appendChild(primitiveWrap);
@@ -229,15 +400,16 @@ export class DevSummoner {
 
     const repopulatePrimitiveSelect = () => {
       const movementClass = movementClassSelect.value as MovementClassId;
-      const primitives = Object.keys(movementGroups[movementClass] ?? {}).sort();
-      primitiveSelect.replaceChildren();
-      primitiveSelect.disabled = primitives.length === 0;
+      const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
       if (primitives.length === 0) {
-        appendOption(primitiveSelect, "", "(none)", true);
+        primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
         repopulatePresetSelect();
         return;
       }
-      for (const primitive of primitives) appendOption(primitiveSelect, primitive);
+      primitiveSelect.setOptions(primitives.map((primitive) => ({
+        value: primitive,
+        label: formatPrimitiveLabel(primitive),
+      })));
       repopulatePresetSelect();
     };
 
@@ -369,6 +541,8 @@ export class DevSummoner {
   destroy(): void {
     if (this.refreshTimer) window.clearInterval(this.refreshTimer);
     this.refreshTimer = null;
+    this.primitiveSelectCleanup?.();
+    this.primitiveSelectCleanup = null;
     if (this.panel?.parentNode) this.panel.parentNode.removeChild(this.panel);
     this.panel = null;
   }
