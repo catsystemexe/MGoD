@@ -7,7 +7,7 @@
       "spawnEverySec": 0.1,
       "maxAlive": 5,
       "enemyTypeId": "bug1",
-      "behaviorPresetId": "sine.hold",
+      "behaviorPresetId": "sine.hover",
       "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 50, "count": 5 }
     },
     {
@@ -27,7 +27,7 @@
       "spawnEverySec": 2.0,
       "maxAlive": 2,
       "enemyTypeId": "sniper_aimed",
-      "behaviorPresetId": "sine.sniper",
+      "behaviorPresetId": "sine.wide",
       "pattern": { "kind": "line", "originX": 936, "originY": 300, "spacingX": 20, "slopeY": 0 }
     },
 
@@ -38,7 +38,7 @@
       "spawnEverySec": 1.5,
       "maxAlive": 4,
       "enemyTypeId": "scout_sine",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 0, "slopeY": 60 }
     },
     {
@@ -59,7 +59,7 @@
       "spawnEverySec": 0.5,
       "maxAlive": 5,
       "enemyTypeId": "bug1",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "pattern": { "kind": "line", "originX": 936, "originY": 200, "spacingX": 12, "slopeY": 0 }
     },
 
@@ -80,7 +80,7 @@
       "spawnEverySec": 0.45,
       "maxAlive": 22,
       "enemyTypeId": "bug1",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
     },
     {
@@ -90,7 +90,7 @@
       "spawnEverySec": 0.45,
       "maxAlive": 22,
       "enemyTypeId": "blue",
-      "behaviorPresetId": "invaders.basic",
+      "behaviorPresetId": "invaders.pack",
       "pattern": { "kind": "grid", "originX": 856, "originY": 322, "cols": 9, "rows": 2, "spacingX": 14, "spacingY": 10 }
     },
 
@@ -113,7 +113,7 @@
       "spawnEverySec": 0.7,
       "maxAlive": 6,
       "enemyTypeId": "sigil",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "pattern": { "kind": "grid", "originX": 900, "originY": 140, "cols": 3, "rows": 2, "spacingX": 24, "spacingY": 22 }
     },
     {
@@ -123,7 +123,7 @@
       "spawnEverySec": 0.8,
       "maxAlive": 5,
       "enemyTypeId": "crown",
-      "behaviorPresetId": "invaders.basic",
+      "behaviorPresetId": "invaders.pack",
       "pattern": { "kind": "grid", "originX": 900, "originY": 200, "cols": 3, "rows": 2, "spacingX": 24, "spacingY": 22 }
     },
     {
@@ -143,7 +143,7 @@
       "spawnEverySec": 1.0,
       "maxAlive": 3,
       "enemyTypeId": "mandala",
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "pattern": { "kind": "ring", "centerX": 936, "centerY": 0, "radius": 60, "count": 4 }
     }
   ]

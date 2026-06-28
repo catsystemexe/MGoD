@@ -234,8 +234,8 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
           const forcedPresetId =
             (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
 
-          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.basic") as any) as EnemyBehaviorPresetId;
-          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.basic"];
+          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.hold") as any) as EnemyBehaviorPresetId;
+          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.hold"];
 
           const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
           const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];

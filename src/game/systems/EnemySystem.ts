@@ -28,7 +28,7 @@ function applyStateBehavior(e: any, movementPresetId?: string): void {
   if (!movementPresetId) return;
   if (e.fsmAppliedMovementPresetId === movementPresetId) return;
 
-  const preset = EnemyBehaviorPresets[movementPresetId] ?? EnemyBehaviorPresets["none.basic"];
+  const preset = EnemyBehaviorPresets[movementPresetId] ?? EnemyBehaviorPresets["none.hold"];
   if (!preset) return;
 
   const nextBehaviorId = preset.behaviorId;

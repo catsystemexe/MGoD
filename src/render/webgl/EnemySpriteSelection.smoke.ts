@@ -82,23 +82,23 @@ function withTemporaryEnemyDef<T>(typeId: string, def: any, fn: () => T): T {
 
 function testContentParser() {
   validateEnemyTypes([
-    { id: "ok", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: " enemy.ok.idle ", scale: 1 } } },
-    { id: "anim_ok", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: "enemy.anim.idle", animation: { id: " enemy.anim.idle ", speed: 2 } } } },
+    { id: "ok", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: " enemy.ok.idle ", scale: 1 } } },
+    { id: "anim_ok", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: "enemy.anim.idle", animation: { id: " enemy.anim.idle ", speed: 2 } } } },
   ]);
   expectThrows(
-    () => validateEnemyTypes([{ id: "bad_id", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: "" } } }]),
+    () => validateEnemyTypes([{ id: "bad_id", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: "" } } }]),
     "empty render.sprite.id should fail structural validation",
   );
   expectThrows(
-    () => validateEnemyTypes([{ id: "bad_scale", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: "enemy.bad.idle", scale: 0 } } }]),
+    () => validateEnemyTypes([{ id: "bad_scale", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: "enemy.bad.idle", scale: 0 } } }]),
     "non-positive render.sprite.scale should fail structural validation",
   );
   expectThrows(
-    () => validateEnemyTypes([{ id: "bad_anim_id", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: "enemy.bad.idle", animation: { id: "" } } } }]),
+    () => validateEnemyTypes([{ id: "bad_anim_id", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: "enemy.bad.idle", animation: { id: "" } } } }]),
     "empty render.sprite.animation.id should fail structural validation",
   );
   expectThrows(
-    () => validateEnemyTypes([{ id: "bad_anim_speed", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.basic", render: { sprite: { id: "enemy.bad.idle", animation: { id: "enemy.bad.idle", speed: 0 } } } }]),
+    () => validateEnemyTypes([{ id: "bad_anim_speed", hp: 1, radius: 1, scoreOnKill: 1, behaviorPresetId: "none.hold", render: { sprite: { id: "enemy.bad.idle", animation: { id: "enemy.bad.idle", speed: 0 } } } }]),
     "non-positive render.sprite.animation.speed should fail structural validation",
   );
 
@@ -771,7 +771,7 @@ function testContentBehaviorAttackSeparation() {
   assert((ENEMY_DEFS.basic_1 as any).animId === undefined, "root enemy animId behavior should not be added to ENEMY_DEFS");
 
   const defaultEnemy = spawnEnemy("basic_1").enemy;
-  const overriddenEnemy = spawnEnemy("basic_1", new EntityStore<SpawnableEntity>(8), { behaviorPresetId: "sine.basic" }).enemy;
+  const overriddenEnemy = spawnEnemy("basic_1", new EntityStore<SpawnableEntity>(8), { behaviorPresetId: "sine.soft" }).enemy;
   assert(defaultEnemy.behaviorId === "straight", "default behavior preset should still resolve at spawn");
   assert(overriddenEnemy.behaviorId === "sine", "wave behavior override should still affect behavior");
   assert(overriddenEnemy.render?.sprite?.id === ENEMY_DEFS.basic_1.render?.sprite?.id, "wave behavior override should not alter appearance");

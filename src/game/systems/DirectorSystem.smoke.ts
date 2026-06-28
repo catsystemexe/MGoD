@@ -20,7 +20,7 @@ const TEST_DEFS: any = {
       spawnEverySec: 1.0,     // jistota: dt=1.1 => min 1 spawn
       maxAlive: 999,
       enemyTypeId: "enemy.test",
-      behaviorPresetId: "none.basic",
+      behaviorPresetId: "none.hold",
     },
   ],
 };

@@ -71,7 +71,7 @@
         ]
       },
       "retreat": {
-        "movementPresetId": "sine.hyper",
+        "movementPresetId": "sine.evade",
         "transitions": [
           {
             "when": {
