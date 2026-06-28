@@ -101,7 +101,7 @@
         ]
       },
       "charge": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "straight.charge",
         "transitions": [
           {
             "when": {

@@ -3,6 +3,7 @@
     { "id": "none.basic", "behaviorId": "none", "params": {} },
 
     { "id": "straight.basic", "behaviorId": "straight", "params": { "speedX": -160, "speedY": 0 } },
+    { "id": "straight.charge", "behaviorId": "straight", "params": { "speedX": -260, "speedY": 0 } },
 
     { "id": "sine.basic", "behaviorId": "sine", "params": { "speedX": -120, "speedY": 0, "ampX": 7, "freq": 0.5, "driftX": 0 } },
     { "id": "sine.hold",  "behaviorId": "sine", "params": { "speedX": -100, "speedY": 0, "ampX": 18, "freq": 0.6, "driftX": 0 } },
