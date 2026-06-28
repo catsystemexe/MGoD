@@ -7,6 +7,7 @@ export const CM_EVENT_OWNERSHIP: OwnershipMap<CMEventMap> = {
   [EventType.SPAWN_PROJECTILE]: Phase.Simulation,
   [EventType.SPAWN_BOMB]: Phase.Simulation,
   [EventType.SPAWN_PICKUP]: Phase.Simulation,
+  [EventType.SPAWN_ENEMY_GROUP]: Phase.Simulation,
 
   [EventType.PLAYER_FIRE_PRIMARY]: Phase.Simulation,
   [EventType.PLAYER_FIRE_BOMB]: Phase.Simulation,
