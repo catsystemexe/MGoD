@@ -3,7 +3,7 @@
     "behaviorId": "straight",
     "params": { "speedY": 40, "speedX": 0 }
   },
-  "sine.basic": {
+  "sine.soft": {
     "behaviorId": "sine",
     "params": { "speedY": 35, "ampX": 18, "freq": 0.8, "driftX": 0 }
   }

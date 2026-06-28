@@ -25,7 +25,7 @@
       "hp": 3,
       "radius": 9,
       "scoreOnKill": 12,
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "render": {
         "color": "#44ff44",
         "sdf": { "shape": "orb", "color": "#2bff88", "size": 0.83 },
@@ -63,7 +63,7 @@
       "hp": 6,
       "radius": 17,
       "scoreOnKill": 22,
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "render": {
         "color": "#2a2a2f",
         "sdf": { "shape": "sigil", "color": "#3a6cff", "size": 0.83 },
@@ -82,7 +82,7 @@
       "hp": 6,
       "radius": 14,
       "scoreOnKill": 26,
-      "behaviorPresetId": "invaders.basic",
+      "behaviorPresetId": "invaders.pack",
       "render": {
         "color": "#2a2a2f",
         "sdf": { "shape": "crown", "color": "#ffcf3a", "size": 0.83 },
@@ -118,7 +118,7 @@
       "hp": 8,
       "radius": 7,
       "scoreOnKill": 34,
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "render": {
         "color": "#2a2a2f",
         "sdf": { "shape": "mandala", "color": "#ff8c2a", "size": 2.0 },
@@ -139,7 +139,7 @@
       "hp": 5,
       "radius": 9,
       "scoreOnKill": 14,
-      "behaviorPresetId": "invaders.basic",
+      "behaviorPresetId": "invaders.pack",
       "render": {
         "color": "#4488ff",
         "sdf": { "shape": "orb", "color": "#2af0ff", "size": 0.83 },
@@ -159,7 +159,7 @@
       "hp": 2,
       "radius": 12,
       "scoreOnKill": 250,
-      "behaviorPresetId": "sine.sniper",
+      "behaviorPresetId": "sine.wide",
       "attackProfileId": "aimed_slow",
       "render": {
         "color": "#aa44ff",
@@ -173,7 +173,7 @@
       "hp": 1,
       "radius": 7,
       "scoreOnKill": 50,
-      "behaviorPresetId": "sine.basic",
+      "behaviorPresetId": "sine.soft",
       "render": {
         "color": "#44ffaa",
         "sdf": { "shape": "arrow", "size": 0.9 }
