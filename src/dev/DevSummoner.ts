@@ -12,7 +12,7 @@ type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
 
-const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "invaders", "none"] as const;
+const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "invaders", "none"] as const;
 const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
 
 function formatNum(value: unknown, digits = 0): string {
@@ -126,7 +126,9 @@ function appendOption(select: HTMLSelectElement, value: string, text = value, di
 }
 
 function formatPrimitiveLabel(primitive: string): string {
-  return primitive === "none" ? "Hold" : primitive;
+  if (primitive === "none") return "Hold";
+  if (primitive === "loop") return "Loop";
+  return primitive;
 }
 
 function sortPrimitiveIds(primitives: string[]): string[] {
@@ -294,6 +296,22 @@ function getPrimitiveFromPresetId(presetId: string): string {
   return presetId.split(".")[0] || presetId;
 }
 
+
+export function createDevSummonerSpawnPayload(input: {
+  typeId: string;
+  spawnX: number;
+  spawnY: number;
+  behaviorPresetId: string;
+  devManualSpawnId: number;
+}) {
+  return {
+    typeId: input.typeId,
+    spawn: { x: input.spawnX, y: input.spawnY },
+    behaviorPresetId: input.behaviorPresetId,
+    devManualSpawnId: input.devManualSpawnId,
+  };
+}
+
 function buildMovementGroups(): MovementGroups {
   const groups: MovementGroups = { dumb: {}, smart: {} };
 
@@ -315,7 +333,7 @@ export class DevSummoner {
   private panel: HTMLElement | null = null;
   private latestManualSpawnId = 0;
   private refreshTimer: number | null = null;
-  private primitiveSelectCleanup: (() => void) | null = null;
+  private readonly cleanupHandlers: Array<() => void> = [];
 
   constructor(
     private bus: EventBus<CMEventMap>,
@@ -367,19 +385,21 @@ export class DevSummoner {
     const movementClassSelect = document.createElement("select");
     movementClassSelect.id = "ds-movement-class";
     const primitiveSelect = createCompactSelect("ds-movement-primitive");
-    this.primitiveSelectCleanup = () => primitiveSelect.destroy();
-    const presetSelect = document.createElement("select");
-    presetSelect.id = "ds-movement-preset";
+    const presetSelect = createCompactSelect("ds-movement-preset");
+    this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
 
     const movementClassWrap = createSelectLabel("Movement Class");
     const primitiveWrap = createSelectLabel("Primitive");
     const presetWrap = createSelectLabel("Preset");
     movementClassWrap.appendChild(movementClassSelect);
     primitiveWrap.appendChild(primitiveSelect.root);
-    presetWrap.appendChild(presetSelect);
+    presetWrap.appendChild(presetSelect.root);
+    const movementPresetRow = document.createElement("div");
+    movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
+    movementPresetRow.appendChild(primitiveWrap);
+    movementPresetRow.appendChild(presetWrap);
     spawnSection.appendChild(movementClassWrap);
-    spawnSection.appendChild(primitiveWrap);
-    spawnSection.appendChild(presetWrap);
+    spawnSection.appendChild(movementPresetRow);
 
     const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
     appendOption(movementClassSelect, "dumb", "Dumb");
@@ -389,13 +409,11 @@ export class DevSummoner {
       const movementClass = movementClassSelect.value as MovementClassId;
       const primitive = primitiveSelect.value;
       const presets = movementGroups[movementClass]?.[primitive] ?? [];
-      presetSelect.replaceChildren();
-      presetSelect.disabled = presets.length === 0;
       if (presets.length === 0) {
-        appendOption(presetSelect, "", "(none)", true);
+        presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
         return;
       }
-      for (const presetId of presets) appendOption(presetSelect, presetId);
+      presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), presetSelect.value);
     };
 
     const repopulatePrimitiveSelect = () => {
@@ -460,12 +478,13 @@ export class DevSummoner {
     btn.style.cssText = "cursor:pointer;margin-top:2px;";
     btn.addEventListener("click", () => {
       this.latestManualSpawnId += 1;
-      this.bus.emitNext(EventType.SPAWN_ENEMY, {
+      this.bus.emitNext(EventType.SPAWN_ENEMY, createDevSummonerSpawnPayload({
         typeId: enemySelect.value,
-        spawn: { x: this.logicW - 40, y: Number(screenY.value) },
+        spawnX: this.logicW - 40,
+        spawnY: Number(screenY.value),
         behaviorPresetId: presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
-      } as any);
+      }) as any);
     });
     spawnSection.appendChild(btn);
 
@@ -541,8 +560,7 @@ export class DevSummoner {
   destroy(): void {
     if (this.refreshTimer) window.clearInterval(this.refreshTimer);
     this.refreshTimer = null;
-    this.primitiveSelectCleanup?.();
-    this.primitiveSelectCleanup = null;
+    while (this.cleanupHandlers.length) this.cleanupHandlers.pop()?.();
     if (this.panel?.parentNode) this.panel.parentNode.removeChild(this.panel);
     this.panel = null;
   }
