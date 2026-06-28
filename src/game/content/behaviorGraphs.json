@@ -46,7 +46,7 @@
     "initial": "enter",
     "states": {
       "enter": {
-        "movementPresetId": "sine.hover",
+        "movementPresetId": "sine.soft",
         "transitions": [
           {
             "when": {
@@ -107,6 +107,313 @@
             "when": {
               "kind": "timeInState",
               "seconds": 3
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.zigzag": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "zigzag.sharp",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 700
+            },
+            "goto": "hold"
+          }
+        ]
+      },
+      "hold": {
+        "movementPresetId": "none.hold",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 2
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "diagonal.up",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_tracker": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "smart.track.soft",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "pressure"
+          }
+        ]
+      },
+      "pressure": {
+        "movementPresetId": "smart.track.aggressive",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_aligner": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.drift",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "align"
+          }
+        ]
+      },
+      "align": {
+        "movementPresetId": "smart.align.attack",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 2.25
+            },
+            "goto": "attack"
+          }
+        ]
+      },
+      "attack": {
+        "movementPresetId": "none.hold",
+        "attackProfileId": "single_basic",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 2
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_evader": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.basic",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "evade"
+          }
+        ]
+      },
+      "evade": {
+        "movementPresetId": "smart.evade.axis",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_ranger": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.basic",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "control"
+          }
+        ]
+      },
+      "control": {
+        "movementPresetId": "smart.range.medium",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_orbit_half": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "smart.range.close",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.25
+            },
+            "goto": "orbit"
+          }
+        ]
+      },
+      "orbit": {
+        "movementPresetId": "smart.orbit.half",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.6
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.smart_orbit_repeat": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "smart.range.medium",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 1.25
+            },
+            "goto": "orbit"
+          }
+        ]
+      },
+      "orbit": {
+        "movementPresetId": "smart.orbit.repeat",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 4
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
             },
             "goto": "despawn"
           }

@@ -1,14 +1,17 @@
 {
   "behaviorPresets": [
     {
-      "id": "none.basic",
+      "id": "none.hold",
       "behaviorId": "none",
       "params": {}
     },
     {
-      "id": "none.hold",
-      "behaviorId": "none",
-      "params": {}
+      "id": "straight.drift",
+      "behaviorId": "straight",
+      "params": {
+        "speedX": -115,
+        "speedY": 0
+      }
     },
     {
       "id": "straight.basic",
@@ -19,43 +22,85 @@
       }
     },
     {
-      "id": "straight.drift",
+      "id": "straight.accel",
       "behaviorId": "straight",
       "params": {
-        "speedX": -100,
-        "speedY": 0
+        "speedXStart": -80,
+        "speedXEnd": -320,
+        "speedYStart": 0,
+        "speedYEnd": 0,
+        "duration": 1.75
+      }
+    },
+    {
+      "id": "straight.decel",
+      "behaviorId": "straight",
+      "params": {
+        "speedXStart": -360,
+        "speedXEnd": -80,
+        "speedYStart": 0,
+        "speedYEnd": 0,
+        "duration": 1.75
       }
     },
     {
       "id": "straight.charge",
       "behaviorId": "straight",
       "params": {
-        "speedX": -440,
+        "speedX": -520,
         "speedY": 0
       }
     },
     {
-      "id": "sine.basic",
-      "behaviorId": "sine",
+      "id": "diagonal.up",
+      "behaviorId": "straight",
       "params": {
-        "speedX": -120,
-        "speedY": 0,
-        "ampX": 7,
-        "freq": 0.5,
-        "driftX": 0
+        "speedX": -170,
+        "speedY": -90
       }
     },
     {
-      "id": "sine.hover",
+      "id": "diagonal.down",
+      "behaviorId": "straight",
+      "params": {
+        "speedX": -170,
+        "speedY": 90
+      }
+    },
+    {
+      "id": "sine.soft",
       "behaviorId": "sine",
       "params": {
-        "speedX": -90,
+        "speedX": -130,
         "speedY": 0,
-        "ampX": 18,
-        "ampY": 10,
-        "freq": 0.65,
+        "ampY": 22,
+        "freq": 0.6,
+        "driftX": 0,
+        "phaseStep": 0.25
+      }
+    },
+    {
+      "id": "sine.wide",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -60,
+        "speedY": 0,
+        "ampY": 60,
+        "freq": 0.7,
         "driftX": 0,
         "phaseStep": 0.35
+      }
+    },
+    {
+      "id": "sine.tight",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -150,
+        "speedY": 0,
+        "ampY": 34,
+        "freq": 1.5,
+        "driftX": 0,
+        "phaseStep": 0.4
       }
     },
     {
@@ -64,45 +109,148 @@
       "params": {
         "speedX": -180,
         "speedY": 0,
-        "ampX": 34,
-        "ampY": 18,
-        "freq": 1.05,
+        "ampY": 66,
+        "freq": 1.8,
         "driftX": 0,
         "phaseStep": 0.5
       }
     },
     {
-      "id": "sine.hold",
+      "id": "sine.hover",
       "behaviorId": "sine",
       "params": {
-        "speedX": -100,
+        "speedX": -30,
         "speedY": 0,
-        "ampX": 18,
-        "freq": 0.6,
-        "driftX": 0
-      }
-    },
-    {
-      "id": "sine.sniper",
-      "behaviorId": "sine",
-      "params": {
-        "speedX": -60,
-        "speedY": 0,
-        "ampX": 0,
-        "ampY": 60,
-        "freq": 0.8,
-        "driftX": 0
-      }
-    },
-    {
-      "id": "invaders.basic",
-      "behaviorId": "invaders",
-      "params": {
-        "speedX": -80,
-        "speedY": 0,
-        "ampX": 26,
-        "freq": 0.55,
+        "ampY": 12,
+        "freq": 0.75,
+        "driftX": 0,
         "phaseStep": 0.35
+      }
+    },
+    {
+      "id": "zigzag.sharp",
+      "behaviorId": "zigzag",
+      "params": {
+        "speedX": -150,
+        "speedY": 0,
+        "ampY": 70,
+        "period": 0.75
+      }
+    },
+    {
+      "id": "loop.single",
+      "behaviorId": "loop",
+      "params": {
+        "speedX": -115,
+        "speedY": 0,
+        "radiusX": 64,
+        "radiusY": 58,
+        "duration": 1.65,
+        "direction": 1,
+        "turns": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "loop.repeat",
+      "behaviorId": "loop",
+      "params": {
+        "speedX": -85,
+        "speedY": 0,
+        "radiusX": 52,
+        "radiusY": 48,
+        "duration": 1.9,
+        "direction": -1,
+        "turns": 1,
+        "repeat": true
+      }
+    },
+    {
+      "id": "smart.range.close",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 95,
+        "tolerance": 12,
+        "response": 5.2,
+        "maxSpeed": 170,
+        "fallbackSpeedX": -90,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.range.medium",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 170,
+        "tolerance": 18,
+        "response": 3.3,
+        "maxSpeed": 125,
+        "fallbackSpeedX": -85,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.range.far",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 285,
+        "tolerance": 24,
+        "response": 2.2,
+        "maxSpeed": 95,
+        "fallbackSpeedX": -70,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.half",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 190,
+        "radiusY": 124,
+        "angularSpeed": 1.1,
+        "arcCenterAngle": 0,
+        "arcRadians": 3.141592653589793,
+        "direction": 1,
+        "repeat": false,
+        "pingPong": true,
+        "radialResponse": 2.6,
+        "maxRadialSpeed": 85,
+        "fallbackSpeedX": -75,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.repeat",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 220,
+        "radiusY": 144,
+        "angularSpeed": 2.8,
+        "arcRadians": 6.283185307179586,
+        "direction": 1,
+        "repeat": true,
+        "radialResponse": 3.0,
+        "maxRadialSpeed": 95,
+        "fallbackSpeedX": -80,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.wide",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 310,
+        "radiusY": 205,
+        "angularSpeed": 2.0,
+        "arcRadians": 6.283185307179586,
+        "direction": -1,
+        "repeat": true,
+        "centerResponse": 1.1,
+        "maxCenterSpeed": 120,
+        "radialResponse": 2.2,
+        "maxRadialSpeed": 80,
+        "fallbackSpeedX": -65,
+        "fallbackSpeedY": 0
       }
     },
     {
@@ -114,6 +262,47 @@
         "ampX": 34,
         "freq": 0.8,
         "phaseStep": 0.45
+      }
+    },
+    {
+      "id": "smart.track.soft",
+      "behaviorId": "track",
+      "params": {
+        "speedX": -110,
+        "response": 2.4,
+        "maxSpeedY": 70,
+        "deadZoneY": 12
+      }
+    },
+    {
+      "id": "smart.track.aggressive",
+      "behaviorId": "track",
+      "params": {
+        "speedX": -145,
+        "response": 5.8,
+        "maxSpeedY": 155,
+        "deadZoneY": 6
+      }
+    },
+    {
+      "id": "smart.align.attack",
+      "behaviorId": "align",
+      "params": {
+        "speedX": -70,
+        "alignSpeedY": 130,
+        "toleranceY": 8
+      }
+    },
+    {
+      "id": "smart.evade.axis",
+      "behaviorId": "evade",
+      "params": {
+        "speedX": -115,
+        "triggerBandY": 44,
+        "evadeSpeedY": 150,
+        "evadeDuration": 0.75,
+        "cooldown": 0.45,
+        "paddingY": 24
       }
     }
   ]

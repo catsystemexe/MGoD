@@ -10,6 +10,11 @@ type MovementClassId = "dumb" | "smart";
 
 type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
+type CompactSelectOption = { value: string; label: string; disabled?: boolean };
+
+const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "range", "orbit", "invaders", "none"] as const;
+const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
+
 function formatNum(value: unknown, digits = 0): string {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : "?";
@@ -120,11 +125,200 @@ function appendOption(select: HTMLSelectElement, value: string, text = value, di
   select.appendChild(opt);
 }
 
-function getPrimitiveFromPresetId(presetId: string): string {
-  return presetId.split(".")[0] || presetId;
+function formatPrimitiveLabel(primitive: string): string {
+  if (primitive === "none") return "Hold";
+  if (primitive === "loop") return "Loop";
+  if (primitive === "track") return "Track";
+  if (primitive === "align") return "Align";
+  if (primitive === "evade") return "Evade";
+  if (primitive === "range") return "Range";
+  if (primitive === "orbit") return "Orbit";
+  return primitive;
 }
 
-function buildMovementGroups(): MovementGroups {
+function sortPrimitiveIds(primitives: string[]): string[] {
+  return [...primitives].sort((a, b) => {
+    const ai = KNOWN_PRIMITIVE_INDEX.get(a);
+    const bi = KNOWN_PRIMITIVE_INDEX.get(b);
+    if (ai !== undefined && bi !== undefined) return ai - bi;
+    if (ai !== undefined) return -1;
+    if (bi !== undefined) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function createCompactSelect(id: string): {
+  root: HTMLDivElement;
+  button: HTMLButtonElement;
+  value: string;
+  disabled: boolean;
+  setOptions(options: CompactSelectOption[], nextValue?: string): void;
+  addEventListener(type: "change", listener: () => void): void;
+  destroy(): void;
+} {
+  const root = document.createElement("div");
+  root.id = id;
+  root.style.cssText = "position:relative;width:100%;";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.style.cssText = [
+    "width:100%",
+    "box-sizing:border-box",
+    "text-align:left",
+    "font:12px monospace",
+    "padding:2px 18px 2px 4px",
+    "background:#111",
+    "color:#eee",
+    "border:1px solid #555",
+    "border-radius:2px",
+    "cursor:pointer",
+  ].join(";");
+  root.appendChild(button);
+
+  const list = document.createElement("div");
+  list.setAttribute("role", "listbox");
+  list.style.cssText = [
+    "display:none",
+    "position:absolute",
+    "left:0",
+    "right:0",
+    "top:100%",
+    "z-index:10000",
+    "max-height:132px",
+    "overflow:auto",
+    "background:#111",
+    "border:1px solid #666",
+    "border-radius:2px",
+    "box-shadow:0 3px 8px rgba(0,0,0,0.45)",
+  ].join(";");
+  root.appendChild(list);
+
+  let options: CompactSelectOption[] = [];
+  let value = "";
+  const listeners: Array<() => void> = [];
+
+  const close = () => {
+    list.style.display = "none";
+    button.setAttribute("aria-expanded", "false");
+  };
+  const open = () => {
+    if (button.disabled) return;
+    list.style.display = "block";
+    button.setAttribute("aria-expanded", "true");
+  };
+  const selectedLabel = () => options.find((option) => option.value === value)?.label ?? "(none)";
+
+  const choose = (nextValue: string) => {
+    if (value === nextValue) {
+      close();
+      return;
+    }
+    value = nextValue;
+    button.textContent = selectedLabel();
+    close();
+    for (const listener of listeners) listener();
+  };
+
+  const renderOptions = () => {
+    list.replaceChildren();
+    for (const option of options) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(option.value === value));
+      item.disabled = !!option.disabled;
+      item.textContent = option.label;
+      item.style.cssText = [
+        "display:block",
+        "width:100%",
+        "box-sizing:border-box",
+        "text-align:left",
+        "font:12px monospace",
+        "padding:3px 5px",
+        "background:" + (option.value === value ? "#26384f" : "#111"),
+        "color:#eee",
+        "border:0",
+        "cursor:pointer",
+      ].join(";");
+      item.addEventListener("click", () => choose(option.value));
+      list.appendChild(item);
+    }
+  };
+
+  button.addEventListener("click", () => {
+    if (list.style.display === "none") open();
+    else close();
+  });
+  button.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      close();
+      return;
+    }
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Enter" && ev.key !== " ") return;
+    ev.preventDefault();
+    if (ev.key === "Enter" || ev.key === " ") {
+      open();
+      return;
+    }
+    const enabled = options.filter((option) => !option.disabled);
+    if (!enabled.length) return;
+    const currentIndex = Math.max(0, enabled.findIndex((option) => option.value === value));
+    const delta = ev.key === "ArrowDown" ? 1 : -1;
+    choose(enabled[(currentIndex + delta + enabled.length) % enabled.length].value);
+  });
+  const handleDocumentClick = (ev: MouseEvent) => {
+    if (!root.contains(ev.target as Node)) close();
+  };
+  document.addEventListener("click", handleDocumentClick);
+
+  return {
+    root,
+    button,
+    get value() { return value; },
+    get disabled() { return button.disabled; },
+    set disabled(next: boolean) { button.disabled = next; },
+    setOptions(nextOptions: CompactSelectOption[], nextValue?: string) {
+      options = nextOptions;
+      value = nextValue && options.some((option) => option.value === nextValue) ? nextValue : (options.find((option) => !option.disabled)?.value ?? options[0]?.value ?? "");
+      button.disabled = options.length === 0 || options.every((option) => option.disabled);
+      button.textContent = selectedLabel();
+      renderOptions();
+      close();
+    },
+    addEventListener(_type: "change", listener: () => void) {
+      listeners.push(listener);
+    },
+    destroy() {
+      document.removeEventListener("click", handleDocumentClick);
+    },
+  };
+}
+
+export function getPrimitiveFromPresetId(presetId: string): string {
+  const parts = presetId.split(".");
+  return presetId.startsWith("smart.") ? (parts[1] || presetId) : (parts[0] || presetId);
+}
+
+
+export function createDevSummonerSpawnPayload(input: {
+  typeId: string;
+  spawnX: number;
+  spawnY: number;
+  behaviorPresetId: string;
+  devManualSpawnId: number;
+}) {
+  return {
+    typeId: input.typeId,
+    spawn: { x: input.spawnX, y: input.spawnY },
+    behaviorPresetId: input.behaviorPresetId,
+    devManualSpawnId: input.devManualSpawnId,
+  };
+}
+
+export function buildMovementGroups(): MovementGroups {
   const groups: MovementGroups = { dumb: {}, smart: {} };
 
   for (const presetId of Object.keys(EnemyBehaviorPresets)) {
@@ -145,6 +339,7 @@ export class DevSummoner {
   private panel: HTMLElement | null = null;
   private latestManualSpawnId = 0;
   private refreshTimer: number | null = null;
+  private readonly cleanupHandlers: Array<() => void> = [];
 
   constructor(
     private bus: EventBus<CMEventMap>,
@@ -193,55 +388,101 @@ export class DevSummoner {
     spawnSection.appendChild(enemySelect);
 
     const movementGroups = buildMovementGroups();
-    const movementClassSelect = document.createElement("select");
-    movementClassSelect.id = "ds-movement-class";
-    const primitiveSelect = document.createElement("select");
-    primitiveSelect.id = "ds-movement-primitive";
-    const presetSelect = document.createElement("select");
-    presetSelect.id = "ds-movement-preset";
+    const primitiveSelect = createCompactSelect("ds-movement-primitive");
+    const presetSelect = createCompactSelect("ds-movement-preset");
+    this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
 
-    const movementClassWrap = createSelectLabel("Movement Class");
+    const movementClassRow = document.createElement("div");
+    movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+    const movementClassLabel = document.createElement("span");
+    movementClassLabel.textContent = "Movement";
+    movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
+    const movementClassSegment = document.createElement("div");
+    movementClassSegment.id = "ds-movement-class";
+    movementClassSegment.setAttribute("role", "radiogroup");
+    movementClassSegment.setAttribute("aria-label", "Movement class");
+    movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+    const dumbButton = document.createElement("button");
+    const smartButton = document.createElement("button");
+    let movementClass: MovementClassId = "dumb";
     const primitiveWrap = createSelectLabel("Primitive");
     const presetWrap = createSelectLabel("Preset");
-    movementClassWrap.appendChild(movementClassSelect);
-    primitiveWrap.appendChild(primitiveSelect);
-    presetWrap.appendChild(presetSelect);
-    spawnSection.appendChild(movementClassWrap);
-    spawnSection.appendChild(primitiveWrap);
-    spawnSection.appendChild(presetWrap);
+    primitiveWrap.appendChild(primitiveSelect.root);
+    presetWrap.appendChild(presetSelect.root);
+    const movementPresetRow = document.createElement("div");
+    movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
+    movementPresetRow.appendChild(primitiveWrap);
+    movementPresetRow.appendChild(presetWrap);
+    movementClassRow.appendChild(movementClassLabel);
+    movementClassRow.appendChild(movementClassSegment);
+    spawnSection.appendChild(movementClassRow);
+    spawnSection.appendChild(movementPresetRow);
 
+    const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
     const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
-    appendOption(movementClassSelect, "dumb", "Dumb");
-    appendOption(movementClassSelect, "smart", hasSmartPresets ? "Smart" : "Smart (none)", !hasSmartPresets);
+    const styleMovementClassButton = (button: HTMLButtonElement, active: boolean, disabled: boolean) => {
+      button.style.cssText = [
+        "font:12px monospace",
+        "padding:2px 6px",
+        "border:1px solid #555",
+        "background:" + (active ? "#26384f" : "#111"),
+        "color:" + (disabled ? "#777" : active ? "#fff" : "#bbb"),
+        "cursor:" + (disabled ? "not-allowed" : "pointer"),
+        "box-sizing:border-box",
+        "min-width:0",
+      ].join(";");
+    };
+    const refreshMovementClassButtons = () => {
+      for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
+        const active = movementClass === value;
+        button.type = "button";
+        button.textContent = value === "dumb" ? "Dumb" : "Smart";
+        button.disabled = !enabled;
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", String(active));
+        styleMovementClassButton(button, active, !enabled);
+      }
+      dumbButton.style.borderRadius = "2px 0 0 2px";
+      smartButton.style.borderLeft = "0";
+      smartButton.style.borderRadius = "0 2px 2px 0";
+    };
+    movementClassSegment.appendChild(dumbButton);
+    movementClassSegment.appendChild(smartButton);
 
     const repopulatePresetSelect = () => {
-      const movementClass = movementClassSelect.value as MovementClassId;
       const primitive = primitiveSelect.value;
       const presets = movementGroups[movementClass]?.[primitive] ?? [];
-      presetSelect.replaceChildren();
-      presetSelect.disabled = presets.length === 0;
       if (presets.length === 0) {
-        appendOption(presetSelect, "", "(none)", true);
+        presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
         return;
       }
-      for (const presetId of presets) appendOption(presetSelect, presetId);
+      presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), presetSelect.value);
     };
 
     const repopulatePrimitiveSelect = () => {
-      const movementClass = movementClassSelect.value as MovementClassId;
-      const primitives = Object.keys(movementGroups[movementClass] ?? {}).sort();
-      primitiveSelect.replaceChildren();
-      primitiveSelect.disabled = primitives.length === 0;
+      const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
       if (primitives.length === 0) {
-        appendOption(primitiveSelect, "", "(none)", true);
+        primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
         repopulatePresetSelect();
         return;
       }
-      for (const primitive of primitives) appendOption(primitiveSelect, primitive);
+      primitiveSelect.setOptions(primitives.map((primitive) => ({
+        value: primitive,
+        label: formatPrimitiveLabel(primitive),
+      })));
       repopulatePresetSelect();
     };
 
-    movementClassSelect.addEventListener("change", repopulatePrimitiveSelect);
+    const setMovementClass = (next: MovementClassId) => {
+      if (next === "dumb" && !hasDumbPresets) return;
+      if (next === "smart" && !hasSmartPresets) return;
+      movementClass = next;
+      refreshMovementClassButtons();
+      repopulatePrimitiveSelect();
+    };
+    dumbButton.addEventListener("click", () => setMovementClass("dumb"));
+    smartButton.addEventListener("click", () => setMovementClass("smart"));
+    refreshMovementClassButtons();
     primitiveSelect.addEventListener("change", repopulatePresetSelect);
     repopulatePrimitiveSelect();
 
@@ -288,12 +529,13 @@ export class DevSummoner {
     btn.style.cssText = "cursor:pointer;margin-top:2px;";
     btn.addEventListener("click", () => {
       this.latestManualSpawnId += 1;
-      this.bus.emitNext(EventType.SPAWN_ENEMY, {
+      this.bus.emitNext(EventType.SPAWN_ENEMY, createDevSummonerSpawnPayload({
         typeId: enemySelect.value,
-        spawn: { x: this.logicW - 40, y: Number(screenY.value) },
+        spawnX: this.logicW - 40,
+        spawnY: Number(screenY.value),
         behaviorPresetId: presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
-      } as any);
+      }) as any);
     });
     spawnSection.appendChild(btn);
 
@@ -369,6 +611,7 @@ export class DevSummoner {
   destroy(): void {
     if (this.refreshTimer) window.clearInterval(this.refreshTimer);
     this.refreshTimer = null;
+    while (this.cleanupHandlers.length) this.cleanupHandlers.pop()?.();
     if (this.panel?.parentNode) this.panel.parentNode.removeChild(this.panel);
     this.panel = null;
   }

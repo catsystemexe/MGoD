@@ -39,7 +39,7 @@ function makeAnimatedEnemy(): any {
     posPrev: { x: 9, y: 19 },
     radius: 18,
     hp: 0,
-    behaviorId: "sine.basic",
+    behaviorId: "sine.soft",
     attackProfile: { weapon: "bad" },
     scoreOnKill: 100,
     pendingKill: true,

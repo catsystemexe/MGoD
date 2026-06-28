@@ -307,14 +307,14 @@ export const ENEMY_DEFS: Record<EnemyTypeId, EnemyDef> = (() => {
       t.behaviorPreset ?? // starší varianta
       t.preset ??
       t.behavior ??
-      "none.basic"; // ✅ tvoje content preset ID pro none
+      "none.hold"; // ✅ tvoje content preset ID pro none
 
     const appearance = normalizeEnemyAppearance(buildEnemyAppearanceRaw(t), id);
 
     const hp = numOr(hpRaw, 1);
     const radius = numOr(radiusRaw, 4);
     const scoreOnKill = numOr(scoreRaw, 0);
-    const behaviorPreset = typeof presetRaw === "string" && presetRaw.length ? presetRaw : "none.basic";
+    const behaviorPreset = typeof presetRaw === "string" && presetRaw.length ? presetRaw : "none.hold";
     const behaviorGraphId = strOrUndef(t?.behaviorGraphId);
 
     // ai overlay (optional)
