@@ -1,14 +1,120 @@
 {
   "behaviorPresets": [
-    { "id": "none.basic", "behaviorId": "none", "params": {} },
-
-    { "id": "straight.basic", "behaviorId": "straight", "params": { "speedX": -160, "speedY": 0 } },
-    { "id": "straight.charge", "behaviorId": "straight", "params": { "speedX": -260, "speedY": 0 } },
-
-    { "id": "sine.basic", "behaviorId": "sine", "params": { "speedX": -120, "speedY": 0, "ampX": 7, "freq": 0.5, "driftX": 0 } },
-    { "id": "sine.hold",  "behaviorId": "sine", "params": { "speedX": -100, "speedY": 0, "ampX": 18, "freq": 0.6, "driftX": 0 } },
-    { "id": "sine.sniper", "behaviorId": "sine", "params": { "speedX": -60, "speedY": 0, "ampX": 0, "ampY": 60, "freq": 0.8, "driftX": 0 } },
-
-    { "id": "invaders.basic", "behaviorId": "invaders", "params": { "speedX": -80, "speedY": 0, "ampX": 26, "freq": 0.55, "phaseStep": 0.35 } }
+    {
+      "id": "none.basic",
+      "behaviorId": "none",
+      "params": {}
+    },
+    {
+      "id": "none.hold",
+      "behaviorId": "none",
+      "params": {}
+    },
+    {
+      "id": "straight.basic",
+      "behaviorId": "straight",
+      "params": {
+        "speedX": -160,
+        "speedY": 0
+      }
+    },
+    {
+      "id": "straight.drift",
+      "behaviorId": "straight",
+      "params": {
+        "speedX": -100,
+        "speedY": 0
+      }
+    },
+    {
+      "id": "straight.charge",
+      "behaviorId": "straight",
+      "params": {
+        "speedX": -440,
+        "speedY": 0
+      }
+    },
+    {
+      "id": "sine.basic",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -120,
+        "speedY": 0,
+        "ampX": 7,
+        "freq": 0.5,
+        "driftX": 0
+      }
+    },
+    {
+      "id": "sine.hover",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -90,
+        "speedY": 0,
+        "ampX": 18,
+        "ampY": 10,
+        "freq": 0.65,
+        "driftX": 0,
+        "phaseStep": 0.35
+      }
+    },
+    {
+      "id": "sine.evade",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -180,
+        "speedY": 0,
+        "ampX": 34,
+        "ampY": 18,
+        "freq": 1.05,
+        "driftX": 0,
+        "phaseStep": 0.5
+      }
+    },
+    {
+      "id": "sine.hold",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -100,
+        "speedY": 0,
+        "ampX": 18,
+        "freq": 0.6,
+        "driftX": 0
+      }
+    },
+    {
+      "id": "sine.sniper",
+      "behaviorId": "sine",
+      "params": {
+        "speedX": -60,
+        "speedY": 0,
+        "ampX": 0,
+        "ampY": 60,
+        "freq": 0.8,
+        "driftX": 0
+      }
+    },
+    {
+      "id": "invaders.basic",
+      "behaviorId": "invaders",
+      "params": {
+        "speedX": -80,
+        "speedY": 0,
+        "ampX": 26,
+        "freq": 0.55,
+        "phaseStep": 0.35
+      }
+    },
+    {
+      "id": "invaders.pack",
+      "behaviorId": "invaders",
+      "params": {
+        "speedX": -90,
+        "speedY": 0,
+        "ampX": 34,
+        "freq": 0.8,
+        "phaseStep": 0.45
+      }
+    }
   ]
 }

@@ -30,5 +30,29 @@
     "spreadCount": 3,
     "spreadAngleDeg": 30,
     "onlyWhenVisible": true
+  },
+  "spread_test_slow": {
+    "id": "spread_test_slow",
+    "pattern": "spread",
+    "fireRateMs": 3200,
+    "damage": 1,
+    "projectileSpeed": 180,
+    "projectileRadius": 4,
+    "windupMs": 500,
+    "spreadCount": 3,
+    "spreadAngleDeg": 30,
+    "onlyWhenVisible": true
+  },
+  "spread_test_fast": {
+    "id": "spread_test_fast",
+    "pattern": "spread",
+    "fireRateMs": 900,
+    "damage": 1,
+    "projectileSpeed": 180,
+    "projectileRadius": 4,
+    "windupMs": 150,
+    "spreadCount": 3,
+    "spreadAngleDeg": 30,
+    "onlyWhenVisible": true
   }
 }

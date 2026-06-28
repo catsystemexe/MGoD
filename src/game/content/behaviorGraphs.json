@@ -8,27 +8,27 @@
           {
             "when": {
               "kind": "xLessThan",
-              "x": 900
+              "x": 700
             },
             "goto": "attack"
           }
         ]
       },
       "attack": {
-        "movementPresetId": "none.basic",
-        "attackProfileId": "spread_basic",
+        "movementPresetId": "none.hold",
+        "attackProfileId": "spread_test_slow",
         "transitions": [
           {
             "when": {
               "kind": "timeInState",
-              "seconds": 8
+              "seconds": 5
             },
             "goto": "retreat"
           }
         ]
       },
       "retreat": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "straight.charge",
         "transitions": [
           {
             "when": {
@@ -46,7 +46,7 @@
     "initial": "enter",
     "states": {
       "enter": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "sine.hover",
         "transitions": [
           {
             "when": {
@@ -58,8 +58,8 @@
         ]
       },
       "hover": {
-        "movementPresetId": "none.basic",
-        "attackProfileId": "spread_basic",
+        "movementPresetId": "none.hold",
+        "attackProfileId": "spread_test_fast",
         "transitions": [
           {
             "when": {
@@ -71,7 +71,7 @@
         ]
       },
       "retreat": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "sine.evade",
         "transitions": [
           {
             "when": {
@@ -89,12 +89,12 @@
     "initial": "enter",
     "states": {
       "enter": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "straight.drift",
         "transitions": [
           {
             "when": {
               "kind": "xLessThan",
-              "x": 900
+              "x": 650
             },
             "goto": "charge"
           }
@@ -106,7 +106,7 @@
           {
             "when": {
               "kind": "timeInState",
-              "seconds": 2
+              "seconds": 3
             },
             "goto": "despawn"
           }
