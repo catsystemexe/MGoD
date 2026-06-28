@@ -1,24 +1,115 @@
 {
-  "turret_fsm": {
+  "fsm.turret": {
     "initial": "enter",
     "states": {
       "enter": {
         "movementPresetId": "straight.basic",
         "transitions": [
-          { "when": { "kind": "xLessThan", "x": 900 }, "goto": "attack" }
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 700
+            },
+            "goto": "attack"
+          }
         ]
       },
       "attack": {
-        "movementPresetId": "none.basic",
-        "attackProfileId": "spread_basic",
+        "movementPresetId": "none.hold",
+        "attackProfileId": "spread_test_slow",
         "transitions": [
-          { "when": { "kind": "timeInState", "seconds": 8 }, "goto": "retreat" }
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 5
+            },
+            "goto": "retreat"
+          }
         ]
       },
       "retreat": {
-        "movementPresetId": "straight.basic",
+        "movementPresetId": "straight.charge",
         "transitions": [
-          { "when": { "kind": "offscreen", "side": "left" }, "goto": "despawn" }
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.hover": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "sine.hover",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 760
+            },
+            "goto": "hover"
+          }
+        ]
+      },
+      "hover": {
+        "movementPresetId": "none.hold",
+        "attackProfileId": "spread_test_fast",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 8
+            },
+            "goto": "retreat"
+          }
+        ]
+      },
+      "retreat": {
+        "movementPresetId": "sine.evade",
+        "transitions": [
+          {
+            "when": {
+              "kind": "offscreen",
+              "side": "left"
+            },
+            "goto": "despawn"
+          }
+        ]
+      },
+      "despawn": {}
+    }
+  },
+  "fsm.charge": {
+    "initial": "enter",
+    "states": {
+      "enter": {
+        "movementPresetId": "straight.drift",
+        "transitions": [
+          {
+            "when": {
+              "kind": "xLessThan",
+              "x": 650
+            },
+            "goto": "charge"
+          }
+        ]
+      },
+      "charge": {
+        "movementPresetId": "straight.charge",
+        "transitions": [
+          {
+            "when": {
+              "kind": "timeInState",
+              "seconds": 3
+            },
+            "goto": "despawn"
+          }
         ]
       },
       "despawn": {}

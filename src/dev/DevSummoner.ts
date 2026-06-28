@@ -6,6 +6,9 @@ import { EnemyBehaviorPresets } from "../game/enemies/EnemyBehaviorPresets";
 import { BEHAVIOR_GRAPHS } from "../game/content/CONTENT";
 
 const EMPTY_ENEMY_LAB = "No FSM enemy selected/spawned.";
+type MovementClassId = "dumb" | "smart";
+
+type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 function formatNum(value: unknown, digits = 0): string {
   const n = Number(value);
@@ -100,6 +103,44 @@ function getFsmRuntimeDebug(enemy: any) {
   };
 }
 
+function createSelectLabel(text: string): HTMLLabelElement {
+  const label = document.createElement("label");
+  label.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  const span = document.createElement("span");
+  span.textContent = text;
+  label.appendChild(span);
+  return label;
+}
+
+function appendOption(select: HTMLSelectElement, value: string, text = value, disabled = false): void {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = text;
+  opt.disabled = disabled;
+  select.appendChild(opt);
+}
+
+function getPrimitiveFromPresetId(presetId: string): string {
+  return presetId.split(".")[0] || presetId;
+}
+
+function buildMovementGroups(): MovementGroups {
+  const groups: MovementGroups = { dumb: {}, smart: {} };
+
+  for (const presetId of Object.keys(EnemyBehaviorPresets)) {
+    const movementClass: MovementClassId = presetId.startsWith("smart.") ? "smart" : "dumb";
+    const primitive = getPrimitiveFromPresetId(presetId);
+    groups[movementClass][primitive] ??= [];
+    groups[movementClass][primitive].push(presetId);
+  }
+
+  for (const classGroups of Object.values(groups)) {
+    for (const presets of Object.values(classGroups)) presets.sort();
+  }
+
+  return groups;
+}
+
 export class DevSummoner {
   private panel: HTMLElement | null = null;
   private latestManualSpawnId = 0;
@@ -151,14 +192,58 @@ export class DevSummoner {
     }
     spawnSection.appendChild(enemySelect);
 
-    const behaviorSelect = document.createElement("select");
-    behaviorSelect.id = "ds-behavior";
-    for (const id of Object.keys(EnemyBehaviorPresets)) {
-      const opt = document.createElement("option");
-      opt.value = id; opt.textContent = id;
-      behaviorSelect.appendChild(opt);
-    }
-    spawnSection.appendChild(behaviorSelect);
+    const movementGroups = buildMovementGroups();
+    const movementClassSelect = document.createElement("select");
+    movementClassSelect.id = "ds-movement-class";
+    const primitiveSelect = document.createElement("select");
+    primitiveSelect.id = "ds-movement-primitive";
+    const presetSelect = document.createElement("select");
+    presetSelect.id = "ds-movement-preset";
+
+    const movementClassWrap = createSelectLabel("Movement Class");
+    const primitiveWrap = createSelectLabel("Primitive");
+    const presetWrap = createSelectLabel("Preset");
+    movementClassWrap.appendChild(movementClassSelect);
+    primitiveWrap.appendChild(primitiveSelect);
+    presetWrap.appendChild(presetSelect);
+    spawnSection.appendChild(movementClassWrap);
+    spawnSection.appendChild(primitiveWrap);
+    spawnSection.appendChild(presetWrap);
+
+    const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
+    appendOption(movementClassSelect, "dumb", "Dumb");
+    appendOption(movementClassSelect, "smart", hasSmartPresets ? "Smart" : "Smart (none)", !hasSmartPresets);
+
+    const repopulatePresetSelect = () => {
+      const movementClass = movementClassSelect.value as MovementClassId;
+      const primitive = primitiveSelect.value;
+      const presets = movementGroups[movementClass]?.[primitive] ?? [];
+      presetSelect.replaceChildren();
+      presetSelect.disabled = presets.length === 0;
+      if (presets.length === 0) {
+        appendOption(presetSelect, "", "(none)", true);
+        return;
+      }
+      for (const presetId of presets) appendOption(presetSelect, presetId);
+    };
+
+    const repopulatePrimitiveSelect = () => {
+      const movementClass = movementClassSelect.value as MovementClassId;
+      const primitives = Object.keys(movementGroups[movementClass] ?? {}).sort();
+      primitiveSelect.replaceChildren();
+      primitiveSelect.disabled = primitives.length === 0;
+      if (primitives.length === 0) {
+        appendOption(primitiveSelect, "", "(none)", true);
+        repopulatePresetSelect();
+        return;
+      }
+      for (const primitive of primitives) appendOption(primitiveSelect, primitive);
+      repopulatePresetSelect();
+    };
+
+    movementClassSelect.addEventListener("change", repopulatePrimitiveSelect);
+    primitiveSelect.addEventListener("change", repopulatePresetSelect);
+    repopulatePrimitiveSelect();
 
     const screenYWrap = document.createElement("label");
     screenYWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
@@ -206,7 +291,7 @@ export class DevSummoner {
       this.bus.emitNext(EventType.SPAWN_ENEMY, {
         typeId: enemySelect.value,
         spawn: { x: this.logicW - 40, y: Number(screenY.value) },
-        behaviorPresetId: behaviorSelect.value,
+        behaviorPresetId: presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
       } as any);
     });

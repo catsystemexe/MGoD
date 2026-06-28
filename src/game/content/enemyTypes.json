@@ -228,12 +228,44 @@
       }
     },
      {
-      "id": "turrt_test",
+      "id": "fsm_turret",
       "hp": 6,
       "radius": 18,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
-      "behaviorGraphId": "turret_fsm",
+      "behaviorGraphId": "fsm.turret",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#ff8844",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_hover",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.hover",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#ff8844",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_charge",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.charge",
       "render": {
         "sprite": {
           "id": "enemy.shooter_1.idle",
