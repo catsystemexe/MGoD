@@ -691,14 +691,14 @@ export class DevSummoner {
     const makeParamStepper = (label: string, key: GroupParamKey, defaultValue: number) => {
       let value = defaultValue;
       const wrap = document.createElement("div");
-      wrap.style.cssText = "display:grid;grid-template-columns:42px 1fr;gap:4px;align-items:center;min-width:0;";
+      wrap.style.cssText = "display:grid;grid-template-columns:max-content minmax(0,1fr);gap:1px;align-items:center;min-width:0;";
       const labelNode = document.createElement("span");
       labelNode.textContent = label;
       applyLabelTextStyle(labelNode, "secondary");
       const segment = document.createElement("div");
       segment.setAttribute("role", "spinbutton");
       segment.setAttribute("aria-label", `Group ${label}`);
-      segment.style.cssText = "display:grid;grid-template-columns:24px minmax(24px,1fr) 24px;gap:2px;align-items:center;min-width:0;";
+      segment.style.cssText = "display:grid;grid-template-columns:22px minmax(20px,1fr) 22px;gap:0;align-items:center;min-width:0;";
       const decButton = document.createElement("button");
       const valueLabel = document.createElement("span");
       const incButton = document.createElement("button");
@@ -711,8 +711,8 @@ export class DevSummoner {
       valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:26px;box-sizing:border-box;font-weight:800;";
       styleCountButton(decButton);
       styleCountButton(incButton);
-      decButton.style.minWidth = "24px";
-      incButton.style.minWidth = "24px";
+      decButton.style.minWidth = "22px";
+      incButton.style.minWidth = "22px";
       const refresh = () => {
         value = normalizeGroupStepperValue(key, value, cohesionChoice.value);
         const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
@@ -740,12 +740,12 @@ export class DevSummoner {
     const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
     const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
     const paramRow1 = document.createElement("div");
-    paramRow1.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:center;";
+    paramRow1.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
     paramRow1.appendChild(spacingStepper.wrap);
     paramRow1.appendChild(depthStepper.wrap);
     groupControls.appendChild(paramRow1);
     const paramRow2 = document.createElement("div");
-    paramRow2.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:center;";
+    paramRow2.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
     paramRow2.appendChild(responseStepper.wrap);
     paramRow2.appendChild(catchStepper.wrap);
     groupControls.appendChild(paramRow2);
