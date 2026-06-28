@@ -4,7 +4,7 @@ import type { WorldState } from "../game/data/WorldState";
 import { ENEMY_DEFS } from "../game/defs/EnemyDefs";
 import { EnemyBehaviorPresets } from "../game/enemies/EnemyBehaviorPresets";
 import { BEHAVIOR_GRAPHS } from "../game/content/CONTENT";
-import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS } from "../game/enemies/EnemyGroups";
+import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS, ENEMY_GROUP_PARAM_LIMITS, normalizeEnemyGroupParams } from "../game/enemies/EnemyGroups";
 import type { CohesionId, FormationId } from "../game/enemies/EnemyGroups";
 
 const EMPTY_ENEMY_LAB = "No FSM enemy selected/spawned.";
@@ -331,6 +331,33 @@ export function stepGroupCount(value: unknown, delta: -1 | 1): number {
   return normalizeGroupCount(normalizeGroupCount(value) + delta);
 }
 
+type GroupParamKey = "spacing" | "depth" | "response" | "maxCatchupSpeed";
+
+export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, cohesionId: CohesionId = "rigid"): number {
+  const params = normalizeEnemyGroupParams({
+    formation: {
+      spacing: key === "spacing" ? Number(value) : undefined,
+      depth: key === "depth" ? Number(value) : undefined,
+    },
+    cohesion: {
+      response: key === "response" ? Number(value) : undefined,
+      maxCatchupSpeed: key === "maxCatchupSpeed" ? Number(value) : undefined,
+    },
+  }, cohesionId);
+  if (key === "spacing") return params.formation.spacing;
+  if (key === "depth") return params.formation.depth;
+  if (key === "response") return params.cohesion.response;
+  return params.cohesion.maxCatchupSpeed;
+}
+
+export function stepGroupParamValue(key: GroupParamKey, value: unknown, delta: -1 | 1, cohesionId: CohesionId = "rigid"): number {
+  const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
+    : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
+      : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+        : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+  return normalizeGroupStepperValue(key, normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step, cohesionId);
+}
+
 function isValidEnemyTypeId(typeId: string): boolean {
   return !!ENEMY_DEFS[typeId];
 }
@@ -355,12 +382,14 @@ export function createDevSummonerGroupSpawnPayload(input: {
   formationId: string;
   movementPresetId: string;
   cohesionId: string;
+  params?: CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP]["params"];
 }): CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP] | null {
   if (!isValidEnemyTypeId(input.enemyTypeId)) return null;
   if (!isValidFormationId(input.formationId)) return null;
   if (!isValidCohesionId(input.cohesionId)) return null;
   if (!isValidMovementPresetId(input.movementPresetId)) return null;
   if (!Number.isFinite(input.anchorX) || !Number.isFinite(input.anchorY)) return null;
+  const params = normalizeEnemyGroupParams(input.params, input.cohesionId);
   return {
     enemyTypeId: input.enemyTypeId,
     count: normalizeGroupCount(input.count),
@@ -368,6 +397,7 @@ export function createDevSummonerGroupSpawnPayload(input: {
     formationId: input.formationId,
     movementPresetId: input.movementPresetId,
     cohesionId: input.cohesionId,
+    params,
   };
 }
 
@@ -531,6 +561,7 @@ export class DevSummoner {
     groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
     const makeSegmentedChoice = <T extends string>(label: string, ariaLabel: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
       let value = defaultValue;
+      const listeners: Array<() => void> = [];
       const wrap = createSelectLabel(label);
       const segment = document.createElement("div");
       segment.setAttribute("role", "radiogroup");
@@ -544,6 +575,7 @@ export class DevSummoner {
         button.addEventListener("click", () => {
           value = option.value;
           refresh();
+          for (const listener of listeners) listener();
         });
         segment.appendChild(button);
         if (index > 0) button.style.borderLeft = "0";
@@ -562,7 +594,7 @@ export class DevSummoner {
       };
       refresh();
       wrap.appendChild(segment);
-      return { wrap, get value() { return value; } };
+      return { wrap, get value() { return value; }, addEventListener(listener: () => void) { listeners.push(listener); } };
     };
     const formationChoice = makeSegmentedChoice<FormationId>("Form", "Group formation", ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: id === "line.horizontal" ? "Line" : "Wedge" })), "line.horizontal");
     const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
@@ -571,6 +603,74 @@ export class DevSummoner {
     groupOptionRow.appendChild(formationWrap);
     groupOptionRow.appendChild(cohesionWrap);
     groupControls.appendChild(groupOptionRow);
+
+    const makeParamStepper = (label: string, key: GroupParamKey, defaultValue: number) => {
+      let value = defaultValue;
+      const wrap = createSelectLabel(label);
+      const segment = document.createElement("div");
+      segment.setAttribute("role", "spinbutton");
+      segment.setAttribute("aria-label", `Group ${label}`);
+      segment.style.cssText = "display:grid;grid-template-columns:28px minmax(34px,1fr) 28px;gap:0;align-items:stretch;";
+      const decButton = document.createElement("button");
+      const valueLabel = document.createElement("span");
+      const incButton = document.createElement("button");
+      decButton.type = "button";
+      incButton.type = "button";
+      decButton.textContent = "−";
+      incButton.textContent = "+";
+      decButton.setAttribute("aria-label", `Decrease ${label}`);
+      incButton.setAttribute("aria-label", `Increase ${label}`);
+      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;border-top:1px solid #555;border-bottom:1px solid #555;background:#111;color:#eee;min-height:24px;box-sizing:border-box;";
+      styleCountButton(decButton);
+      styleCountButton(incButton);
+      decButton.style.borderRadius = "2px 0 0 2px";
+      incButton.style.borderRadius = "0 2px 2px 0";
+      incButton.style.borderLeft = "0";
+      const refresh = () => {
+        value = normalizeGroupStepperValue(key, value, cohesionChoice.value);
+        const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
+          : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
+            : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+              : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+        valueLabel.textContent = String(value);
+        segment.setAttribute("aria-valuemin", String(limits.min));
+        segment.setAttribute("aria-valuemax", String(limits.max));
+        segment.setAttribute("aria-valuenow", String(value));
+      };
+      decButton.addEventListener("click", () => { value = stepGroupParamValue(key, value, -1, cohesionChoice.value); refresh(); });
+      incButton.addEventListener("click", () => { value = stepGroupParamValue(key, value, 1, cohesionChoice.value); refresh(); });
+      segment.appendChild(decButton);
+      segment.appendChild(valueLabel);
+      segment.appendChild(incButton);
+      wrap.appendChild(segment);
+      refresh();
+      return { wrap, refresh, get value() { return value; } };
+    };
+
+    const spacingStepper = makeParamStepper("Space", "spacing", ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default);
+    const depthStepper = makeParamStepper("Depth", "depth", ENEMY_GROUP_PARAM_LIMITS.formation.depth.default);
+    const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
+    const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
+    const paramRow1 = document.createElement("div");
+    paramRow1.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    paramRow1.appendChild(spacingStepper.wrap);
+    paramRow1.appendChild(depthStepper.wrap);
+    groupControls.appendChild(paramRow1);
+    const paramRow2 = document.createElement("div");
+    paramRow2.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    paramRow2.appendChild(responseStepper.wrap);
+    paramRow2.appendChild(catchStepper.wrap);
+    groupControls.appendChild(paramRow2);
+    const refreshGroupParamVisibility = () => {
+      depthStepper.wrap.style.display = formationChoice.value === "wedge" ? "flex" : "none";
+      spacingStepper.refresh();
+      depthStepper.refresh();
+      responseStepper.refresh();
+      catchStepper.refresh();
+    };
+    formationChoice.addEventListener(refreshGroupParamVisibility);
+    cohesionChoice.addEventListener(refreshGroupParamVisibility);
+    refreshGroupParamVisibility();
 
     const movementGroups = buildMovementGroups();
     const makeMovementControls = (prefix: string, labelText: string, primitiveLabel = "Primitive") => {
@@ -752,6 +852,16 @@ export class DevSummoner {
           formationId: formationChoice.value,
           movementPresetId: groupMovement.presetSelect.value,
           cohesionId: cohesionChoice.value,
+          params: {
+            formation: {
+              spacing: spacingStepper.value,
+              depth: depthStepper.value,
+            },
+            cohesion: {
+              response: responseStepper.value,
+              maxCatchupSpeed: catchStepper.value,
+            },
+          },
         });
         if (!payload) {
           console.warn("[DevSummoner] invalid group spawn payload");

@@ -76,6 +76,10 @@ export type CMEventMap = {
     movementPresetId: string;
     cohesionId: string;
     spacing?: number;
+    params?: {
+      formation?: { spacing?: number; depth?: number };
+      cohesion?: { response?: number; maxCatchupSpeed?: number };
+    };
   };
 
   [EventType.PLAYER_FIRE_PRIMARY]: { owner: EntityRef };
