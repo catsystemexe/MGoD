@@ -82,10 +82,19 @@ Important current properties:
 * Node-compatible smoke tests.
 * Developer UI exposed through runtime debug integration.
 
-The local integration branch may be named work, but this must be verified at the start of every session.
+The repository uses four branch levels:
 
-Do not assume that main, master, or the remote default branch is the correct pull-request base.
+- `main` — protected long-term vault branch.
+- `work` — current integrated state of the developing project.
+- `X` — one thematic working branch created from `work`.
+- `Y` — one short-lived Codex task branch created from `X`.
 
+Expected flow:
+
+
+Y → pull request → X
+X → manual merge → work
+work → manual milestone merge → main
 ⸻
 
 5. Repository map
@@ -1103,11 +1112,17 @@ Check for:
 
 Phase 7 — Commit
 
-Create one focused commit when the task is complete and validation is understood.
+Commit the focused implementation on the current Codex task branch `Y`.
+
+Do not commit directly to `X`, `work`, or `main` during an ordinary Codex session
 
 Phase 8 — Pull request
 
-Create or prepare one PR against the verified integration branch when tooling and remote configuration allow it.
+Create or prepare one pull request:
+
+head: "Y"
+
+base: "X"
 
 Phase 9 — Report
 
@@ -1414,11 +1429,17 @@ Validation
 
 Git
 
-* Working tree contains only expected changes.
-* One focused commit was created when appropriate.
-* Commit message describes the actual change.
-* PR base was verified.
-* One focused PR was created or prepared when possible.
+
+
+* The task was performed on a focused Codex task branch `Y`.
+* `Y` originated from the intended thematic branch `X`.
+* The working tree contains only expected task changes.
+* A focused commit was created when appropriate.
+* The commit message describes the actual change.
+* The pull-request head is `Y`.
+* The pull-request base is `X`.
+* No ordinary Codex task pull request targets `work` or `main`.
+* Higher-level merges `X → work` and `work → main` remain under manual maintainer control.
 
 Reporting
 
@@ -1668,6 +1689,7 @@ Use this structure for implementation tasks:
 
 Implemented
 - concise description
+
 Files changed
 - path
 - path
@@ -1675,10 +1697,19 @@ Validation
 - ✅ command — result
 - ❌ command — exact failure
 - ⚠️ limitation or pre-existing failure
+
 Commit
 - <sha> <message>
+
+Branch state
+- thematic branch X: <branch>
+- Codex task branch Y: <branch>
+
 Pull request
-- <PR or prepared base/head information>
+- head: <Y>
+- base: <X>
+- status: created / prepared / unavailable
+
 Risks / follow-up
 - only relevant remaining risks
 
