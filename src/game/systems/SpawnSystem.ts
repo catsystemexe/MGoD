@@ -13,6 +13,7 @@ import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/Ene
 
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
+import { EnemyGroupRegistry, formationOffset, normalizeFormationId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
 
 type Vec2 = { x: number; y: number };
 import type { WorldState } from "../data/WorldState";
@@ -89,6 +90,7 @@ export interface EnemyEntity extends BaseEntity {
   behaviorId: EnemyBehaviorId;
   behavior: EnemyBehaviorParams;
   bState: EnemyBehaviorRuntime;
+  group?: EnemyGroupMembership;
 }
 
 export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | EnemyEntity;
@@ -98,6 +100,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
         private readonly store: EntityStore<SpawnableEntity>,
         private readonly cfg: SpawnSystemConfig,
         private readonly world: WorldState,
+        private readonly groups?: EnemyGroupRegistry,
       ) {
     if (typeof this.cfg?.rng01 !== "function") throw new Error(`[SpawnSystem] cfg.rng01 must be a function`);
     if (!this.cfg.logicSize || typeof this.cfg.logicSize.w !== "number" || typeof this.cfg.logicSize.h !== "number") {
@@ -205,90 +208,49 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
             break;
           }
 
+
+          case EventType.SPAWN_ENEMY_GROUP: {
+            const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP];
+            if (!this.groups) break;
+            const count = Math.max(0, Math.floor(Number(p.count ?? 0)));
+            const enemyTypeId = String(p.enemyTypeId);
+            if (count <= 0 || !ENEMY_DEFS[enemyTypeId as EnemyTypeId]) break;
+
+            const anchor = { x: Number(p.anchor?.x ?? 0), y: Number(p.anchor?.y ?? 0) };
+            const spacing = typeof p.spacing === "number" ? p.spacing : undefined;
+            const formationId = normalizeFormationId(String(p.formationId));
+            const groupId = this.groups.create({
+              enemyTypeId,
+              count,
+              anchor,
+              formationId,
+              movementPresetId: String(p.movementPresetId),
+              cohesionId: String(p.cohesionId),
+              spacing,
+            });
+
+            let spawnedCount = 0;
+            for (let slotIndex = 0; slotIndex < count; slotIndex++) {
+              const offset = formationOffset(formationId, slotIndex, count, spacing);
+              try {
+                this.spawnEnemy({
+                  typeId: enemyTypeId,
+                  spawn: { x: anchor.x + offset.x, y: anchor.y + offset.y },
+                  behaviorPresetId: "none.hold",
+                  spawnOrdinal: slotIndex,
+                  group: { groupId, slotIndex },
+                });
+                spawnedCount++;
+              } catch (err) {
+                if (spawnedCount === 0) this.groups.remove(groupId);
+                break;
+              }
+            }
+            break;
+          }
+
                 case EventType.SPAWN_ENEMY: {
-            const p = e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY];
-            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
-              console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
-            }
-          const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
-
-          const spawnOrdinal = (typeof (p as any)?.spawnOrdinal === "number" && Number.isFinite((p as any).spawnOrdinal))
-          ? (p as any).spawnOrdinal
-          : 0;
-
-          const spawnAgeSec =
-            (typeof (p as any)?.spawnAgeSec === "number" && Number.isFinite((p as any).spawnAgeSec) && (p as any).spawnAgeSec > 0)
-              ? (p as any).spawnAgeSec
-              : 0;
-          
-const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
-if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
-
-const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.radius > 0) ? def.radius : 4;
-
-              const spawnPos =
-                (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
-                  ? { x: Number(p.spawn.x), y: Number(p.spawn.y) }
-                  : this.pickEdgeSpawn(r);
-
-          const forcedPresetId =
-            (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
-
-          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.hold") as any) as EnemyBehaviorPresetId;
-          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.hold"];
-
-          const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
-          const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
-
-          // Unified contract: all gameplay entities live in WORLD space.
-          // Enemy spawn patterns are authored viewport-relative (where on screen we
-          // want them to appear), so convert pattern -> world ONCE here by adding the
-          // current scroll. Projectiles/bombs need no such conversion: their origin
-          // already comes from the player (WORLD) via WeaponSystem.
-          const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
-          const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
-          this.store.spawn((ent: any) => {
-            ent.kind = "enemy";
-            ent.typeId = p.typeId as EnemyTypeId;
-            ent.waveId = waveId;
-            if (typeof (p as any).devManualSpawnId === "number") {
-              ent.devManualSpawnId = (p as any).devManualSpawnId;
-            }
-
-            delete ent.spriteId;
-            ent.animId = "";
-
-            // ✅ BE V1 deterministic index
-            ent.spawnOrdinal = spawnOrdinal;
-            // ✅ BE V1 deterministic index
-            
-            // CLONE + INIT PREV (KEY FIX)
-            ent.pos = { x, y };
-            ent.posPrev = { x, y };
-
-            ent.vel = { x: 0, y: 0 };
-            ent.hp = def.hp;
-            ent.maxHp = def.hp;
-            ent.radius = r;
-            ent.render = materializeEnemyAppearance(def.render);
-// OPTIONAL AI overlay (disabled unless def.ai exists)
-            ent.ai = (def as any).ai ? { ...(def as any).ai } : undefined;
-            ent.aiWeight = typeof (def as any).aiWeight === "number" ? (def as any).aiWeight : 0;
-            ent.aiWeightTarget = ent.aiWeight;
-            ent.aiEaseSec = typeof (def as any).aiEaseSec === "number" ? (def as any).aiEaseSec : 0.12;
-
-            ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
-            ent.behavior = { ...(preset.params ?? {}) };
-            ent.bState = { t: spawnAgeSec };
-
-            beh?.init?.(ent);
-
-            // If init moved pos, keep prev in sync (prevents spawn pop)
-            ent.posPrev.x = ent.pos.x;
-            ent.posPrev.y = ent.pos.y;
-
-            ent.pendingKill = false;
-          });
+            this.spawnEnemy(e.payload as CMEventMap[typeof EventType.SPAWN_ENEMY]);
           break;
         }
 
@@ -323,6 +285,81 @@ const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.
       }
     }
   }
+
+
+      private spawnEnemy(p: CMEventMap[typeof EventType.SPAWN_ENEMY] & { group?: EnemyGroupMembership }): EntityRef {
+            if ((globalThis as any).__DEV__ && Math.random() < 0.03) {
+              console.log("[SPAWN_SYS][IN]", { typeId: (p as any)?.typeId, spawn: (p as any)?.spawn, waveId: (p as any)?.waveId });
+            }
+          const waveId = (typeof p?.waveId === "string") ? p.waveId : undefined;
+
+          const spawnOrdinal = (typeof (p as any)?.spawnOrdinal === "number" && Number.isFinite((p as any).spawnOrdinal))
+          ? (p as any).spawnOrdinal
+          : 0;
+
+          const spawnAgeSec =
+            (typeof (p as any)?.spawnAgeSec === "number" && Number.isFinite((p as any).spawnAgeSec) && (p as any).spawnAgeSec > 0)
+              ? (p as any).spawnAgeSec
+              : 0;
+          
+const def = ENEMY_DEFS[p.typeId as EnemyTypeId];
+if (!def) throw new Error(`[SpawnSystem] Unknown enemy typeId: ${String(p.typeId)}`);
+
+const r = (typeof def.radius === "number" && Number.isFinite(def.radius) && def.radius > 0) ? def.radius : 4;
+
+              const spawnPos =
+                (p?.spawn && typeof p.spawn.x === "number" && typeof p.spawn.y === "number")
+                  ? { x: Number(p.spawn.x), y: Number(p.spawn.y) }
+                  : this.pickEdgeSpawn(r);
+
+          const forcedPresetId =
+            (typeof p?.behaviorPresetId === "string" && p.behaviorPresetId.length) ? p.behaviorPresetId : undefined;
+
+          const presetId = ((forcedPresetId ?? def.behaviorPreset ?? "none.hold") as any) as EnemyBehaviorPresetId;
+          const preset = EnemyBehaviorPresets[presetId] ?? EnemyBehaviorPresets["none.hold"];
+
+          const behaviorId = (preset.behaviorId ?? "none") as EnemyBehaviorId;
+          const beh = EnemyBehaviorDB[behaviorId] ?? EnemyBehaviorDB["none"];
+
+          const x = Number(spawnPos.x) + Number(this.world?.scrollX ?? 0);
+          const y = Number(spawnPos.y) + Number(this.world?.scrollY ?? 0);
+          const spawned = this.store.spawn((ent: any) => {
+            ent.kind = "enemy";
+            ent.typeId = p.typeId as EnemyTypeId;
+            ent.waveId = waveId;
+            if (typeof (p as any).devManualSpawnId === "number") {
+              ent.devManualSpawnId = (p as any).devManualSpawnId;
+            }
+
+            delete ent.spriteId;
+            ent.animId = "";
+            ent.spawnOrdinal = spawnOrdinal;
+            ent.pos = { x, y };
+            ent.posPrev = { x, y };
+            ent.vel = { x: 0, y: 0 };
+            ent.hp = def.hp;
+            ent.maxHp = def.hp;
+            ent.radius = r;
+            ent.render = materializeEnemyAppearance(def.render);
+            ent.ai = (def as any).ai ? { ...(def as any).ai } : undefined;
+            ent.aiWeight = typeof (def as any).aiWeight === "number" ? (def as any).aiWeight : 0;
+            ent.aiWeightTarget = ent.aiWeight;
+            ent.aiEaseSec = typeof (def as any).aiEaseSec === "number" ? (def as any).aiEaseSec : 0.12;
+            ent.behaviorId = (EnemyBehaviorDB[behaviorId] ? behaviorId : "none") as EnemyBehaviorId;
+            ent.behavior = { ...(preset.params ?? {}) };
+            ent.bState = { t: spawnAgeSec };
+            beh?.init?.(ent);
+            ent.posPrev.x = ent.pos.x;
+            ent.posPrev.y = ent.pos.y;
+            ent.pendingKill = false;
+          });
+          if (p.group && this.groups) {
+            const membership = this.groups.addMember(p.group.groupId, spawned, p.group.slotIndex);
+            const ent = this.store.get(spawned) as any;
+            if (ent && membership) ent.group = membership;
+          }
+          return spawned;
+      }
 
       private pickEdgeSpawn(radius: number): Vec2 {
         const w = this.cfg.logicSize.w;

@@ -9,6 +9,7 @@ import type { EnemyBehaviorId } from "../enemies/EnemyBehaviorTypes";
 import { ENEMY_DEFS, getAttackProfile } from "../defs/EnemyDefs";
 import { updateAttack } from "../enemies/AttackController";
 import { BEHAVIOR_GRAPHS } from "../content/CONTENT";
+import type { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
@@ -55,6 +56,7 @@ export class EnemySystem {
     private readonly logicW: number,
     private readonly logicH: number,
     private readonly world: { scrollY: number },
+    private readonly groups?: EnemyGroupRegistry,
   ) {}
 
   update(ctx: TickContext): void {
@@ -70,6 +72,8 @@ export class EnemySystem {
       const y = Number(e.pos.y);
       if (Number.isFinite(x) && Number.isFinite(y)) playerPos = { x, y };
     });
+
+    this.groups?.updateAnchors(dt, { playerPos, logicW: W, logicH: H });
 
     const scrollX = safeNum((this.world as any)?.scrollX, 0);
 
@@ -204,6 +208,8 @@ export class EnemySystem {
         return;
       }
 
+      if (e.group) this.groups?.applyMemberCohesion(e, e.group, dt);
+
       // sanitize AFTER behavior (repair)
       if (!isFiniteNum(e.pos?.x) || !isFiniteNum(e.pos?.y)) {
         if (DEV) console.error("[EnemyBehavior] invalid pos -> reset", bid, e.pos, e);
@@ -252,5 +258,6 @@ export class EnemySystem {
         if (e.pos.x < camX - r - xBand) this.store.markKill(ref);
         if (e.pos.x > camX + W + r + xBand) this.store.markKill(ref);
     });
+    this.groups?.reconcile(this.store);
   }
 }
