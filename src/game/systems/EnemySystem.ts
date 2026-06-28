@@ -63,11 +63,12 @@ export class EnemySystem {
     const W = this.logicW;
     const H = this.logicH;
 
-    let playerPos = { x: 0, y: 0 };
+    let playerPos: { x: number; y: number } | null = null;
     this.store.debugForEachAlive((_ref, e: any) => {
-      if (e?.kind === "player" && !e.pendingKill && e.pos) {
-        playerPos = { x: Number(e.pos.x ?? 0), y: Number(e.pos.y ?? 0) };
-      }
+      if (e?.kind !== "player" || e.pendingKill || !e.pos) return;
+      const x = Number(e.pos.x);
+      const y = Number(e.pos.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) playerPos = { x, y };
     });
 
     const scrollX = safeNum((this.world as any)?.scrollX, 0);
@@ -178,11 +179,17 @@ export class EnemySystem {
       // run behavior safely
       try {
         // 1) update internal state
-        behavior?.update?.(e, ctx);
+        const behaviorCtx = {
+          ...(ctx as any),
+          playerPos,
+          logicW: W,
+          logicH: H,
+        };
+        behavior?.update?.(e, behaviorCtx as any);
 
         // 2) V1: if behavior provides target, derive velocity here (single authority)
         if (behavior?.getTarget) {
-          const t = behavior.getTarget(e, ctx);
+          const t = behavior.getTarget(e, behaviorCtx as any);
           if (t && Number.isFinite(t.x) && Number.isFinite(t.y)) {
             const px = safeNum(e.pos?.x, 0);
             const py = safeNum(e.pos?.y, 0);
@@ -224,7 +231,7 @@ export class EnemySystem {
         updateAttack({
           ent: e,
           profile: attackProfile,
-          playerPos,
+          playerPos: playerPos ?? { x: 0, y: 0 },
           store: this.store,
           scrollX,
           logicW: W,

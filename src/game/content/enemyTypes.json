@@ -340,6 +340,56 @@
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
     }
+    ,
+     {
+      "id": "fsm_smart_tracker",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_tracker",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#55ccff",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_smart_aligner",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_aligner",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#ffcc55",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_smart_evader",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_evader",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#cc88ff",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    }
+
 
     
   ]

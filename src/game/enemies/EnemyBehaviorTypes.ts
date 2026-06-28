@@ -20,6 +20,9 @@ export type EnemyBehaviorId =
   "sine" |
   "zigzag" |
   "loop" |
+  "track" |
+  "align" |
+  "evade" |
   "invaders";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
@@ -56,6 +59,9 @@ export const ENEMY_BEHAVIOR_IDS = [
   "sine",
   "zigzag",
   "loop",
+  "track",
+  "align",
+  "evade",
   "invaders",
 ] as const;
 
