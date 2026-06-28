@@ -15,6 +15,77 @@ type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
 
+const CONTROL_HEIGHT_PX = 26;
+const CONTROL_RADIUS_PX = 2;
+const CONTROL_FONT = "12px monospace";
+const CONTROL_BG = "#111";
+const CONTROL_BORDER = "1px solid rgba(255,255,255,0.24)";
+const LABEL_WEIGHT = "800";
+
+function applyControlBaseStyle(el: HTMLElement): void {
+  el.style.boxSizing = "border-box";
+  el.style.minHeight = `${CONTROL_HEIGHT_PX}px`;
+  el.style.font = CONTROL_FONT;
+  el.style.color = "#eee";
+  el.style.background = CONTROL_BG;
+  el.style.border = CONTROL_BORDER;
+  el.style.borderRadius = `${CONTROL_RADIUS_PX}px`;
+}
+
+function applyNativeSelectStyle(select: HTMLSelectElement): void {
+  applyControlBaseStyle(select);
+  select.style.width = "100%";
+  select.style.minWidth = "0";
+  select.style.padding = "2px 18px 2px 5px";
+  select.style.cursor = "pointer";
+  select.style.appearance = "none";
+  select.style.setProperty("-webkit-appearance", "none");
+  select.style.textOverflow = "ellipsis";
+  select.style.overflow = "hidden";
+  select.style.whiteSpace = "nowrap";
+}
+
+function applyValueInputStyle(input: HTMLInputElement): void {
+  applyControlBaseStyle(input);
+  input.style.width = "52px";
+  input.style.padding = "2px 4px";
+  input.style.textAlign = "center";
+  input.style.appearance = "textfield";
+  input.style.setProperty("-webkit-appearance", "none");
+}
+
+function applyLabelTextStyle(el: HTMLElement, prominence: "primary" | "secondary" = "primary"): void {
+  el.style.fontFamily = "monospace";
+  el.style.fontSize = "12px";
+  el.style.fontWeight = LABEL_WEIGHT;
+  el.style.color = prominence === "primary" ? "#f2f2f2" : "#d7d7d7";
+  el.style.opacity = prominence === "primary" ? "0.98" : "0.88";
+  el.style.lineHeight = "1.05";
+  el.style.whiteSpace = "nowrap";
+}
+
+function applyInlineStepperButtonStyle(button: HTMLButtonElement): void {
+  button.style.cssText = [
+    "font:12px monospace",
+    "min-width:24px",
+    "min-height:26px",
+    "padding:0 5px",
+    "border:0",
+    "border-radius:2px",
+    "background:transparent",
+    "color:#ddd",
+    "cursor:pointer",
+    "box-sizing:border-box",
+  ].join(";");
+}
+
+function createSectionGap(): HTMLDivElement {
+  const gap = document.createElement("div");
+  gap.style.cssText = "height:4px;min-height:4px;";
+  gap.setAttribute("aria-hidden", "true");
+  return gap;
+}
+
 const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "range", "orbit", "invaders", "none"] as const;
 const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
 
@@ -116,12 +187,7 @@ function createSelectLabel(text: string, prominence: "primary" | "secondary" = "
   label.style.cssText = "display:flex;flex-direction:column;gap:2px;min-width:0;";
   const span = document.createElement("span");
   span.textContent = text;
-  span.style.cssText = [
-    "font-weight:700",
-    "opacity:" + (prominence === "primary" ? "0.95" : "0.82"),
-    "line-height:1.05",
-    "white-space:nowrap",
-  ].join(";");
+  applyLabelTextStyle(span, prominence);
   label.appendChild(span);
   return label;
 }
@@ -178,10 +244,11 @@ function createCompactSelect(id: string): {
     "box-sizing:border-box",
     "text-align:left",
     "font:12px monospace",
-    "padding:2px 18px 2px 4px",
+    "min-height:26px",
+    "padding:2px 18px 2px 5px",
     "background:#111",
     "color:#eee",
-    "border:1px solid #555",
+    "border:1px solid rgba(255,255,255,0.24)",
     "border-radius:2px",
     "cursor:pointer",
   ].join(";");
@@ -246,6 +313,7 @@ function createCompactSelect(id: string): {
         "box-sizing:border-box",
         "text-align:left",
         "font:12px monospace",
+        "min-height:26px",
         "padding:3px 5px",
         "background:" + (option.value === value ? "#26384f" : "#111"),
         "color:#eee",
@@ -445,7 +513,7 @@ export class DevSummoner {
       "position:fixed","top:8px","right:8px","z-index:9999",
       "background:rgba(0,0,0,0.75)","border:1px solid #444",
       "color:#eee","font:12px monospace","padding:3px",
-      "border-radius:2px","display:flex","flex-direction:column","gap:3px",
+      "border-radius:2px","display:flex","flex-direction:column","gap:5px",
       "width:220px",
       "min-width:220px",
       "max-width:220px",
@@ -459,19 +527,19 @@ export class DevSummoner {
     panel.appendChild(title);
 
     const spawnSection = document.createElement("div");
-    spawnSection.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    spawnSection.style.cssText = "display:flex;flex-direction:column;gap:6px;";
     panel.appendChild(spawnSection);
 
     const spawnTitle = document.createElement("div");
     spawnTitle.textContent = "Spawn";
-    spawnTitle.style.cssText = "font-weight:bold;opacity:0.9;";
+    spawnTitle.style.cssText = "font-weight:800;opacity:0.95;";
     spawnSection.appendChild(spawnTitle);
 
     const modeRow = document.createElement("div");
     modeRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
     const modeLabel = document.createElement("span");
     modeLabel.textContent = "Spawn Mode";
-    modeLabel.style.cssText = "font-weight:700;opacity:0.95;white-space:nowrap;line-height:1.05;";
+    applyLabelTextStyle(modeLabel);
     const modeSegment = document.createElement("div");
     modeSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
     const enemyModeButton = document.createElement("button");
@@ -486,8 +554,9 @@ export class DevSummoner {
     const styleSegmentButton = (button: HTMLButtonElement, active: boolean, disabled = false) => {
       button.style.cssText = [
         "font:12px monospace",
+        "min-height:26px",
         "padding:2px 6px",
-        "border:1px solid #555",
+        "border:1px solid rgba(255,255,255,0.24)",
         "background:" + (active ? "#26384f" : "#111"),
         "color:" + (disabled ? "#777" : active ? "#fff" : "#bbb"),
         "cursor:" + (disabled ? "not-allowed" : "pointer"),
@@ -497,9 +566,9 @@ export class DevSummoner {
     };
 
     const enemyControls = document.createElement("div");
-    enemyControls.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    enemyControls.style.cssText = "display:flex;flex-direction:column;gap:6px;";
     const groupControls = document.createElement("div");
-    groupControls.style.cssText = "display:none;flex-direction:column;gap:3px;";
+    groupControls.style.cssText = "display:none;flex-direction:column;gap:6px;";
     spawnSection.appendChild(enemyControls);
     spawnSection.appendChild(groupControls);
 
@@ -510,25 +579,35 @@ export class DevSummoner {
       opt.value = id; opt.textContent = id;
       enemySelect.appendChild(opt);
     }
-    enemyControls.appendChild(enemySelect);
+    applyNativeSelectStyle(enemySelect);
+    const enemyTypeRow = document.createElement("label");
+    enemyTypeRow.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;align-items:center;min-width:0;";
+    const enemyTypeLabel = document.createElement("span");
+    enemyTypeLabel.textContent = "Type";
+    applyLabelTextStyle(enemyTypeLabel);
+    enemyTypeRow.appendChild(enemyTypeLabel);
+    enemyTypeRow.appendChild(enemySelect);
+    enemyControls.appendChild(enemyTypeRow);
+    enemyControls.appendChild(createSectionGap());
 
     const groupTypeRow = document.createElement("div");
-    groupTypeRow.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:end;min-width:0;";
-    const groupEnemyWrap = createSelectLabel("Type");
+    groupTypeRow.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px;align-items:center;min-width:0;";
+    const groupTypeLabel = document.createElement("span");
+    groupTypeLabel.textContent = "Type";
+    applyLabelTextStyle(groupTypeLabel);
     const groupEnemySelect = document.createElement("select");
     groupEnemySelect.id = "ds-group-enemy";
-    groupEnemySelect.style.cssText = "width:100%;min-width:0;box-sizing:border-box;";
+    applyNativeSelectStyle(groupEnemySelect);
     for (const id of Object.keys(ENEMY_DEFS)) appendOption(groupEnemySelect, id);
-    groupEnemyWrap.style.minWidth = "0";
-    groupEnemyWrap.appendChild(groupEnemySelect);
-    groupTypeRow.appendChild(groupEnemyWrap);
+    groupTypeRow.appendChild(groupTypeLabel);
+    groupTypeRow.appendChild(groupEnemySelect);
 
     let groupCount = 5;
     const countSegment = document.createElement("div");
     countSegment.id = "ds-group-count";
     countSegment.setAttribute("role", "spinbutton");
     countSegment.setAttribute("aria-label", "Group count");
-    countSegment.style.cssText = "display:grid;grid-template-columns:26px 24px 26px;gap:2px;align-items:center;align-self:end;min-width:82px;";
+    countSegment.style.cssText = "display:grid;grid-template-columns:24px 22px 24px;gap:1px;align-items:center;align-self:end;min-width:72px;";
     const countDecButton = document.createElement("button");
     const countValue = document.createElement("span");
     const countIncButton = document.createElement("button");
@@ -539,9 +618,9 @@ export class DevSummoner {
     countDecButton.setAttribute("aria-label", "Decrease group count");
     countIncButton.setAttribute("aria-label", "Increase group count");
     countValue.textContent = String(groupCount);
-    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:24px;box-sizing:border-box;font-weight:700;";
+    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:26px;box-sizing:border-box;font-weight:800;";
     const styleCountButton = (button: HTMLButtonElement) => {
-      button.style.cssText = "font:12px monospace;padding:2px 6px;border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.06);color:#ddd;cursor:pointer;box-sizing:border-box;min-width:26px;min-height:24px;border-radius:2px;";
+      applyInlineStepperButtonStyle(button);
     };
     const refreshGroupCount = () => {
       groupCount = normalizeGroupCount(groupCount);
@@ -554,14 +633,13 @@ export class DevSummoner {
     countIncButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, 1); refreshGroupCount(); });
     styleCountButton(countDecButton);
     styleCountButton(countIncButton);
-    countDecButton.style.borderRadius = "2px";
-    countIncButton.style.borderRadius = "2px";
     countSegment.appendChild(countDecButton);
     countSegment.appendChild(countValue);
     countSegment.appendChild(countIncButton);
     refreshGroupCount();
     groupTypeRow.appendChild(countSegment);
     groupControls.appendChild(groupTypeRow);
+    groupControls.appendChild(createSectionGap());
 
     const groupOptionRow = document.createElement("div");
     groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
@@ -616,7 +694,7 @@ export class DevSummoner {
       wrap.style.cssText = "display:grid;grid-template-columns:42px 1fr;gap:4px;align-items:center;min-width:0;";
       const labelNode = document.createElement("span");
       labelNode.textContent = label;
-      labelNode.style.cssText = "font-weight:700;opacity:0.82;line-height:1.05;white-space:nowrap;";
+      applyLabelTextStyle(labelNode, "secondary");
       const segment = document.createElement("div");
       segment.setAttribute("role", "spinbutton");
       segment.setAttribute("aria-label", `Group ${label}`);
@@ -630,7 +708,7 @@ export class DevSummoner {
       incButton.textContent = "+";
       decButton.setAttribute("aria-label", `Decrease ${label}`);
       incButton.setAttribute("aria-label", `Increase ${label}`);
-      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:24px;box-sizing:border-box;font-weight:700;";
+      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:26px;box-sizing:border-box;font-weight:800;";
       styleCountButton(decButton);
       styleCountButton(incButton);
       decButton.style.minWidth = "24px";
@@ -671,6 +749,7 @@ export class DevSummoner {
     paramRow2.appendChild(responseStepper.wrap);
     paramRow2.appendChild(catchStepper.wrap);
     groupControls.appendChild(paramRow2);
+    groupControls.appendChild(createSectionGap());
     const refreshGroupParamVisibility = () => {
       depthStepper.wrap.style.visibility = formationChoice.value === "wedge" ? "visible" : "hidden";
       depthStepper.wrap.setAttribute("aria-hidden", String(formationChoice.value !== "wedge"));
@@ -692,7 +771,7 @@ export class DevSummoner {
       movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
       const movementClassLabel = document.createElement("span");
       movementClassLabel.textContent = labelText;
-      movementClassLabel.style.cssText = "font-weight:700;opacity:0.95;white-space:nowrap;line-height:1.05;";
+      applyLabelTextStyle(movementClassLabel);
       const movementClassSegment = document.createElement("div");
       movementClassSegment.id = `${prefix}-movement-class`;
       movementClassSegment.setAttribute("role", "radiogroup");
@@ -768,74 +847,63 @@ export class DevSummoner {
     const enemyMovement = makeMovementControls("ds", "Movement");
     enemyControls.appendChild(enemyMovement.movementClassRow);
     enemyControls.appendChild(enemyMovement.movementPresetRow);
+    enemyControls.appendChild(createSectionGap());
     const groupMovement = makeMovementControls("ds-group", "Move", "Prim");
     groupControls.appendChild(groupMovement.movementClassRow);
     groupControls.appendChild(groupMovement.movementPresetRow);
+    groupControls.appendChild(createSectionGap());
 
-    const screenYWrap = document.createElement("label");
-    screenYWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
-    const screenYLabel = document.createElement("span");
-    screenYLabel.textContent = "screenY: 260";
-    const screenYRow = document.createElement("div");
-    screenYRow.style.cssText = "display:grid;grid-template-columns:1fr 56px;gap:4px;align-items:center;";
-    const screenY = document.createElement("input");
-    screenY.id = "ds-screen-y";
-    screenY.type = "range";
-    screenY.min = "0";
-    screenY.max = String(Math.max(0, this.logicH));
-    screenY.step = "1";
-    screenY.value = "260";
-    screenY.style.width = "100%";
-    const screenYInput = document.createElement("input");
-    screenYInput.id = "ds-screen-y-input";
-    screenYInput.type = "number";
-    screenYInput.min = screenY.min;
-    screenYInput.max = screenY.max;
-    screenYInput.step = screenY.step;
-    screenYInput.value = screenY.value;
-    screenYInput.style.cssText = "width:56px;box-sizing:border-box;";
-    const setScreenY = (value: unknown) => {
-      const maxY = Math.max(0, this.logicH);
-      const raw = Number(value);
-      const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
-      screenY.value = String(y);
-      screenYInput.value = String(y);
-      screenYLabel.textContent = `screenY: ${formatNum(y)}`;
+    const createSpawnYControl = (idPrefix: string) => {
+      const wrap = document.createElement("label");
+      wrap.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr) 52px;gap:6px;align-items:center;min-width:0;";
+      const label = document.createElement("span");
+      label.textContent = "Y Spawn";
+      applyLabelTextStyle(label);
+      const slider = document.createElement("input");
+      slider.id = `${idPrefix}-screen-y`;
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = String(Math.max(0, this.logicH));
+      slider.step = "1";
+      slider.value = "260";
+      slider.style.cssText = "width:100%;min-width:0;box-sizing:border-box;accent-color:#6f8fc0;";
+      const valueInput = document.createElement("input");
+      valueInput.id = `${idPrefix}-screen-y-input`;
+      valueInput.type = "number";
+      valueInput.min = slider.min;
+      valueInput.max = slider.max;
+      valueInput.step = slider.step;
+      valueInput.value = slider.value;
+      applyValueInputStyle(valueInput);
+      const setValue = (value: unknown) => {
+        const maxY = Math.max(0, this.logicH);
+        const raw = Number(value);
+        const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
+        slider.value = String(y);
+        valueInput.value = String(y);
+      };
+      slider.addEventListener("input", () => setValue(slider.value));
+      valueInput.addEventListener("input", () => setValue(valueInput.value));
+      wrap.appendChild(label);
+      wrap.appendChild(slider);
+      wrap.appendChild(valueInput);
+      setValue(260);
+      return { wrap, slider, valueInput, setValue, get value() { return Number(slider.value); } };
     };
-    screenY.addEventListener("input", () => setScreenY(screenY.value));
-    screenYInput.addEventListener("input", () => setScreenY(screenYInput.value));
-    screenYRow.appendChild(screenY);
-    screenYRow.appendChild(screenYInput);
-    screenYWrap.appendChild(screenYLabel);
-    screenYWrap.appendChild(screenYRow);
-    enemyControls.appendChild(screenYWrap);
 
-    const groupYWrap = createSelectLabel("Y", "secondary");
-    const groupYInput = document.createElement("input");
-    groupYInput.id = "ds-group-screen-y";
-    groupYInput.type = "number";
-    groupYInput.min = "0";
-    groupYInput.max = String(Math.max(0, this.logicH));
-    groupYInput.step = "1";
-    groupYInput.value = "260";
-    groupYInput.style.cssText = "width:100%;box-sizing:border-box;";
-    const setGroupY = (value: unknown) => {
-      const maxY = Math.max(0, this.logicH);
-      const raw = Number(value);
-      const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
-      groupYInput.value = String(y);
-    };
-    groupYInput.addEventListener("change", () => setGroupY(groupYInput.value));
-    groupYWrap.appendChild(groupYInput);
-    groupControls.appendChild(groupYWrap);
+    const screenYControl = createSpawnYControl("ds");
+    enemyControls.appendChild(screenYControl.wrap);
+
+    const groupYControl = createSpawnYControl("ds-group");
+    groupControls.appendChild(groupYControl.wrap);
 
     const btn = document.createElement("button");
     btn.textContent = "RELEASE";
-    btn.style.cssText = "cursor:pointer;margin-top:1px;font-weight:700;min-height:26px;";
+    btn.style.cssText = "cursor:pointer;margin-top:2px;font:12px monospace;font-weight:800;min-height:28px;background:#26384f;color:#fff;border:1px solid rgba(255,255,255,0.28);border-radius:2px;";
     const refreshModeButtons = () => {
       enemyModeButton.type = "button";
       groupModeButton.type = "button";
-      enemyModeButton.textContent = "Enemy";
+      enemyModeButton.textContent = "Single";
       groupModeButton.textContent = "Group";
       enemyModeButton.setAttribute("aria-pressed", String(spawnMode === "enemy"));
       groupModeButton.setAttribute("aria-pressed", String(spawnMode === "group"));
@@ -854,7 +922,7 @@ export class DevSummoner {
     btn.addEventListener("click", () => {
       this.latestManualSpawnId += 1;
       if (spawnMode === "group") {
-        const anchorY = Number(groupYInput.value);
+        const anchorY = groupYControl.value;
         const payload = createDevSummonerGroupSpawnPayload({
           enemyTypeId: groupEnemySelect.value,
           count: groupCount,
@@ -880,19 +948,20 @@ export class DevSummoner {
         }
         groupCount = payload.count;
         refreshGroupCount();
-        groupYInput.value = String(payload.anchor.y);
+        groupYControl.setValue(payload.anchor.y);
         this.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, payload);
         return;
       }
       this.bus.emitNext(EventType.SPAWN_ENEMY, createDevSummonerSpawnPayload({
         typeId: enemySelect.value,
         spawnX: this.logicW - 40,
-        spawnY: Number(screenY.value),
+        spawnY: screenYControl.value,
         behaviorPresetId: enemyMovement.presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
       }) as any);
     });
     spawnSection.appendChild(btn);
+    panel.appendChild(createSectionGap());
 
     const labPanel = document.createElement("div");
     labPanel.id = "ds-enemy-lab-debug";
