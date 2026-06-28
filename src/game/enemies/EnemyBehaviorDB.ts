@@ -11,6 +11,8 @@ import { loopBehavior } from "./behaviors/loop";
 import { trackBehavior } from "./behaviors/track";
 import { alignBehavior } from "./behaviors/align";
 import { evadeBehavior } from "./behaviors/evade";
+import { rangeBehavior } from "./behaviors/range";
+import { orbitTargetBehavior } from "./behaviors/orbitTarget";
 
 export const EnemyBehaviorDB: Record<EnemyBehaviorId, EnemyBehavior> = {
   none: noneBehavior,
@@ -21,5 +23,7 @@ export const EnemyBehaviorDB: Record<EnemyBehaviorId, EnemyBehavior> = {
   track: trackBehavior,
   align: alignBehavior,
   evade: evadeBehavior,
+  range: rangeBehavior,
+  orbitTarget: orbitTargetBehavior,
   invaders: invadersBehavior,
 };

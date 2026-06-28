@@ -7,6 +7,8 @@ import { loopBehavior } from "./behaviors/loop";
 import { trackBehavior } from "./behaviors/track";
 import { alignBehavior } from "./behaviors/align";
 import { evadeBehavior } from "./behaviors/evade";
+import { rangeBehavior } from "./behaviors/range";
+import { orbitTargetBehavior } from "./behaviors/orbitTarget";
 import { buildMovementGroups, createDevSummonerSpawnPayload, getPrimitiveFromPresetId } from "../../dev/DevSummoner";
 import type { SmartBehaviorContext } from "./behaviors/smartContext";
 
@@ -85,6 +87,12 @@ function assertCanonicalLibrary(): void {
     "smart.track.aggressive",
     "smart.align.attack",
     "smart.evade.axis",
+    "smart.range.close",
+    "smart.range.medium",
+    "smart.range.far",
+    "smart.orbit.half",
+    "smart.orbit.repeat",
+    "smart.orbit.wide",
     "invaders.pack",
   ];
   for (const id of expected) assert(EnemyBehaviorPresets[id], `expected canonical preset ${id}`);
@@ -195,8 +203,8 @@ function assertLoopBehavior(): void {
   approx(first.y, second.y, 0.00001);
 }
 
-function initSmart(behavior: typeof trackBehavior, params: Record<string, unknown>, y = 50, spawnOrdinal = 0) {
-  const ent: any = { pos: { x: 100, y }, behavior: params, bState: { t: 0 }, spawnOrdinal };
+function initSmart(behavior: typeof trackBehavior, params: Record<string, unknown>, y = 50, spawnOrdinal = 0, x = 100) {
+  const ent: any = { pos: { x, y }, behavior: params, bState: { t: 0 }, spawnOrdinal };
   behavior.init?.(ent);
   return ent;
 }
@@ -221,15 +229,29 @@ function assertSmartBehaviors(): void {
   assert(EnemyBehaviorDB.track === trackBehavior, "track behavior ID must be registered");
   assert(EnemyBehaviorDB.align === alignBehavior, "align behavior ID must be registered");
   assert(EnemyBehaviorDB.evade === evadeBehavior, "evade behavior ID must be registered");
+  assert(EnemyBehaviorDB.range === rangeBehavior, "range behavior ID must be registered");
+  assert(EnemyBehaviorDB.orbitTarget === orbitTargetBehavior, "orbitTarget behavior ID must be registered");
 
   const soft = EnemyBehaviorPresets["smart.track.soft"];
   const aggressive = EnemyBehaviorPresets["smart.track.aggressive"];
   const align = EnemyBehaviorPresets["smart.align.attack"];
   const evade = EnemyBehaviorPresets["smart.evade.axis"];
+  const rangeClose = EnemyBehaviorPresets["smart.range.close"];
+  const rangeMedium = EnemyBehaviorPresets["smart.range.medium"];
+  const rangeFar = EnemyBehaviorPresets["smart.range.far"];
+  const orbitHalf = EnemyBehaviorPresets["smart.orbit.half"];
+  const orbitRepeat = EnemyBehaviorPresets["smart.orbit.repeat"];
+  const orbitWide = EnemyBehaviorPresets["smart.orbit.wide"];
   assert(soft?.behaviorId === "track", "smart.track.soft must use track behavior");
   assert(aggressive?.behaviorId === "track", "smart.track.aggressive must use track behavior");
   assert(align?.behaviorId === "align", "smart.align.attack must use align behavior");
   assert(evade?.behaviorId === "evade", "smart.evade.axis must use evade behavior");
+  assert(rangeClose?.behaviorId === "range", "smart.range.close must use range behavior");
+  assert(rangeMedium?.behaviorId === "range", "smart.range.medium must use range behavior");
+  assert(rangeFar?.behaviorId === "range", "smart.range.far must use range behavior");
+  assert(orbitHalf?.behaviorId === "orbitTarget", "smart.orbit.half must use orbitTarget behavior");
+  assert(orbitRepeat?.behaviorId === "orbitTarget", "smart.orbit.repeat must use orbitTarget behavior");
+  assert(orbitWide?.behaviorId === "orbitTarget", "smart.orbit.wide must use orbitTarget behavior");
 
   const softEnt = initSmart(trackBehavior, soft.params, 50);
   const aggressiveEnt = initSmart(trackBehavior, aggressive.params, 50);
@@ -263,6 +285,117 @@ function assertSmartBehaviors(): void {
   const evadeB = initSmart(evadeBehavior, evade.params, 100, 2);
   const repeatEvade = stepSmart(evadeBehavior, evadeB, 1 / 60, 100);
   approx(firstEvade.y, repeatEvade.y, 0.00001);
+
+
+
+  const tooFar = initSmart(rangeBehavior, rangeMedium.params, 100, 0, 500);
+  const farTarget = stepSmart(rangeBehavior, tooFar, 1 / 60, 100);
+  assert(farTarget.x < 500, "range.medium too-far enemy must move toward player");
+  assert(Math.abs(farTarget.x - 500) <= Number(rangeMedium.params.maxSpeed) / 60 + 0.00001, "range correction must be bounded");
+
+  const tooClose = initSmart(rangeBehavior, rangeClose.params, 100, 0, 45);
+  const closeTarget = stepSmart(rangeBehavior, tooClose, 1 / 60, 100);
+  assert(closeTarget.x > 45, "range.close too-close enemy must move away from player");
+
+  const stable = initSmart(rangeBehavior, rangeMedium.params, 100, 0, 40 + Number(rangeMedium.params.preferredDistance));
+  const stableTarget = stepSmart(rangeBehavior, stable, 1 / 60, 100);
+  approx(stableTarget.x, stable.pos.x);
+
+  const overlapA = initSmart(rangeBehavior, rangeClose.params, 100, 2, 40);
+  const overlapB = initSmart(rangeBehavior, rangeClose.params, 100, 2, 40);
+  const overlapTargetA = stepSmart(rangeBehavior, overlapA, 1 / 60, 100);
+  const overlapTargetB = stepSmart(rangeBehavior, overlapB, 1 / 60, 100);
+  assert(overlapTargetA.x > 40, "range overlap must use deterministic fallback direction");
+  approx(overlapTargetA.x, overlapTargetB.x, 0.00001);
+  approx(overlapTargetA.y, overlapTargetB.y, 0.00001);
+
+  const rangeMissing = initSmart(rangeBehavior, rangeFar.params, 120, 0, 300);
+  const rangeMissingTarget = stepSmart(rangeBehavior, rangeMissing, 1 / 60, null);
+  assertFiniteTarget(rangeMissingTarget, "range null-player fallback");
+
+  const orbitInit = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 0, 260);
+  const orbitInitialTarget = stepSmart(orbitTargetBehavior, orbitInit, 0, 120);
+  approx(orbitInitialTarget.x, 260, 0.00001);
+  approx(orbitInitialTarget.y, 120, 0.00001);
+
+  const half = initSmart(orbitTargetBehavior, orbitHalf.params, 120, 0, 260);
+  stepSmart(orbitTargetBehavior, half, 0, 120);
+  const halfDuration = Number(orbitHalf.params.arcRadians) / Number(orbitHalf.params.angularSpeed);
+  const halfEnd = stepSmart(orbitTargetBehavior, half, halfDuration + 0.5, 120);
+  const halfAfter = stepSmart(orbitTargetBehavior, half, 0.5, 120);
+  assertFiniteTarget(halfEnd, "orbit half completed");
+  approx(halfAfter.x, halfEnd.x, 2);
+  approx(halfAfter.y, halfEnd.y, 2);
+
+  const repeatDuration = Number(orbitRepeat.params.arcRadians) / Number(orbitRepeat.params.angularSpeed);
+  const repeatOne = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 0, 40 + Number(orbitRepeat.params.radiusX));
+  stepSmart(orbitTargetBehavior, repeatOne, 0, 120);
+  const repeatOneCycle = stepSmart(orbitTargetBehavior, repeatOne, repeatDuration, 180);
+  assertFiniteTarget(repeatOneCycle, "orbit repeat one cycle");
+
+  const repeatMany = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 0, 40 + Number(orbitRepeat.params.radiusX));
+  stepSmart(orbitTargetBehavior, repeatMany, 0, 120);
+  const repeatManyCycles = stepSmart(orbitTargetBehavior, repeatMany, repeatDuration * 5, 180);
+  assertFiniteTarget(repeatManyCycles, "orbit repeat many cycles");
+  approx(repeatOneCycle.x - 40, repeatManyCycles.x - 40, 0.00001);
+  approx(repeatOneCycle.y - 180, repeatManyCycles.y - 180, 0.00001);
+
+  const moving = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 0, 260);
+  stepSmart(orbitTargetBehavior, moving, 0, 120);
+  const beforeMove = stepSmart(orbitTargetBehavior, moving, 1 / 60, 120);
+  const afterMove = stepSmart(orbitTargetBehavior, moving, 1 / 60, 180);
+  assert(afterMove.y > beforeMove.y, "moving player must translate orbit center");
+
+  assert(Number(orbitWide.params.radiusX) > Number(orbitRepeat.params.radiusX) + 40, "orbit.wide radius must be visibly larger than repeat");
+
+  const cwParams = { ...orbitRepeat.params, direction: 1 };
+  const ccwParams = { ...orbitRepeat.params, direction: -1 };
+  const cw = initSmart(orbitTargetBehavior, cwParams, 120, 0, 260);
+  const ccw = initSmart(orbitTargetBehavior, ccwParams, 120, 0, 260);
+  stepSmart(orbitTargetBehavior, cw, 0, 120);
+  stepSmart(orbitTargetBehavior, ccw, 0, 120);
+  const cwTarget = stepSmart(orbitTargetBehavior, cw, 0.25, 120);
+  const ccwTarget = stepSmart(orbitTargetBehavior, ccw, 0.25, 120);
+  assert(cwTarget.y > 120 && ccwTarget.y < 120, "orbit directions must diverge deterministically");
+
+  const orbitMissing = initSmart(orbitTargetBehavior, orbitRepeat.params, 140, 0, 260);
+  const orbitMissingTarget = stepSmart(orbitTargetBehavior, orbitMissing, 1 / 60, null);
+  assertFiniteTarget(orbitMissingTarget, "orbit null-player fallback");
+
+  const overlapOrbitA = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 4, 40);
+  const overlapOrbitB = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 4, 40);
+  const overlapInitialA = stepSmart(orbitTargetBehavior, overlapOrbitA, 0, 120);
+  const overlapInitialB = stepSmart(orbitTargetBehavior, overlapOrbitB, 0, 120);
+  approx(overlapInitialA.x, 40, 0.00001);
+  approx(overlapInitialA.y, 120, 0.00001);
+  approx(overlapInitialA.x, overlapInitialB.x, 0.00001);
+  approx(overlapInitialA.y, overlapInitialB.y, 0.00001);
+  const overlapFirstA = stepSmart(orbitTargetBehavior, overlapOrbitA, 1 / 60, 120);
+  const overlapFirstB = stepSmart(orbitTargetBehavior, overlapOrbitB, 1 / 60, 120);
+  assertFiniteTarget(overlapFirstA, "orbit overlap first target");
+  const overlapStep = Math.hypot(overlapFirstA.x - overlapInitialA.x, overlapFirstA.y - overlapInitialA.y);
+  assert(overlapStep <= Number(orbitRepeat.params.maxRadialSpeed) / 60 * 2, "orbit overlap first step must be bounded by radial convergence");
+  assert(overlapStep < Number(orbitRepeat.params.radiusX) * 0.25, "orbit overlap first step must not jump to configured radius");
+  approx(overlapFirstA.x, overlapFirstB.x, 0.00001);
+  approx(overlapFirstA.y, overlapFirstB.y, 0.00001);
+
+  const rangeReentryA = initSmart(rangeBehavior, rangeMedium.params, 100, 1, 500);
+  const rangeReentryB = initSmart(rangeBehavior, rangeMedium.params, 100, 1, 500);
+  const rangeReentryTargetA = stepSmart(rangeBehavior, rangeReentryA, 1 / 60, 100);
+  const rangeReentryTargetB = stepSmart(rangeBehavior, rangeReentryB, 1 / 60, 100);
+  approx(rangeReentryTargetA.x, rangeReentryTargetB.x, 0.00001);
+  approx(rangeReentryTargetA.y, rangeReentryTargetB.y, 0.00001);
+
+  const orbitReentryA = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 1, 260);
+  const orbitReentryB = initSmart(orbitTargetBehavior, orbitRepeat.params, 120, 1, 260);
+  const orbitReentryInitialA = stepSmart(orbitTargetBehavior, orbitReentryA, 0, 120);
+  const orbitReentryInitialB = stepSmart(orbitTargetBehavior, orbitReentryB, 0, 120);
+  const orbitReentryTargetA = stepSmart(orbitTargetBehavior, orbitReentryA, 1 / 60, 120);
+  const orbitReentryTargetB = stepSmart(orbitTargetBehavior, orbitReentryB, 1 / 60, 120);
+  approx(orbitReentryInitialA.x, orbitReentryInitialB.x, 0.00001);
+  approx(orbitReentryInitialA.y, orbitReentryInitialB.y, 0.00001);
+  approx(orbitReentryTargetA.x, orbitReentryTargetB.x, 0.00001);
+  approx(orbitReentryTargetA.y, orbitReentryTargetB.y, 0.00001);
 
   const reentryA = initSmart(trackBehavior, soft.params, 50);
   const reentryB = initSmart(trackBehavior, soft.params, 50);
@@ -345,11 +478,11 @@ function assertEvadeCooldown(): void {
 }
 
 function assertSmartFsmContent(): void {
-  for (const id of ["fsm.smart_tracker", "fsm.smart_aligner", "fsm.smart_evader"]) {
+  for (const id of ["fsm.smart_tracker", "fsm.smart_aligner", "fsm.smart_evader", "fsm.smart_ranger", "fsm.smart_orbit_half", "fsm.smart_orbit_repeat"]) {
     assert(BEHAVIOR_GRAPHS[id], `expected test FSM graph ${id}`);
   }
   const enemies = new Set(CONTENT.enemyTypes.map((enemy) => enemy.id));
-  for (const id of ["fsm_smart_tracker", "fsm_smart_aligner", "fsm_smart_evader"]) {
+  for (const id of ["fsm_smart_tracker", "fsm_smart_aligner", "fsm_smart_evader", "fsm_smart_ranger", "fsm_smart_orbit_half", "fsm_smart_orbit_repeat"]) {
     assert(enemies.has(id), `expected test enemy ${id}`);
   }
 }
@@ -360,8 +493,11 @@ function assertMovementGrouping(): void {
   assert(groups.smart.track.includes("smart.track.aggressive"), "smart.track.aggressive must appear under Smart/Track");
   assert(groups.smart.align.includes("smart.align.attack"), "smart.align.attack must appear under Smart/Align");
   assert(groups.smart.evade.includes("smart.evade.axis"), "smart.evade.axis must appear under Smart/Evade");
+  assert(groups.smart.range.includes("smart.range.close"), "smart.range.close must appear under Smart/Range");
+  assert(groups.smart.orbit.includes("smart.orbit.repeat"), "smart.orbit.repeat must appear under Smart/Orbit");
   assert(groups.dumb.straight.includes("straight.basic"), "Dumb straight presets must remain under Dumb");
   assert(getPrimitiveFromPresetId("smart.track.soft") === "track", "smart primitive extraction must skip class prefix");
+  assert(getPrimitiveFromPresetId("smart.orbit.repeat") === "orbit", "smart orbit primitive extraction must use orbit UI label");
   assert(getPrimitiveFromPresetId("straight.basic") === "straight", "dumb primitive extraction must use first segment");
 }
 

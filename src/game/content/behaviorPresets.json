@@ -166,6 +166,90 @@
       }
     },
     {
+      "id": "smart.range.close",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 95,
+        "tolerance": 12,
+        "response": 5.2,
+        "maxSpeed": 170,
+        "fallbackSpeedX": -90,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.range.medium",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 170,
+        "tolerance": 18,
+        "response": 3.3,
+        "maxSpeed": 125,
+        "fallbackSpeedX": -85,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.range.far",
+      "behaviorId": "range",
+      "params": {
+        "preferredDistance": 285,
+        "tolerance": 24,
+        "response": 2.2,
+        "maxSpeed": 95,
+        "fallbackSpeedX": -70,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.half",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 125,
+        "radiusY": 82,
+        "angularSpeed": 2.2,
+        "arcRadians": 3.141592653589793,
+        "direction": 1,
+        "repeat": false,
+        "radialResponse": 2.6,
+        "maxRadialSpeed": 85,
+        "fallbackSpeedX": -75,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.repeat",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 110,
+        "radiusY": 72,
+        "angularSpeed": 2.8,
+        "arcRadians": 6.283185307179586,
+        "direction": 1,
+        "repeat": true,
+        "radialResponse": 3.0,
+        "maxRadialSpeed": 95,
+        "fallbackSpeedX": -80,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
+      "id": "smart.orbit.wide",
+      "behaviorId": "orbitTarget",
+      "params": {
+        "radiusX": 180,
+        "radiusY": 118,
+        "angularSpeed": 2.0,
+        "arcRadians": 6.283185307179586,
+        "direction": -1,
+        "repeat": true,
+        "radialResponse": 2.2,
+        "maxRadialSpeed": 80,
+        "fallbackSpeedX": -65,
+        "fallbackSpeedY": 0
+      }
+    },
+    {
       "id": "invaders.pack",
       "behaviorId": "invaders",
       "params": {

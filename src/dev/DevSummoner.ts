@@ -12,7 +12,7 @@ type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
 
-const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "invaders", "none"] as const;
+const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "range", "orbit", "invaders", "none"] as const;
 const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
 
 function formatNum(value: unknown, digits = 0): string {
@@ -131,6 +131,8 @@ function formatPrimitiveLabel(primitive: string): string {
   if (primitive === "track") return "Track";
   if (primitive === "align") return "Align";
   if (primitive === "evade") return "Evade";
+  if (primitive === "range") return "Range";
+  if (primitive === "orbit") return "Orbit";
   return primitive;
 }
 

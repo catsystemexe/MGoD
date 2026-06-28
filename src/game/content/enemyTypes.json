@@ -37,7 +37,7 @@
         ]
       }
     },
-   
+
     {
       "id": "obelisk",
       "hp": 7,
@@ -129,11 +129,11 @@
         ]
       }
     },
-    
-    
-    
-    
-    
+
+
+
+
+
     {
       "id": "blue",
       "hp": 5,
@@ -388,9 +388,58 @@
         "color": "#cc88ff",
         "sdf": { "shape": "triangle", "size": 1.0 }
       }
+
+    },
+     {
+      "id": "fsm_smart_ranger",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_ranger",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#66ffaa",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_smart_orbit_half",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_orbit_half",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#66aaff",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
+    },
+     {
+      "id": "fsm_smart_orbit_repeat",
+      "hp": 4,
+      "radius": 18,
+      "scoreOnKill": 25,
+      "behaviorPresetId": "straight.basic",
+      "behaviorGraphId": "fsm.smart_orbit_repeat",
+      "render": {
+        "sprite": {
+          "id": "enemy.shooter_1.idle",
+          "scale": 1.0
+        },
+        "color": "#ffaa66",
+        "sdf": { "shape": "triangle", "size": 1.0 }
+      }
     }
 
 
-    
+
   ]
 }

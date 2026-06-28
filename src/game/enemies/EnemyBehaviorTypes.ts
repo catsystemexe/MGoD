@@ -23,6 +23,8 @@ export type EnemyBehaviorId =
   "track" |
   "align" |
   "evade" |
+  "range" |
+  "orbitTarget" |
   "invaders";
 
 // Parametry jsou “data first” – validaci děláme runtime guardem.
@@ -62,6 +64,8 @@ export const ENEMY_BEHAVIOR_IDS = [
   "track",
   "align",
   "evade",
+  "range",
+  "orbitTarget",
   "invaders",
 ] as const;
 
