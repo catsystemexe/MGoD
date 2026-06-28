@@ -10,8 +10,9 @@ Its goals are to:
 * preserve gameplay behavior and determinism,
 * prevent accidental architectural drift,
 * keep changes small and reviewable,
-* standardize validation, commits, and pull requests,
-* distinguish current architecture from legacy exceptions.
+* standardize inspection, implementation, validation, commits, and pull requests,
+* distinguish current architecture from legacy exceptions,
+* support autonomous multi-step implementation sessions without sacrificing repository safety.
 
 This is an operational contract, not a complete architecture specification.
 
@@ -36,6 +37,16 @@ Never silently resolve a material conflict by guessing.
 
 State the conflict and choose the smallest safe interpretation.
 
+If the conflict affects:
+
+* branch origin,
+* architectural ownership,
+* public/runtime contracts,
+* user-owned changes,
+* task scope,
+
+stop implementation and report the ambiguity before modifying files.
+
 ⸻
 
 3. Core workflow principle
@@ -48,8 +59,21 @@ A focused implementation unit should normally contain:
 * one bounded area of change,
 * one coherent implementation,
 * one validation pass,
-* one commit,
-* one pull request.
+* one focused diff review,
+* one focused commit,
+* one pull request or prepared pull-request handoff.
+
+A focused implementation session may include:
+
+* repository inspection,
+* local design reasoning,
+* implementation,
+* targeted tests,
+* validation,
+* final diff review,
+* corrective work discovered during validation,
+
+provided all of those steps serve the same original task.
 
 Do not combine unrelated:
 
@@ -59,9 +83,10 @@ Do not combine unrelated:
 * asset changes,
 * cleanup,
 * architectural refactors,
-* balance tuning.
+* balance tuning,
+* documentation rewrites.
 
-Separate audit, design, implementation, and cleanup tasks unless the task explicitly combines them.
+Separate standalone architecture audits, broad design exercises, unrelated cleanup, and speculative follow-up refactors into their own tasks unless the task explicitly combines them.
 
 ⸻
 
@@ -84,17 +109,24 @@ Important current properties:
 
 The repository uses four branch levels:
 
-- `main` — protected long-term vault branch.
-- `work` — current integrated state of the developing project.
-- `X` — one thematic working branch created from `work`.
-- `Y` — one short-lived Codex task branch created from `X`.
+* main — protected long-term vault branch.
+* work — current integrated state of the developing project.
+* X — one thematic working branch created from work.
+* Y — one short-lived Codex task branch created from X.
 
 Expected flow:
-
 
 Y → pull request → X
 X → manual merge → work
 work → manual milestone merge → main
+
+The maintainer controls the higher-level integrations:
+
+X → work
+work → main
+
+Ordinary Codex implementation work must remain on Y.
+
 ⸻
 
 5. Repository map
@@ -309,6 +341,7 @@ Before adding a new primitive:
 * inspect the behavior ID union or registry,
 * inspect preset validation,
 * inspect all behavior consumers,
+* inspect runtime movement ownership,
 * add targeted tests.
 
 FSM graph IDs
@@ -420,7 +453,7 @@ The EventBus ownership map is authoritative.
 
 Rules:
 
-* emit events only through the supported EventBus APIs,
+* emit events only through supported EventBus APIs,
 * do not bypass phase ownership with ad hoc queues,
 * do not consume events in a non-owning phase,
 * do not create duplicate event-routing systems.
@@ -645,7 +678,7 @@ Math.random()
 
 Gameplay randomness should be passed through an explicit RNG dependency.
 
-Current use of Math.random in the composition root and some systems is a known legacy limitation, not a preferred pattern.
+Current use of Math.random() in the composition root and some systems is a known legacy limitation, not a preferred pattern.
 
 For new systems, prefer:
 
@@ -697,7 +730,9 @@ Legacy animation fields
 
 Root animId still exists in some entity or projectile boundaries.
 
-For enemy appearance, the canonical path is nested under render.sprite.animation.
+For enemy appearance, the canonical path is nested under:
+
+render.sprite.animation
 
 window.__CM
 
@@ -726,17 +761,21 @@ A passing npm run typecheck does not prove the entire repository is type-correct
 
 Existing smoke failure
 
-The full smoke runner currently has a known failure involving BombExplosionChain.smoke.ts and undefined DamageSystem.rules.
+The full smoke runner currently has a known failure involving:
+
+BombExplosionChain.smoke.ts
+DamageSystem.rules.onExplosion
 
 Until repaired:
 
-* run the smoke suite,
+* run the smoke suite when required,
 * report the existing failure accurately,
 * do not claim the suite passed,
-* distinguish pre-existing failure from patch-introduced failure,
-* run narrower relevant smoke tests where possible.
+* distinguish the pre-existing failure from patch-introduced failures,
+* run narrower relevant smoke tests where possible,
+* do not automatically repair this failure during unrelated tasks.
 
-Do not automatically repair this failure during unrelated tasks.
+When this failure is fixed, remove this exception from AGENTS.md.
 
 ⸻
 
@@ -757,11 +796,11 @@ main is the protected long-term vault branch.
 
 Rules:
 
-* Do not develop directly on main.
-* Do not create ordinary Codex task branches from main.
-* Do not target main with a Codex task pull request.
-* Do not merge into main.
-* Only the maintainer performs deliberate milestone merges from work into main.
+* do not develop directly on main,
+* do not create ordinary Codex task branches from main,
+* do not target main with a Codex task pull request,
+* do not merge into main,
+* only the maintainer performs deliberate milestone merges from work into main.
 
 Unless explicitly instructed otherwise, Codex must treat main as read-only.
 
@@ -771,10 +810,11 @@ work represents the current integrated state of the developing project.
 
 Rules:
 
-* Do not perform ordinary Codex implementation directly on work.
-* Do not create task pull requests from Y directly into work.
-* Completed thematic branches X are merged into work manually by the maintainer.
-* Codex may inspect work when establishing the origin or freshness of a thematic branch, but must not modify it unless explicitly instructed.
+* do not perform ordinary Codex implementation directly on work,
+* do not create task pull requests from Y directly into work,
+* completed thematic branches X are merged into work manually by the maintainer,
+* Codex may inspect work when establishing the origin or freshness of a thematic branch,
+* Codex must not modify work unless explicitly instructed.
 
 Thematic branch X
 
@@ -788,13 +828,13 @@ feature/explosion-system
 
 Rules:
 
-* X should originate from the current work branch.
-* Replit uses X for runtime testing, visual inspection, and maintainer adjustments.
-* Codex uses X as the base branch for each focused session.
-* Codex must not normally implement directly on X.
-* Each Codex session creates a separate task branch Y from the current state of X.
-* Pull requests from Codex task branches must target X.
-* The maintainer manually merges the completed thematic branch X into work.
+* X should originate from the current work branch,
+* Replit uses X for runtime testing, visual inspection, and maintainer adjustments,
+* Codex uses X as the base branch for each focused session,
+* Codex must not normally implement directly on X,
+* each Codex session creates a separate task branch Y from the current verified snapshot of X,
+* pull requests from Codex task branches must target X,
+* the maintainer manually merges completed thematic branch X into work.
 
 Codex task branch Y
 
@@ -806,16 +846,16 @@ codex/<short-task-description>
 
 Rules:
 
-* Create Y from the current thematic branch X.
-* One Y branch represents one focused task.
-* A session may contain inspection, implementation, validation, and corrections, provided they all serve the same task.
-* At the end of the session, create or prepare a pull request from Y into X.
-* Never target work or main from Y unless explicitly instructed.
-* After merge into X, Y may be deleted.
+* create Y from the verified current snapshot of thematic branch X,
+* one Y branch represents one focused task,
+* a session may contain inspection, implementation, validation, diff review, and corrections when they serve the same task,
+* at the end of the session, create or prepare a pull request from Y into X,
+* never target work or main from Y unless explicitly instructed,
+* after merge into X, Y may be deleted.
 
 Expected task flow:
 
-current X
+current X snapshot
 → create Y from X
 → implement and validate on Y
 → PR Y into X
@@ -824,7 +864,42 @@ current X
 
 ⸻
 
-9.2 Start every session with repository inspection
+9.2 Codex branch selector
+
+When a Codex session is launched with a thematic branch selected in the Codex UI, that selected branch is the intended thematic branch X for the task.
+
+The selected branch determines the source snapshot from which Codex reads.
+
+However, the isolated checkout may:
+
+* expose the selected snapshot under a synthetic local branch name such as work,
+* omit a local branch ref named X,
+* omit a normal origin remote,
+* omit upstream tracking information.
+
+Therefore:
+
+* do not infer that a local branch named work is the repository’s actual integrated work branch solely from its local name,
+* do not reject a valid selected snapshot solely because git switch <X> fails,
+* do not require a local ref named X when the session was explicitly launched from X,
+* do not invent upstream, fetch, pull, or synchronization state,
+* verify the selected snapshot by inspecting its contents, recent commits, required prerequisites, and working-tree state,
+* when the task explicitly identifies the selected branch as X and prerequisites match, treat the current clean HEAD as the supplied snapshot of X,
+* create task branch Y directly from that verified HEAD,
+* report that the local branch name was synthetic when applicable,
+* report that remote synchronization could not be independently verified when no remote is available.
+
+The Codex branch selector supplies the snapshot.
+
+The task instructions still must identify:
+
+* thematic branch X,
+* task branch Y,
+* intended PR base X.
+
+⸻
+
+9.3 Start every session with repository inspection
 
 Run:
 
@@ -839,13 +914,14 @@ git log -12 --oneline --decorate
 
 Before editing, establish:
 
-* current local branch,
+* current local branch name,
+* whether that name is normal or synthetic,
 * working-tree state,
 * available remotes,
-* upstream state,
-* current thematic branch X,
-* current task branch Y,
-* whether Y was created from the latest state of X,
+* upstream state when available,
+* intended thematic branch X,
+* intended task branch Y,
+* whether current HEAD is the verified current snapshot of X,
 * intended pull-request base.
 
 The intended pull-request base for a normal Codex session is X.
@@ -859,26 +935,34 @@ Do not infer the PR base from:
 
 ⸻
 
-9.3 Required branch verification
+9.4 Required branch verification
 
 Before implementation, Codex must verify that:
 
 1. the current task is associated with a named thematic branch X,
-2. X contains all previously merged task work required by the task,
-3. the task branch Y originates from the current state of X,
-4. the final PR will target X.
+2. the current checkout represents the intended current snapshot of X,
+3. X or its supplied snapshot contains all previously merged task work required by the task,
+4. task branch Y originates from that verified snapshot,
+5. the final pull request will target X.
+
+A verified snapshot of X may be:
+
+* a normal local branch named X,
+* a remote-tracking branch for X,
+* an explicitly identified Codex branch-selector snapshot exposed under a synthetic local branch name.
 
 If X cannot be identified confidently:
 
 * do not target main,
 * do not target work,
-* report the ambiguity before creating a PR.
+* do not create speculative branches,
+* report the ambiguity before implementation or PR preparation.
 
-When the user explicitly identifies X, that instruction is authoritative.
+When the user explicitly identifies X, that instruction is authoritative unless repository evidence clearly contradicts it.
 
 ⸻
 
-9.4 Working-tree safety
+9.5 Working-tree safety
 
 Never overwrite unknown or user-owned changes.
 
@@ -899,11 +983,12 @@ If unrelated changes already exist:
 * identify them,
 * avoid modifying them,
 * keep the task diff isolated,
-* report unavoidable overlap.
+* report unavoidable overlap,
+* stop if safe isolation is not possible.
 
 ⸻
 
-9.5 Codex and Replit coordination
+9.6 Codex and Replit coordination
 
 Codex and Replit must not write concurrently to the same branch.
 
@@ -914,9 +999,9 @@ Replit works with X.
 
 During an active Codex session:
 
-* Codex is the sole writer to Y.
-* Replit may continue using X.
-* Replit must not push changes into Y.
+* Codex is the sole writer to Y,
+* Replit may continue using X,
+* Replit must not push changes into Y,
 * Replit will not see unmerged Y changes unless the maintainer intentionally checks out Y for temporary testing.
 
 After PR merge Y → X:
@@ -934,11 +1019,13 @@ The preferred recovery is a new Codex session from the updated branch state.
 
 ⸻
 
-9.6 Synchronization rules
+9.7 Synchronization rules
 
-Before creating a task branch from X, verify that local X reflects the intended GitHub state.
+Before creating task branch Y, verify that the available snapshot reflects the intended state of X.
 
-Where a normal remote and upstream are available, prefer:
+Normal checkout with remote and local X
+
+Prefer:
 
 git fetch origin
 git switch <X>
@@ -955,18 +1042,23 @@ If fast-forward is not possible:
 * do not reset or rebase without explicit instruction,
 * report the exact state.
 
-A Codex environment may use an isolated checkout without a normal Git remote.
+Isolated Codex checkout
+
+An isolated Codex environment may not expose a normal remote or local branch named X.
 
 In that case:
 
 * do not claim that fetch or pull was performed,
 * do not invent upstream information,
-* work from the provided snapshot,
-* clearly report any limitation affecting PR or synchronization.
+* do not reject the snapshot solely because its local branch name differs,
+* verify expected prerequisite commits, files, IDs, and behavior,
+* work from the explicitly supplied and verified snapshot,
+* create Y directly from current clean HEAD,
+* clearly report limitations affecting synchronization or PR creation.
 
 ⸻
 
-9.7 Commit policy
+9.8 Commit policy
 
 Default:
 
@@ -974,9 +1066,16 @@ one focused task
 one focused Codex task branch Y
 one focused pull request Y → X
 
-A session should normally create one focused commit.
+A session should normally create one focused implementation commit.
 
-Additional corrective commits are acceptable when required by testing during the same task.
+Additional corrective commits are acceptable when required by:
+
+* targeted tests,
+* validation,
+* final diff review,
+* a concrete defect found during the same task.
+
+Do not amend an already reviewed commit unless explicitly instructed.
 
 Preferred commit prefixes:
 
@@ -986,19 +1085,21 @@ refactor(scope): description
 test(scope): description
 docs(scope): description
 chore(scope): description
+tune(scope): description
 
 Do not create:
 
 * empty commits,
 * unrelated cleanup commits,
 * formatting-only noise mixed with logic,
-* speculative follow-up changes.
+* speculative follow-up changes,
+* commits created only to satisfy process when no patch is needed.
 
 If the requested implementation already exists and no patch is needed, do not create a commit solely to satisfy the workflow.
 
 ⸻
 
-9.8 Pull-request policy
+9.9 Pull-request policy
 
 For an ordinary Codex task:
 
@@ -1015,9 +1116,9 @@ The maintainer controls the higher-level integrations:
 X → work
 work → main
 
-Codex must not create, merge, or retarget these higher-level pull requests unless explicitly requested.
+Codex must not create, merge, or retarget those higher-level pull requests unless explicitly requested.
 
-A Codex task PR should contain:
+A Codex task pull request should contain:
 
 ## Motivation
 ## Scope
@@ -1032,9 +1133,17 @@ Before presenting or creating a PR, verify and report:
 * base branch X,
 * whether the branch is pushed,
 * whether validation was completed,
-* any pre-existing failures.
+* any pre-existing failures,
+* any environment limitation affecting remote PR creation.
 
 Do not merge the PR unless explicitly requested.
+
+If the task explicitly says that the maintainer handles PR creation:
+
+* do not push,
+* do not create a hosted PR,
+* prepare exact manual PR metadata,
+* report head, base, title, commits, validation, and branch state.
 
 ⸻
 
@@ -1044,14 +1153,15 @@ Every implementation task follows these phases.
 
 Phase 1 — Inspect
 
-Read:
+Read and inspect:
 
 * repository state,
 * relevant definitions,
 * producers,
 * consumers,
 * tests,
-* nearby architecture.
+* nearby architecture,
+* integration boundaries.
 
 Search broadly enough to find all affected contracts.
 
@@ -1065,7 +1175,8 @@ Before editing, determine:
 * which layer owns the behavior,
 * which files form the data path,
 * what must remain unchanged,
-* whether the requested change already exists.
+* whether the requested change already exists,
+* whether current behavior contradicts task assumptions.
 
 Do not patch based only on filenames or assumptions.
 
@@ -1077,7 +1188,8 @@ State internally or in the task report:
 * protected behavior,
 * non-goals,
 * compatibility requirements,
-* validation plan.
+* validation plan,
+* expected observable result.
 
 Phase 4 — Implement
 
@@ -1085,11 +1197,15 @@ Make the smallest coherent patch that solves the verified problem.
 
 Do not expand scope because adjacent cleanup looks attractive.
 
+Do not introduce unused extension points.
+
 Phase 5 — Validate
 
 Run relevant automated checks.
 
 Perform targeted manual inspection where automation is insufficient.
+
+For visible UI/render changes, perform browser-level verification when the environment allows it.
 
 Phase 6 — Review diff
 
@@ -1100,6 +1216,8 @@ git diff --stat
 git diff
 git status --short
 
+Inspect the complete diff.
+
 Check for:
 
 * unrelated edits,
@@ -1108,33 +1226,77 @@ Check for:
 * debug logs,
 * stale comments,
 * hidden API changes,
-* duplicate ownership.
+* duplicate ownership,
+* formatting churn,
+* reordered content,
+* unexpectedly large JSON diffs,
+* unintentional production-content changes.
 
-Phase 7 — Commit
+Phase 7 — Correct within scope
 
-Commit the focused implementation on the current Codex task branch `Y`.
+If validation or final diff review finds a concrete defect within the defined task scope:
 
-Do not commit directly to `X`, `work`, or `main` during an ordinary Codex session
+* identify the causal defect,
+* apply the smallest correction,
+* preserve task scope,
+* rerun relevant validation,
+* create an additional corrective commit when appropriate.
 
-Phase 8 — Pull request
+Do not stop merely to request permission for a correction that is:
+
+* clearly required,
+* within the defined scope,
+* architecturally compatible,
+* safe for existing work.
+
+Stop and report instead when:
+
+* the correction expands the stated scope,
+* the correction changes an architectural contract,
+* intended behavior is materially ambiguous,
+* unrelated user work may be overwritten,
+* the required base snapshot cannot be verified,
+* a failing validation path may represent a broader regression,
+* the safe correction requires a separate focused task.
+
+Phase 8 — Commit
+
+Commit the focused implementation on task branch Y.
+
+Do not commit directly to:
+
+* X,
+* work,
+* main
+
+during an ordinary Codex session.
+
+Phase 9 — Pull request or handoff
 
 Create or prepare one pull request:
 
-head: "Y"
+head: Y
+base: X
 
-base: "X"
+Follow explicit task instructions regarding:
 
-Phase 9 — Report
+* push,
+* hosted PR creation,
+* manual maintainer handoff.
+
+Phase 10 — Report
 
 Report:
 
 * implementation,
 * files changed,
 * validation,
-* commit,
+* commit or commits,
+* branch state,
 * PR/base branch,
 * risks,
-* known failures.
+* known failures,
+* remaining limitations.
 
 ⸻
 
@@ -1151,7 +1313,8 @@ Prefer
 * pure helpers where useful,
 * local ownership,
 * explicit fallback order,
-* comments explaining invariants and reasons.
+* comments explaining invariants and reasons,
+* observable-invariant tests.
 
 Avoid
 
@@ -1164,7 +1327,8 @@ Avoid
 * architecture changes hidden in feature work,
 * hot-path debug logging,
 * direct browser dependencies in engine code,
-* changing gameplay and presentation simultaneously without need.
+* changing gameplay and presentation simultaneously without need,
+* tests that only duplicate implementation formulas.
 
 ⸻
 
@@ -1181,7 +1345,9 @@ Examples:
 * no unrelated type cleanup,
 * no phase-order change,
 * no public API change,
-* no legacy removal outside the target contract.
+* no legacy removal outside the target contract,
+* no production-content migration,
+* no unrelated formatting cleanup.
 
 If the smallest correct implementation exceeds the stated scope:
 
@@ -1231,7 +1397,12 @@ npm run build
 
 Runs the Vite production build.
 
-This is especially important for browser integration, renderer, UI, and module-boundary changes.
+This is especially important for:
+
+* browser integration,
+* renderer changes,
+* UI changes,
+* module-boundary changes.
 
 npm run gen:atlas
 
@@ -1252,6 +1423,10 @@ Run:
 git diff --check
 git status --short
 
+Also review the complete task diff before commit.
+
+⸻
+
 14.2 Engine core, EventBus, Loop, EntityStore
 
 Run:
@@ -1265,8 +1440,10 @@ Inspect:
 
 * phase behavior,
 * event ownership,
-* generation/ref safety,
+* generation/reference safety,
 * cleanup behavior.
+
+⸻
 
 14.3 Gameplay systems
 
@@ -1285,7 +1462,9 @@ Verify:
 * event owner phase,
 * score/damage separation.
 
-14.4 Enemy content and appearance
+⸻
+
+14.4 Enemy behavior, enemy content, and appearance
 
 Run:
 
@@ -1293,13 +1472,20 @@ npm run typecheck
 npm run test
 npm run build
 
+Run relevant targeted enemy/content smoke tests directly.
+
 Verify:
 
-* content loader acceptance,
+* behavior registration,
+* preset/content loader acceptance,
 * ID cross-references,
 * normalized output,
 * fallback behavior,
-* no shared mutable definition objects.
+* deterministic re-entry,
+* no shared mutable definition objects,
+* no direct authoritative position/velocity writes from Behavior V1.
+
+⸻
 
 14.5 Renderer, WebGL, sprite animation
 
@@ -1314,11 +1500,15 @@ Because the main typecheck may not cover all renderer roots, do not rely only on
 
 For visible changes, perform a browser-level manual check when the environment allows it.
 
+⸻
+
 14.6 UI and developer tools
 
 Run:
 
 npm run build
+
+Run targeted tests where available.
 
 Perform browser-level verification when possible.
 
@@ -1328,7 +1518,11 @@ Check:
 * event listener cleanup,
 * timer cleanup,
 * window.__CM compatibility,
-* behavior when developer state is absent.
+* behavior when developer state is absent,
+* mobile/native-control regressions where relevant,
+* runtime payload shape.
+
+⸻
 
 14.7 Content-only changes
 
@@ -1339,7 +1533,14 @@ npm run build
 
 Run targeted content or enemy-definition tests.
 
-Verify every referenced ID.
+Verify:
+
+* every referenced ID,
+* no unintended production-content changes,
+* no full-file formatting churn,
+* ordering preservation where practical.
+
+⸻
 
 14.8 Atlas and assets
 
@@ -1352,13 +1553,15 @@ Review generated diff carefully.
 
 Confirm that only intended generated files changed.
 
+⸻
+
 14.9 Documentation-only changes
 
 Run:
 
 git diff --check
 
-Verify paths, symbols, and claims against current code.
+Verify paths, symbols, branch names, and claims against current code and repository state.
 
 ⸻
 
@@ -1368,10 +1571,10 @@ A pre-existing failure does not automatically block unrelated work.
 
 However, the agent must:
 
-1. run the requested/relevant validation,
+1. run the requested or relevant validation,
 2. capture the exact failure,
 3. determine whether the patch touched the failing path,
-4. distinguish existing failure from new regression,
+4. distinguish the existing failure from a new regression,
 5. run narrower checks when possible,
 6. report the limitation honestly.
 
@@ -1382,6 +1585,10 @@ All tests pass
 when the full test or smoke command failed.
 
 Never hide failing output by omitting the command from the final report.
+
+A known failure must not become a blanket excuse for ignoring new failures.
+
+If the failure signature changes, treat it as potentially new until verified.
 
 ⸻
 
@@ -1418,6 +1625,8 @@ Quality
 * New any usage is avoided or justified.
 * Mutable definition data is not accidentally shared.
 * New browser-only dependencies do not break Node paths.
+* The implementation remains deterministic where required.
+* Targeted tests validate observable invariants.
 
 Validation
 
@@ -1426,20 +1635,20 @@ Validation
 * Known existing failures are identified.
 * Targeted checks passed where available.
 * The complete diff was reviewed.
+* Corrective validation was rerun after fixes.
 
 Git
 
-
-
-* The task was performed on a focused Codex task branch `Y`.
-* `Y` originated from the intended thematic branch `X`.
+* The task was performed on focused Codex task branch Y.
+* Y originated from the intended verified snapshot of thematic branch X.
 * The working tree contains only expected task changes.
 * A focused commit was created when appropriate.
-* The commit message describes the actual change.
-* The pull-request head is `Y`.
-* The pull-request base is `X`.
-* No ordinary Codex task pull request targets `work` or `main`.
-* Higher-level merges `X → work` and `work → main` remain under manual maintainer control.
+* Additional corrective commits are limited to the same task.
+* Commit messages describe actual changes.
+* Pull-request head is Y.
+* Pull-request base is X.
+* No ordinary Codex task pull request targets work or main.
+* Higher-level merges X → work and work → main remain under maintainer control.
 
 Reporting
 
@@ -1448,7 +1657,8 @@ The final response includes:
 * what changed,
 * files changed,
 * validation commands and results,
-* commit,
+* commit or commits,
+* branch state,
 * PR/base branch,
 * risks or remaining limitations.
 
@@ -1607,7 +1817,7 @@ Verify neighboring cases
 
 Check:
 
-* empty/undefined input,
+* empty or undefined input,
 * lifecycle boundaries,
 * fallback paths,
 * repeated execution,
@@ -1681,15 +1891,18 @@ Do not report stylistic preferences as correctness defects.
 
 If no material defect is found, say so clearly and mention remaining test limitations.
 
+A read-only review must not modify files or create commits.
+
 ⸻
 
 23. Required final response format
 
-Use this structure for implementation tasks:
+Implementation task
+
+Use:
 
 Implemented
 - concise description
-
 Files changed
 - path
 - path
@@ -1697,23 +1910,33 @@ Validation
 - ✅ command — result
 - ❌ command — exact failure
 - ⚠️ limitation or pre-existing failure
-
 Commit
 - <sha> <message>
-
+- optional corrective commit
 Branch state
 - thematic branch X: <branch>
 - Codex task branch Y: <branch>
-
+- local checkout name: <branch or synthetic name>
+- working tree: clean / dirty
 Pull request
 - head: <Y>
 - base: <X>
 - status: created / prepared / unavailable
-
+- push status: pushed / not pushed / unavailable
 Risks / follow-up
 - only relevant remaining risks
 
-When no patch is required:
+If the task explicitly requires manual PR handling, include exact:
+
+* source branch,
+* target branch,
+* recommended PR title,
+* expected commits,
+* validation limitation.
+
+When no patch is required
+
+Use:
 
 No patch required
 Verified
@@ -1726,7 +1949,9 @@ Repository state
 - clean/dirty state
 - no commit created
 
-For audit-only work:
+Audit-only task
+
+Use:
 
 Audit completed
 Scope
@@ -1744,7 +1969,77 @@ Repository state
 
 ⸻
 
-24. Playbook maintenance
+24. Autonomous session policy
+
+For a focused implementation task, Codex should normally complete the full sequence without waiting for confirmation between steps:
+
+inspect
+→ establish current behavior
+→ define scope
+→ create Y
+→ implement
+→ test
+→ review diff
+→ correct in-scope defects
+→ retest
+→ commit
+→ prepare PR handoff
+→ report
+
+Do not pause merely because:
+
+* multiple repository files are involved,
+* one targeted correction is needed,
+* a second corrective commit is required,
+* a known unrelated smoke failure occurs,
+* browser verification is unavailable.
+
+Pause and report only when:
+
+* the base snapshot cannot be verified,
+* the working tree contains unsafe unrelated changes,
+* the requested behavior is materially ambiguous,
+* an architectural contract must change outside the task,
+* a required correction exceeds scope,
+* validation indicates a possible unrelated regression,
+* repository integrity cannot be preserved.
+
+⸻
+
+25. Task-prompt responsibilities
+
+AGENTS.md defines durable repository-wide rules.
+
+Each explicit task prompt should provide only the task-specific information that AGENTS.md cannot know.
+
+A normal implementation task prompt should identify:
+
+* thematic branch X,
+* Codex task branch Y,
+* whether X was selected in the Codex branch selector,
+* concrete objective,
+* required prerequisites,
+* observable acceptance criteria,
+* allowed files or layers,
+* protected behavior,
+* non-goals,
+* task-specific tests,
+* push/PR policy,
+* recommended commit or PR title when useful.
+
+Do not duplicate the entire playbook inside every task prompt.
+
+Use this standard branch-selector wording when applicable:
+
+This Codex session was launched from thematic branch X in the Codex branch selector.
+Treat the selected snapshot as the intended thematic base X.
+The isolated checkout may expose it under a synthetic local branch name. Follow the Codex branch-selector and isolated-checkout rules in AGENTS.md.
+Create task branch Y from the verified current HEAD.
+Do not reject the snapshot solely because the local branch name differs from X.
+
+⸻
+
+26. Playbook maintenance
 
 Keep this file concise enough to be read during every session.
 
@@ -1755,16 +2050,19 @@ Update it only when a durable project contract changes, such as:
 * entity lifecycle,
 * source-of-truth ownership,
 * branch workflow,
+* Codex branch-selector behavior,
 * validation scripts,
-* Definition of Done.
+* Definition of Done,
+* manual PR policy.
 
 Do not add:
 
 * one-off feature details,
 * temporary task instructions,
-* current bug descriptions that belong in an issue,
+* current feature tuning values,
 * large architecture explanations better suited to docs,
-* historical implementation narratives.
+* historical implementation narratives,
+* temporary branch names.
 
 Known temporary failures may be included only when they materially affect every agent’s validation workflow.
 
