@@ -36,8 +36,10 @@ type Group = {
   members: Member[];
 };
 
-const FORMATIONS = new Set<string>(["line.horizontal", "wedge"]);
-const COHESION = new Set<string>(["rigid", "elastic"]);
+export const ENEMY_GROUP_FORMATION_IDS = ["line.horizontal", "wedge"] as const;
+export const ENEMY_GROUP_COHESION_IDS = ["rigid", "elastic"] as const;
+const FORMATIONS = new Set<string>(ENEMY_GROUP_FORMATION_IDS);
+const COHESION = new Set<string>(ENEMY_GROUP_COHESION_IDS);
 const finite = (n: unknown, fallback = 0) => typeof n === "number" && Number.isFinite(n) ? n : fallback;
 const RIGID_MAX_SPEED = 480;
 
