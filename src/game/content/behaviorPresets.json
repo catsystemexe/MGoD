@@ -138,6 +138,34 @@
       }
     },
     {
+      "id": "loop.single",
+      "behaviorId": "loop",
+      "params": {
+        "speedX": -115,
+        "speedY": 0,
+        "radiusX": 64,
+        "radiusY": 58,
+        "duration": 1.65,
+        "direction": 1,
+        "turns": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "loop.repeat",
+      "behaviorId": "loop",
+      "params": {
+        "speedX": -85,
+        "speedY": 0,
+        "radiusX": 52,
+        "radiusY": 48,
+        "duration": 1.9,
+        "direction": -1,
+        "turns": 1,
+        "repeat": true
+      }
+    },
+    {
       "id": "invaders.pack",
       "behaviorId": "invaders",
       "params": {
