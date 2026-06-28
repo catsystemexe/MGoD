@@ -13,7 +13,7 @@ import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/Ene
 
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
-import { EnemyGroupRegistry, formationOffset, normalizeFormationId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
+import { EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams, normalizeFormationId, normalizeCohesionId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
 
 type Vec2 = { x: number; y: number };
 import type { WorldState } from "../data/WorldState";
@@ -219,19 +219,22 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
             const anchor = { x: Number(p.anchor?.x ?? 0), y: Number(p.anchor?.y ?? 0) };
             const spacing = typeof p.spacing === "number" ? p.spacing : undefined;
             const formationId = normalizeFormationId(String(p.formationId));
+            const cohesionId = normalizeCohesionId(String(p.cohesionId));
+            const params = normalizeEnemyGroupParams(p.params, cohesionId, spacing);
             const groupId = this.groups.create({
               enemyTypeId,
               count,
               anchor,
               formationId,
               movementPresetId: String(p.movementPresetId),
-              cohesionId: String(p.cohesionId),
+              cohesionId,
               spacing,
+              params,
             });
 
             let spawnedCount = 0;
             for (let slotIndex = 0; slotIndex < count; slotIndex++) {
-              const offset = formationOffset(formationId, slotIndex, count, spacing);
+              const offset = formationOffset(formationId, slotIndex, count, params);
               try {
                 this.spawnEnemy({
                   typeId: enemyTypeId,

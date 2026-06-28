@@ -10,6 +10,22 @@ export type CohesionId = "rigid" | "elastic";
 
 export type EnemyGroupMembership = { groupId: GroupId; slotIndex: number };
 
+export type EnemyGroupParams = {
+  formation?: {
+    spacing?: number;
+    depth?: number;
+  };
+  cohesion?: {
+    response?: number;
+    maxCatchupSpeed?: number;
+  };
+};
+
+export type NormalizedEnemyGroupParams = {
+  formation: { spacing: number; depth: number };
+  cohesion: { response: number; maxCatchupSpeed: number };
+};
+
 export type EnemyGroupSpawnRequest = {
   enemyTypeId: string;
   count: number;
@@ -17,7 +33,9 @@ export type EnemyGroupSpawnRequest = {
   formationId: string;
   movementPresetId: string;
   cohesionId: string;
+  /** Legacy compatibility alias for formation.spacing. */
   spacing?: number;
+  params?: EnemyGroupParams;
 };
 
 type Member = { ref: EntityRef; slotIndex: number; offset: Vec2 };
@@ -31,7 +49,7 @@ type Group = {
   vel: Vec2;
   formationId: FormationId;
   cohesionId: CohesionId;
-  spacing: number;
+  params: NormalizedEnemyGroupParams;
   slotCount: number;
   members: Member[];
 };
@@ -41,7 +59,40 @@ export const ENEMY_GROUP_COHESION_IDS = ["rigid", "elastic"] as const;
 const FORMATIONS = new Set<string>(ENEMY_GROUP_FORMATION_IDS);
 const COHESION = new Set<string>(ENEMY_GROUP_COHESION_IDS);
 const finite = (n: unknown, fallback = 0) => typeof n === "number" && Number.isFinite(n) ? n : fallback;
-const RIGID_MAX_SPEED = 480;
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+export const ENEMY_GROUP_PARAM_LIMITS = {
+  formation: {
+    spacing: { min: 16, max: 96, default: 18, step: 4 },
+    depth: { min: 8, max: 80, default: 18, step: 4 },
+  },
+  cohesion: {
+    response: { min: 1, max: 20, default: 7, step: 1 },
+    maxCatchupSpeed: { min: 80, max: 600, rigidDefault: 480, elasticDefault: 260, step: 20 },
+  },
+} as const;
+
+function finiteClamped(value: unknown, fallback: number, min: number, max: number): number {
+  return clamp(finite(value, fallback), min, max);
+}
+
+export function normalizeEnemyGroupParams(input: EnemyGroupParams | undefined, cohesionId: CohesionId, legacySpacing?: number): NormalizedEnemyGroupParams {
+  const spacingInput = input?.formation?.spacing ?? legacySpacing;
+  const depthInput = input?.formation?.depth ?? legacySpacing;
+  const catchupDefault = cohesionId === "rigid"
+    ? ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault
+    : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.elasticDefault;
+  return {
+    formation: {
+      spacing: finiteClamped(spacingInput, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.min, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.max),
+      depth: finiteClamped(depthInput, ENEMY_GROUP_PARAM_LIMITS.formation.depth.default, ENEMY_GROUP_PARAM_LIMITS.formation.depth.min, ENEMY_GROUP_PARAM_LIMITS.formation.depth.max),
+    },
+    cohesion: {
+      response: finiteClamped(input?.cohesion?.response, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.min, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.max),
+      maxCatchupSpeed: finiteClamped(input?.cohesion?.maxCatchupSpeed, catchupDefault, ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.min, ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.max),
+    },
+  };
+}
 
 export function normalizeFormationId(id: string): FormationId {
   return FORMATIONS.has(id) ? id as FormationId : "line.horizontal";
@@ -51,17 +102,21 @@ export function normalizeCohesionId(id: string): CohesionId {
   return COHESION.has(id) ? id as CohesionId : "rigid";
 }
 
-export function formationOffset(id: FormationId, slotIndex: number, slotCount: number, spacing = 18): Vec2 {
+export function formationOffset(id: FormationId, slotIndex: number, slotCount: number, paramsOrSpacing: NormalizedEnemyGroupParams | number = ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default): Vec2 {
   const count = Math.max(1, Math.floor(slotCount));
   const slot = Math.max(0, Math.floor(slotIndex));
-  const s = Math.max(0, finite(spacing, 18));
+  const params = typeof paramsOrSpacing === "number"
+    ? normalizeEnemyGroupParams(undefined, "rigid", paramsOrSpacing)
+    : paramsOrSpacing;
+  const spacing = params.formation.spacing;
+  const depth = params.formation.depth;
   if (id === "wedge") {
     if (slot === 0) return { x: 0, y: 0 };
     const pair = Math.ceil(slot / 2);
     const side = slot % 2 === 1 ? -1 : 1;
-    return { x: pair * s, y: side * pair * s };
+    return { x: pair * depth, y: side * pair * spacing };
   }
-  return { x: 0, y: (slot - (count - 1) / 2) * s };
+  return { x: 0, y: (slot - (count - 1) / 2) * spacing };
 }
 
 export class EnemyGroupRegistry {
@@ -71,6 +126,8 @@ export class EnemyGroupRegistry {
   create(req: EnemyGroupSpawnRequest): GroupId {
     const preset = EnemyBehaviorPresets[req.movementPresetId] ?? EnemyBehaviorPresets["none.hold"];
     const behaviorId = preset?.behaviorId ?? "none";
+    const cohesionId = normalizeCohesionId(req.cohesionId);
+    const params = normalizeEnemyGroupParams(req.params, cohesionId, req.spacing);
     const group: Group = {
       id: this.nextId++,
       anchor: { x: finite(req.anchor?.x), y: finite(req.anchor?.y) },
@@ -80,8 +137,8 @@ export class EnemyGroupRegistry {
       bState: { t: 0 },
       vel: { x: 0, y: 0 },
       formationId: normalizeFormationId(req.formationId),
-      cohesionId: normalizeCohesionId(req.cohesionId),
-      spacing: Math.max(1, finite(req.spacing, 18)),
+      cohesionId,
+      params,
       slotCount: Math.max(0, Math.floor(finite(req.count, 0))),
       members: [],
     };
@@ -94,7 +151,7 @@ export class EnemyGroupRegistry {
     const group = this.groups.get(groupId);
     if (!group) return null;
     const slot = Math.max(0, Math.floor(slotIndex));
-    const offset = formationOffset(group.formationId, slot, group.slotCount, group.spacing);
+    const offset = formationOffset(group.formationId, slot, group.slotCount, group.params);
     group.members.push({ ref: { slot: ref.slot, gen: ref.gen }, slotIndex: slot, offset });
     return { groupId, slotIndex: slot };
   }
@@ -123,23 +180,24 @@ export class EnemyGroupRegistry {
     const group = this.groups.get(membership.groupId);
     if (!group || !(dt > 0)) return false;
     const member = group.members.find((m) => m.slotIndex === membership.slotIndex);
-    const offset = member?.offset ?? formationOffset(group.formationId, membership.slotIndex, group.slotCount, group.spacing);
+    const offset = member?.offset ?? formationOffset(group.formationId, membership.slotIndex, group.slotCount, group.params);
     const target = { x: group.anchor.x + offset.x, y: group.anchor.y + offset.y };
     ent.vel = ent.vel ?? { x: 0, y: 0 };
     if (group.cohesionId === "rigid") {
       let vx = (target.x - finite(ent.pos?.x)) / dt;
       let vy = (target.y - finite(ent.pos?.y)) / dt;
       const speed = Math.hypot(vx, vy);
-      if (speed > RIGID_MAX_SPEED) {
-        vx = vx / speed * RIGID_MAX_SPEED;
-        vy = vy / speed * RIGID_MAX_SPEED;
+      const maxSpeed = group.params.cohesion.maxCatchupSpeed;
+      if (speed > maxSpeed) {
+        vx = vx / speed * maxSpeed;
+        vy = vy / speed * maxSpeed;
       }
       ent.vel.x = vx;
       ent.vel.y = vy;
       return true;
     }
-    const maxSpeed = 260;
-    const response = 7;
+    const maxSpeed = group.params.cohesion.maxCatchupSpeed;
+    const response = group.params.cohesion.response;
     const dx = target.x - finite(ent.pos?.x);
     const dy = target.y - finite(ent.pos?.y);
     let vx = dx * response;
