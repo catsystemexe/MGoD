@@ -7,6 +7,7 @@ export type PlayerData = {
  
   speed: number;    // WU/sec
   radius: number;
+  bodyRadius?: number;
   alive: boolean;
   pendingKill: boolean;
   gen: number;

@@ -14,6 +14,7 @@ export interface PlayerEntity {
   // NOTE: player.pos is in WORLD space (unified contract — same as all entities)
   pos: { x: number; y: number };
   radius: number;
+  bodyRadius?: number;
   pendingKill: boolean;
 
   invulnT?: number; // seconds
@@ -111,6 +112,15 @@ export interface CollisionConfig {
 function dist2(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx, dy = ay - by;
   return dx * dx + dy * dy;
+}
+
+function positiveFiniteRadius(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function playerBodyRadius(player: PlayerEntity): number {
+  return positiveFiniteRadius((player as any).bodyRadius) ?? positiveFiniteRadius(player.radius) ?? 0;
 }
 
 const ACTIVE_W2_BEAM = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB).beam;
@@ -213,7 +223,7 @@ export class CollisionSystem {
     if (playerRef && player && player.kind === "player") {
       const pwx = Number(player.pos?.x ?? 0);
       const pwy = Number(player.pos?.y ?? 0);
-      const pr = Number(player.radius ?? 3);
+      const pr = playerBodyRadius(player as PlayerEntity);
 
       for (const { ref: pickRef, e: pick } of pickups) {
         if (pick.pendingKill) continue;
@@ -242,7 +252,8 @@ export class CollisionSystem {
     const pwx = Number(player.pos?.x ?? 0);
     const pwy = Number(player.pos?.y ?? 0);
 
-    const pr = Number(player.radius ?? 3);
+    const combatPr = Number(player.radius ?? 3);
+    const bodyPr = playerBodyRadius(player as PlayerEntity);
 
     // 3.5) enemyProjectile -> player
     this.store.debugForEachAlive((epRef, ep: any) => {
@@ -250,7 +261,7 @@ export class CollisionSystem {
       if (ep.kind !== "enemyProjectile") return;
       if (ep.consumed) return;
 
-      const rr = pr + Number(ep.radius ?? 4);
+      const rr = combatPr + Number(ep.radius ?? 4);
       if (dist2(pwx, pwy, Number(ep.pos?.x ?? 0), Number(ep.pos?.y ?? 0)) <= rr * rr) {
         ep.consumed = true;
         this.bus.emit(EventType.ENEMY_PROJECTILE_HIT_PLAYER, {
@@ -263,7 +274,7 @@ export class CollisionSystem {
 
     // 4) player -> enemy (CONTACT)
     for (const { ref: enemyRef, e: enemy } of enemies) {
-      const rr = pr + Number(enemy.radius ?? 4);
+      const rr = bodyPr + Number(enemy.radius ?? 4);
       if (dist2(pwx, pwy, enemy.pos.x, enemy.pos.y) <= rr * rr) {
         this.bus.emit(EventType.PLAYER_HIT_ENEMY, { player: playerRef, enemy: enemyRef });
         break;

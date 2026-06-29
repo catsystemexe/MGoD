@@ -10,7 +10,8 @@ export function spawnPlayer(store: EntityStore<any>, x: number, y: number): { re
     e.pos = { x, y };
     e.vel = { x: 0, y: 0 };
     e.speed = 140;
-    e.radius = 4;
+    e.radius = 3;
+    e.bodyRadius = 20;
 
     player = e as PlayerData;
   });
