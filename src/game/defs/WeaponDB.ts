@@ -10,6 +10,13 @@ export const WEAPON_DB: WeaponDB = {
     spriteAnimId: "projectile.w1",
     visual: { spriteAnimId: "projectile.w1" },
     audio: { fire: "player.primary.fire" },
+    levels: [
+      { projectileCount: 1 },
+      { projectileCount: 2 },
+      { projectileCount: 3 },
+      { projectileCount: 4 },
+      { projectileCount: 5 },
+    ],
     projectile: {
       speed: 1100,
       ttlSec: 3,
@@ -32,8 +39,15 @@ export const WEAPON_DB: WeaponDB = {
     cooldownSec: 10.0,
     visual: { sdfShape: "laser" },
     audio: { start: null, stop: null },
+    levels: [
+      { durationSec: 1.0 },
+      { durationSec: 2.0 },
+      { durationSec: 3.0 },
+      { durationSec: 4.0 },
+      { durationSec: 5.0 },
+    ],
     beam: {
-      durationSec: 5.0,
+      durationSec: 1.0,
       damage: 15,
       hitIntervalSec: 0.08,
       visual: { sdfShape: "laser" },

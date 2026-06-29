@@ -50,6 +50,11 @@ export type WeaponBombSpec = {
   freezeSec?: number;
 };
 
+export type WeaponLevelSpec = {
+  projectileCount?: number;
+  durationSec?: number;
+};
+
 export type WeaponDef = {
   id: WeaponTypeId;
   fireKind: WeaponFireKind;
@@ -61,6 +66,8 @@ export type WeaponDef = {
   spriteAnimId?: string;
   visual?: WeaponVisualSpec;
   audio?: WeaponAudioSpec;
+
+  levels?: ReadonlyArray<WeaponLevelSpec>;
 
   // one of these according to fireKind
   projectile?: WeaponProjectileSpec;
@@ -100,12 +107,15 @@ export type WeaponInstance = {
 
 export type EffectiveWeaponSpec = WeaponDef & {
   level: number;
+  maxLevel: number;
+  projectileCount?: number;
 };
 
 export type WeaponSlotSnapshot = {
   slot: WeaponSlotId;
   weaponId: WeaponTypeId;
   level: number;
+  maxLevel: number;
   fireKind: WeaponFireKind;
   active: boolean;
   cooldownRemainingSec: number;
@@ -113,6 +123,7 @@ export type WeaponSlotSnapshot = {
   charge01: number;
   ready01: number;
   damage?: number;
+  projectileCount?: number;
   durationSec?: number;
   hitIntervalSec?: number;
 };
@@ -130,18 +141,40 @@ export function resolveWeaponDefinition(weaponId: WeaponTypeId, db: WeaponDB): W
   return def;
 }
 
+export function getWeaponMaxLevel(weaponId: WeaponTypeId, db: WeaponDB): number {
+  const levels = resolveWeaponDefinition(weaponId, db).levels;
+  return Math.max(1, levels?.length ?? 1);
+}
+
+export function normalizeWeaponLevel(level: number, maxLevel: number): number {
+  if (!Number.isFinite(level)) return 1;
+  return Math.max(1, Math.min(Math.max(1, Math.floor(maxLevel)), Math.floor(level)));
+}
+
 export function resolveEffectiveWeaponSpec(instance: WeaponInstance, db: WeaponDB): EffectiveWeaponSpec {
   const def = resolveWeaponDefinition(instance.weaponId, db);
   const fireKind = def.fireKind ?? (def.projectile ? "projectile" : def.beam ? "beam" : "bomb");
-  // Foundation pass: level is stored for future modifiers but does not alter stats yet.
+  const levels = def.levels ? def.levels.map((level) => ({ ...level })) : undefined;
+  const maxLevel = Math.max(1, levels?.length ?? 1);
+  const level = normalizeWeaponLevel(instance.level, maxLevel);
+  const levelSpec = levels?.[level - 1];
+  const beam = def.beam ? {
+    ...def.beam,
+    durationSec: Number(levelSpec?.durationSec ?? def.beam.durationSec),
+    visual: def.beam.visual ? { ...def.beam.visual } : undefined,
+  } : undefined;
+
   return {
     ...def,
     fireKind,
+    levels,
     projectile: def.projectile ? { ...def.projectile, charge: def.projectile.charge ? { ...def.projectile.charge } : undefined } : undefined,
-    beam: def.beam ? { ...def.beam, visual: def.beam.visual ? { ...def.beam.visual } : undefined } : undefined,
+    beam,
     bomb: def.bomb ? { ...def.bomb } : undefined,
     visual: def.visual ? { ...def.visual } : undefined,
     audio: def.audio ? { ...def.audio } : undefined,
-    level: instance.level,
+    level,
+    maxLevel,
+    projectileCount: Math.max(1, Math.floor(Number(levelSpec?.projectileCount ?? def.projectile?.pellets ?? 1))),
   };
 }
