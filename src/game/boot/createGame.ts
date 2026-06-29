@@ -39,7 +39,7 @@ import { VFXSystem } from "../vfx/VFXSystem";
 
 const WEAPONS_FALLBACK: any = {
   primary: "w1.basic",
-  secondary: "w2.basic",
+  secondary: "w2.laser",
   bomb: "b1.basic",
   bombCooldownSec: 0.8,
 };
@@ -502,7 +502,9 @@ export async function createGame(
         }
 
         // Mirror W2 (laser) state onto the player entity so the DOM HUD can read it.
-        const w2 = weaponSystem.getW2State();
+        const weaponSnapshot = weaponSystem.getSnapshot();
+        const w2 = { active: weaponSnapshot.slots.w2.active, charge01: weaponSnapshot.slots.w2.charge01 };
+        (playerEnt as any).weapons = weaponSnapshot;
         (playerEnt as any).w2 = w2;
         (playerEnt as any).weapon = w2.active ? "W2" : "W1";
 

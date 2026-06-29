@@ -12,6 +12,7 @@ import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
 import { WeaponSystem } from "./WeaponSystem";
+import { WEAPON_DB } from "../defs/WeaponDB";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -33,8 +34,8 @@ function main() {
   const muzzle: VfxCall[] = [];
   const tracer: VfxCall[] = [];
 
-  const weaponsCfg: any = { primary: "w1.basic", secondary: "w2.basic", bomb: "b", bombCooldownSec: 0.8 };
-  const ws = new WeaponSystem(bus as any, weaponsCfg, {} as any, { scrollX: 0, scrollY: 0 } as any, {
+  const weaponsCfg: any = { primary: "w1.basic", secondary: "w2.laser", bomb: "b", bombCooldownSec: 0.8 };
+  const ws = new WeaponSystem(bus as any, weaponsCfg, WEAPON_DB as any, { scrollX: 0, scrollY: 0 } as any, {
     onSpawnProjectile: (p: VfxCall) => muzzle.push(p),
     onTracer: (p: VfxCall) => tracer.push(p),
   });
