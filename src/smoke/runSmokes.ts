@@ -10,6 +10,7 @@ const SMOKES = [
   "../game/systems/DirectorSpawn.smoke",
   "../game/systems/SpawnDelayOneTick.smoke",
   "../game/systems/EnemyCapRespected.smoke",
+  "../game/systems/EnemyCulling.smoke",
   "../game/systems/CollisionSystem.smoke",
   "../game/systems/ProjectileSystem.smoke",
   "../game/systems/ProjectileConsumedKillsSameTick.smoke",

@@ -10,6 +10,7 @@ import { ENEMY_DEFS, getAttackProfile } from "../defs/EnemyDefs";
 import { updateAttack } from "../enemies/AttackController";
 import { BEHAVIOR_GRAPHS } from "../content/CONTENT";
 import type { EnemyGroupRegistry } from "../enemies/EnemyGroups";
+import { resolveMovementCullReferenceX } from "../enemies/EnemyCullReference";
 
 const DEV = Boolean((globalThis as any).__DEV__);
 
@@ -245,18 +246,25 @@ export class EnemySystem {
         });
       }
 
-      // offscreen cull
-      // offscreen cull
+      // Horizontal cleanup uses a persistent movement reference so temporary
+      // cyclic offsets, group formation offsets, and cohesion lag do not cause
+      // false deaths. Vertical viewport excursions are valid enemy movement.
       const r = safeNum(e.radius, 4);
-      const camX = safeNum((this.world as any)?.scrollX, 0);const camY = safeNum((this.world as any)?.scrollY, 0);
-      const band = 120; // px tolerance above/below viewport
-        const xBand = 160; // px tolerance left/right (allows offscreen spawns)
+      const camX = safeNum((this.world as any)?.scrollX, 0);
+      const xBand = 160; // px tolerance left/right (allows offscreen spawns)
+      const cullRefX = e.group
+        ? this.groups?.resolveCullReferenceX(e.group.groupId, e.pos.x) ?? safeNum(e.pos.x, 0)
+        : resolveMovementCullReferenceX(e.behaviorId, e.bState, e.pos.x);
 
-        // kill far outside bands
-        if (e.pos.y < camY - r - band) this.store.markKill(ref);
-        if (e.pos.y > camY + H + r + band) this.store.markKill(ref);
-        if (e.pos.x < camX - r - xBand) this.store.markKill(ref);
-        if (e.pos.x > camX + W + r + xBand) this.store.markKill(ref);
+      if (cullRefX < camX - r - xBand) {
+        if (e.group) this.groups?.markMembersForKill(e.group.groupId, this.store);
+        else this.store.markKill(ref);
+        return;
+      }
+      if (cullRefX > camX + W + r + xBand) {
+        if (e.group) this.groups?.markMembersForKill(e.group.groupId, this.store);
+        else this.store.markKill(ref);
+      }
     });
     this.groups?.reconcile(this.store);
   }

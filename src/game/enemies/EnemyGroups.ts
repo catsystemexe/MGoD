@@ -2,6 +2,7 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { EnemyBehaviorDB } from "./EnemyBehaviorDB";
 import { EnemyBehaviorPresets } from "./EnemyBehaviorPresets";
+import { resolveMovementCullReferenceX } from "./EnemyCullReference";
 
 type Vec2 = { x: number; y: number };
 export type GroupId = number;
@@ -259,6 +260,18 @@ export class EnemyGroupRegistry {
   }
 
   remove(id: GroupId): void { this.groups.delete(id); }
+  resolveCullReferenceX(id: GroupId, fallbackX: unknown): number {
+    const group = this.groups.get(id);
+    if (!group) return finite(fallbackX);
+    return resolveMovementCullReferenceX(group.behaviorId, group.bState, group.anchor.x);
+  }
+  markMembersForKill(id: GroupId, store: EntityStore<any>): void {
+    const group = this.groups.get(id);
+    if (!group) return;
+    for (const member of group.members) {
+      store.markKill(member.ref);
+    }
+  }
   reset(): void { this.groups.clear(); this.nextId = 1; }
   get(id: GroupId): Readonly<Group> | undefined { return this.groups.get(id); }
   size(): number { return this.groups.size; }
