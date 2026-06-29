@@ -7,6 +7,7 @@ type Vec2 = { x: number; y: number };
 export type GroupId = number;
 export type FormationId = typeof ENEMY_GROUP_FORMATION_IDS[number];
 export type CohesionId = "rigid" | "elastic";
+export type GroupFormationFacing = "left" | "right";
 
 export type EnemyGroupMembership = { groupId: GroupId; slotIndex: number };
 
@@ -16,6 +17,8 @@ export type EnemyGroupParams = {
     depth?: number;
     radius?: number;
     angle?: number;
+    facing?: string;
+    startAngle?: number;
   };
   cohesion?: {
     response?: number;
@@ -24,7 +27,7 @@ export type EnemyGroupParams = {
 };
 
 export type NormalizedEnemyGroupParams = {
-  formation: { spacing: number; depth: number; radius: number; angle: number };
+  formation: { spacing: number; depth: number; radius: number; angle: number; facing: GroupFormationFacing; startAngle: number };
   cohesion: { response: number; maxCatchupSpeed: number };
 };
 
@@ -80,6 +83,15 @@ function finiteClamped(value: unknown, fallback: number, min: number, max: numbe
   return clamp(finite(value, fallback), min, max);
 }
 
+export function normalizeGroupFormationFacing(value: unknown): GroupFormationFacing {
+  return value === "right" ? "right" : "left";
+}
+
+export function normalizeGroupFormationStartAngle(value: unknown): number {
+  const raw = finite(value, 0);
+  return ((raw % 360) + 360) % 360;
+}
+
 export function normalizeEnemyGroupParams(input: EnemyGroupParams | undefined, cohesionId: CohesionId, legacySpacing?: number): NormalizedEnemyGroupParams {
   const spacingInput = input?.formation?.spacing ?? legacySpacing;
   const depthInput = input?.formation?.depth ?? legacySpacing;
@@ -92,6 +104,8 @@ export function normalizeEnemyGroupParams(input: EnemyGroupParams | undefined, c
       depth: finiteClamped(depthInput, ENEMY_GROUP_PARAM_LIMITS.formation.depth.default, ENEMY_GROUP_PARAM_LIMITS.formation.depth.min, ENEMY_GROUP_PARAM_LIMITS.formation.depth.max),
       radius: finiteClamped(input?.formation?.radius, ENEMY_GROUP_PARAM_LIMITS.formation.radius.default, ENEMY_GROUP_PARAM_LIMITS.formation.radius.min, ENEMY_GROUP_PARAM_LIMITS.formation.radius.max),
       angle: finiteClamped(input?.formation?.angle, ENEMY_GROUP_PARAM_LIMITS.formation.angle.default, ENEMY_GROUP_PARAM_LIMITS.formation.angle.min, ENEMY_GROUP_PARAM_LIMITS.formation.angle.max),
+      facing: normalizeGroupFormationFacing(input?.formation?.facing),
+      startAngle: normalizeGroupFormationStartAngle(input?.formation?.startAngle),
     },
     cohesion: {
       response: finiteClamped(input?.cohesion?.response, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.min, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.max),
@@ -120,7 +134,8 @@ export function formationOffset(id: FormationId, slotIndex: number, slotCount: n
     if (slot === 0) return { x: 0, y: 0 };
     const pair = Math.ceil(slot / 2);
     const side = slot % 2 === 1 ? -1 : 1;
-    return { x: pair * depth, y: side * pair * spacing };
+    const x = pair * depth;
+    return { x: params.formation.facing === "right" ? -x : x, y: side * pair * spacing };
   }
   if (id === "column.vertical") {
     return { x: 0, y: (slot - (count - 1) / 2) * spacing };
@@ -131,13 +146,13 @@ export function formationOffset(id: FormationId, slotIndex: number, slotCount: n
     const theta = u * (params.formation.angle * Math.PI / 180) / 2;
     return {
       // Positive X trails the center for right-to-left enemy travel; the center slot is forward-most.
-      x: params.formation.radius * (1 - Math.cos(theta)),
+      x: (params.formation.facing === "right" ? -1 : 1) * params.formation.radius * (1 - Math.cos(theta)),
       y: params.formation.radius * Math.sin(theta),
     };
   }
   if (id === "ring") {
     if (count === 1) return { x: 0, y: 0 };
-    const theta = slot * Math.PI * 2 / count;
+    const theta = params.formation.startAngle * Math.PI / 180 + slot * Math.PI * 2 / count;
     return { x: Math.cos(theta) * params.formation.radius, y: Math.sin(theta) * params.formation.radius };
   }
   return { x: (slot - (count - 1) / 2) * spacing, y: 0 };
