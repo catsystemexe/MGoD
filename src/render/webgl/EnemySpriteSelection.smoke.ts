@@ -11,7 +11,7 @@ import { materializeEnemyAppearance } from "../../game/defs/EnemyAppearanceTypes
 import { createWorldState } from "../../game/data/WorldState";
 import { SpawnSystem, type SpawnableEntity } from "../../game/systems/SpawnSystem";
 import { SpriteAtlas } from "../sprites/SpriteAtlas";
-import { computeSpriteDrawGeometry, selectEnemySpriteFrame } from "./WebGLSceneRenderer";
+import { computePickupVisualMetrics, computeSpriteDrawGeometry, selectEnemySpriteFrame } from "./WebGLSceneRenderer";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -812,6 +812,16 @@ function testRendererSpriteHelperSeparationSource() {
   }
 }
 
+
+function testPickupVisualMetrics() {
+  for (const scale of [1, 2, 3, 4]) {
+    const metrics = computePickupVisualMetrics(scale);
+    assert(Math.abs(metrics.backgroundLogicPx * metrics.screenPixelScale - 60) < 0.001, `pickup background should render at 60 screen px for scale ${scale}`);
+    assert(Math.abs(metrics.symbolHeightLogicPx * metrics.screenPixelScale - 40) < 0.001, `pickup symbol should render at 40 screen px high for scale ${scale}`);
+    assert(Math.abs(metrics.shadowLogicPx * metrics.screenPixelScale - 3) < 0.001, `pickup outline/shadow should render at 3 screen px for scale ${scale}`);
+  }
+}
+
 function main() {
   testContentParser();
   testSpriteAnimationNormalization();
@@ -821,6 +831,7 @@ function main() {
   testSpawnRuntime();
   testSpawnAnimationMaterialization();
   testRendererHelpers();
+  testPickupVisualMetrics();
   testRealAtlasAnimationContract();
   testMigratedAssetConsistency();
   testExistingEnemyRenderPaths();
