@@ -29,6 +29,7 @@ import { ParticleStore } from "../../engine/fx/ParticleStore";
 import { ImpactPhaseSystem } from "../systems/ImpactPhaseSystem";
 import type { WorldEntity } from "../systems/CollisionSystem";
 import { EnemySystem } from "../systems/EnemySystem";
+import { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
@@ -203,7 +204,8 @@ export async function createGame(
   const pickupSystem = new PickupSystem(store as any);
 
   
-        const spawn = new SpawnSystem(store as any, spawnCfg, world as any);
+        const enemyGroups = new EnemyGroupRegistry();
+        const spawn = new SpawnSystem(store as any, spawnCfg, world as any, enemyGroups);
 
   // ---- Alive counting for caps
   function countAliveEnemies(): number {
@@ -381,7 +383,7 @@ export async function createGame(
           },
         });
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
-        const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any);
+        const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any, enemyGroups);
         
   // ---- Impact
   const ca = { applyExplosion: (_x: number, _y: number, _r: number) => 0 };
@@ -419,6 +421,8 @@ export async function createGame(
       });
       store.cleanup();
     }
+
+    enemyGroups.reset();
 
     // reset player entity (same object)
     playerEnt.kind = "player";
