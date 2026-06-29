@@ -606,6 +606,8 @@ function assertDevSummonerGroupPayload(): void {
   assert(stepGroupParamValue("radius", 140, 1) === 140, "radius stepper clamps high values");
   assert(normalizeGroupStepperValue("angle", Number.POSITIVE_INFINITY) === 100, "angle stepper defaults invalid values");
   assert(stepGroupParamValue("angle", 20, -1) === 20, "angle stepper clamps at min");
+  assert(normalizeGroupStepperValue("startAngle" as any, -90) === 270, "start angle stepper wraps negative degrees");
+  assert(stepGroupParamValue("startAngle" as any, 350, 1) === 5, "start angle stepper wraps above 360 degrees");
   assert(normalizeGroupStepperValue("response", 99) === 20, "tight stepper clamps high values");
   assert(stepGroupParamValue("response", 1, -1) === 1, "tight stepper clamps at min");
   assert(normalizeGroupStepperValue("maxCatchupSpeed", undefined, "elastic") === 260, "elastic catch stepper uses elastic default");
@@ -615,6 +617,7 @@ function assertDevSummonerGroupPayload(): void {
   const formationOptions = groupFormationSelectOptions();
   assert(formationOptions.find((option) => option.label === "Line")?.value === "line.horizontal", "visible Line option must emit line.horizontal");
   assert(formationOptions.find((option) => option.label === "Column")?.value === "column.vertical", "visible Column option must emit column.vertical");
+  assert(!formationOptions.some((option) => option.value === "wedge.left" || option.value === "wedge.right" || option.value === "arc.backward" || option.value === "ring.rotated"), "formation variants must not add new canonical IDs");
 
   const payload = createDevSummonerGroupSpawnPayload({
     enemyTypeId: "red",
@@ -624,7 +627,7 @@ function assertDevSummonerGroupPayload(): void {
     formationId: "wedge",
     movementPresetId: "smart.track.soft",
     cohesionId: "elastic",
-    params: { formation: { spacing: 35.5, depth: 999, radius: 999, angle: 5 }, cohesion: { response: -4, maxCatchupSpeed: 100 } },
+    params: { formation: { spacing: 35.5, depth: 999, radius: 999, angle: 5, facing: "right", startAngle: 450 }, cohesion: { response: -4, maxCatchupSpeed: 100 } },
   });
   assert(payload, "valid group payload must be constructed");
   assert(payload.enemyTypeId === "red", "group payload must include canonical enemy type");
@@ -637,6 +640,8 @@ function assertDevSummonerGroupPayload(): void {
   assert(payload.params?.formation?.depth === 80, "group payload must clamp depth override");
   assert(payload.params?.formation?.radius === 140, "group payload must clamp radius override");
   assert(payload.params?.formation?.angle === 20, "group payload must clamp angle override");
+  assert(payload.params?.formation?.facing === "right", "visible Wedge Right/Arc Backward values map to canonical right");
+  assert(payload.params?.formation?.startAngle === 90, "Ring Start is emitted and normalized in degrees");
   assert(payload.params?.cohesion?.response === 1, "group payload must clamp tight override");
   assert(payload.params?.cohesion?.maxCatchupSpeed === 100, "group payload must preserve valid catch override");
   assert(!(payload as any).behaviorPresetId, "grouped members must not receive an independent behavior preset from UI payload");

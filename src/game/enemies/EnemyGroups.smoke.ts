@@ -358,6 +358,19 @@ function assertLinearAxis(formationId: "line.horizontal" | "column.vertical", ax
 }
 
 {
+  const params = normalizeEnemyGroupParams({ formation: { spacing: 20, depth: 12 } }, "rigid");
+  const left = [0, 1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, params));
+  assert.deepEqual(left, [{ x: 0, y: 0 }, { x: 12, y: -20 }, { x: 12, y: 20 }, { x: 24, y: -40 }, { x: 24, y: 40 }], "default wedge geometry remains the previous left-facing shape");
+  const rightParams = normalizeEnemyGroupParams({ formation: { spacing: 20, depth: 12, facing: "right" } }, "rigid");
+  const right = [0, 1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, rightParams));
+  for (let i = 0; i < left.length; i++) {
+    assert(close(right[i].x, -left[i].x), "wedge right horizontally reflects default X offsets without reordering slots");
+    assert(close(right[i].y, left[i].y), "wedge right preserves default Y offsets");
+  }
+  assert.equal(normalizeEnemyGroupParams({ formation: { facing: "invalid" } }, "rigid").formation.facing, "left", "invalid facing normalizes to default left");
+}
+
+{
   const params = normalizeEnemyGroupParams({ formation: { radius: 60, angle: 120 } }, "rigid");
   assert.deepEqual(formationOffset("arc.forward", 0, 1, params), { x: 0, y: 0 });
   const arc3 = [0, 1, 2].map((i) => formationOffset("arc.forward", i, 3, params));
@@ -370,6 +383,19 @@ function assertLinearAxis(formationId: "line.horizontal" | "column.vertical", ax
   assert(close(arc5[0].y, -arc5[4].y) && close(arc5[1].y, -arc5[3].y), "arc five-slot order is symmetric");
   const wider = [0, 1, 2].map((i) => formationOffset("arc.forward", i, 3, normalizeEnemyGroupParams({ formation: { radius: 80, angle: 160 } }, "rigid")));
   assert(wider[0].x > arc3[0].x && Math.abs(wider[0].y) > Math.abs(arc3[0].y), "arc radius and angle affect geometry");
+
+  const backwardParams = normalizeEnemyGroupParams({ formation: { radius: 60, angle: 120, facing: "right" } }, "rigid");
+  for (const count of [3, 5]) {
+    const forward = Array.from({ length: count }, (_unused, i) => formationOffset("arc.forward", i, count, params));
+    const backward = Array.from({ length: count }, (_unused, i) => formationOffset("arc.forward", i, count, backwardParams));
+    for (let i = 0; i < count; i++) {
+      assert(close(backward[i].x, -forward[i].x), "arc backward horizontally reflects forward X offsets");
+      assert(close(backward[i].y, forward[i].y), "arc backward preserves forward Y offsets");
+    }
+    const center = Math.floor(count / 2);
+    assert(forward[center].x < forward[0].x && backward[center].x > backward[0].x, "arc center/outer semantic relationship reverses under backward facing");
+  }
+
 }
 
 {
@@ -388,6 +414,18 @@ function assertLinearAxis(formationId: "line.horizontal" | "column.vertical", ax
     assert(close(Math.hypot(next.x - ring8[i].x, next.y - ring8[i].y), chord), "ring adjacent spacing is uniform");
     assert(Number.isFinite(ring8[i].x) && Number.isFinite(ring8[i].y), "ring offsets remain finite");
   }
+
+  const ring45 = [0, 1, 2, 3].map((i) => formationOffset("ring", i, 4, normalizeEnemyGroupParams({ formation: { radius: 40, startAngle: 45 } }, "rigid")));
+  const diag = 40 / Math.SQRT2;
+  assert(close(ring45[0].x, diag) && close(ring45[0].y, diag), "ring startAngle 45 degrees places slot 0 on the down-right diagonal");
+  assert(ring45.every((p) => close(Math.hypot(p.x, p.y), 40)), "ring startAngle preserves radius");
+  const ring2Vertical = [0, 1].map((i) => formationOffset("ring", i, 2, normalizeEnemyGroupParams({ formation: { radius: 40, startAngle: 90 } }, "rigid")));
+  assert(close(ring2Vertical[0].x, 0) && close(ring2Vertical[0].y, 40) && close(ring2Vertical[1].x, 0) && close(ring2Vertical[1].y, -40), "ring startAngle 90 degrees creates a vertical pair in screen coordinates");
+  assert.equal(normalizeEnemyGroupParams({ formation: { startAngle: -90 } }, "rigid").formation.startAngle, 270, "negative ring start angles wrap into [0, 360)");
+  assert.equal(normalizeEnemyGroupParams({ formation: { startAngle: 450 } }, "rigid").formation.startAngle, 90, "large ring start angles wrap into [0, 360)");
+  assert.equal(normalizeEnemyGroupParams({ formation: { startAngle: Number.NaN } }, "rigid").formation.startAngle, 0, "NaN ring start angle uses default");
+  assert.equal(normalizeEnemyGroupParams({ formation: { startAngle: Number.POSITIVE_INFINITY } }, "rigid").formation.startAngle, 0, "infinite ring start angle uses default");
+
 }
 
 {
@@ -449,13 +487,33 @@ function assertLinearAxis(formationId: "line.horizontal" | "column.vertical", ax
 }
 
 {
-  const diagonal = spawnGroup("column.vertical", "diagonal.down", "rigid", 3, { formation: { spacing: 20 }, cohesion: { maxCatchupSpeed: 600 } });
+  for (const [formationId, params] of [
+    ["wedge", { formation: { spacing: 20, depth: 12, facing: "right" }, cohesion: { maxCatchupSpeed: 600 } }],
+    ["arc.forward", { formation: { radius: 40, angle: 120, facing: "right" }, cohesion: { maxCatchupSpeed: 600 } }],
+    ["ring", { formation: { radius: 40, startAngle: 45 }, cohesion: { maxCatchupSpeed: 600 } }],
+  ] as const) {
+    const { store, groups } = spawnGroup(formationId, "none.hold", "rigid", 5, params);
+    const [snapshot] = groups.snapshot();
+    const group = groups.get(snapshot.id) as any;
+    const es = enemiesOf(store);
+    assert.deepEqual(es.map((e) => e.group.slotIndex), [0, 1, 2, 3, 4], `${formationId} variant preserves stable slot IDs`);
+    assert.equal(group.params.formation.facing, formationId === "ring" ? "left" : "right", `${formationId} normalized facing is stored`);
+    if (formationId === "ring") assert.equal(group.params.formation.startAngle, 45, "ring normalized startAngle is stored in degrees");
+    for (let i = 0; i < es.length; i++) {
+      const expected = formationOffset(formationId, i, 5, group.params);
+      assert(close(es[i].pos.x, 200 + expected.x) && close(es[i].pos.y, 90 + expected.y), `${formationId} variant members spawn at anchor plus offset`);
+    }
+  }
+}
+
+{
+  const diagonal = spawnGroup("wedge", "diagonal.down", "rigid", 3, { formation: { spacing: 20, depth: 12, facing: "right" }, cohesion: { maxCatchupSpeed: 600 } });
   const before = enemiesOf(diagonal.store).map((e) => ({ x: e.pos.x, y: e.pos.y }));
   diagonal.enemies.update({ dt: DT, tick: 2, time: DT * 2 } as any);
   const after = enemiesOf(diagonal.store);
-  assert(after.every((e, i) => e.pos.x < before[i].x && e.pos.y > before[i].y), "column formation follows diagonal.down without deformation");
+  assert(after.every((e, i) => e.pos.x < before[i].x && e.pos.y > before[i].y), "reflected wedge formation follows diagonal.down without deformation");
 
-  const sine = spawnGroup("ring", "sine.wide", "rigid", 4, { formation: { radius: 32 }, cohesion: { maxCatchupSpeed: 600 } });
+  const sine = spawnGroup("ring", "sine.wide", "rigid", 4, { formation: { radius: 32, startAngle: 45 }, cohesion: { maxCatchupSpeed: 600 } });
   const initial = enemiesOf(sine.store).map((e) => ({ x: e.pos.x, y: e.pos.y }));
   for (let i = 0; i < 90; i++) sine.enemies.update({ dt: DT, tick: i + 2, time: DT * (i + 2) } as any);
   const moved = enemiesOf(sine.store);

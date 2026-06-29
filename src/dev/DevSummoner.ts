@@ -4,7 +4,7 @@ import type { WorldState } from "../game/data/WorldState";
 import { ENEMY_DEFS } from "../game/defs/EnemyDefs";
 import { EnemyBehaviorPresets } from "../game/enemies/EnemyBehaviorPresets";
 import { BEHAVIOR_GRAPHS } from "../game/content/CONTENT";
-import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS, ENEMY_GROUP_PARAM_LIMITS, normalizeEnemyGroupParams } from "../game/enemies/EnemyGroups";
+import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS, ENEMY_GROUP_PARAM_LIMITS, normalizeEnemyGroupParams, normalizeGroupFormationStartAngle } from "../game/enemies/EnemyGroups";
 import type { CohesionId, FormationId } from "../game/enemies/EnemyGroups";
 
 const EMPTY_ENEMY_LAB = "No FSM enemy selected/spawned.";
@@ -414,7 +414,7 @@ export function stepGroupCount(value: unknown, delta: -1 | 1): number {
   return normalizeGroupCount(normalizeGroupCount(value) + delta);
 }
 
-type GroupParamKey = "spacing" | "depth" | "radius" | "angle" | "response" | "maxCatchupSpeed";
+type GroupParamKey = "spacing" | "depth" | "radius" | "angle" | "startAngle" | "response" | "maxCatchupSpeed";
 
 export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, cohesionId: CohesionId = "rigid"): number {
   const params = normalizeEnemyGroupParams({
@@ -423,6 +423,7 @@ export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, c
       depth: key === "depth" ? Number(value) : undefined,
       radius: key === "radius" ? Number(value) : undefined,
       angle: key === "angle" ? Number(value) : undefined,
+      startAngle: key === "startAngle" ? Number(value) : undefined,
     },
     cohesion: {
       response: key === "response" ? Number(value) : undefined,
@@ -433,6 +434,7 @@ export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, c
   if (key === "depth") return params.formation.depth;
   if (key === "radius") return params.formation.radius;
   if (key === "angle") return params.formation.angle;
+  if (key === "startAngle") return params.formation.startAngle;
   if (key === "response") return params.cohesion.response;
   return params.cohesion.maxCatchupSpeed;
 }
@@ -442,8 +444,10 @@ export function stepGroupParamValue(key: GroupParamKey, value: unknown, delta: -
     : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
       : key === "radius" ? ENEMY_GROUP_PARAM_LIMITS.formation.radius
         : key === "angle" ? ENEMY_GROUP_PARAM_LIMITS.formation.angle
+          : key === "startAngle" ? { min: 0, max: 359, default: 0, step: 15 }
           : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
             : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+  if (key === "startAngle") return normalizeGroupFormationStartAngle(normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step);
   return normalizeGroupStepperValue(key, normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step, cohesionId);
 }
 
@@ -704,6 +708,8 @@ export class DevSummoner {
       return { wrap, get value() { return value; }, addEventListener(listener: () => void) { listeners.push(listener); } };
     };
     const formationChoice = makeCompactChoice<FormationId>("Form", groupFormationSelectOptions(), "line.horizontal");
+    const wedgeFacingChoice = makeSegmentedChoice<"left" | "right">("Facing", "Wedge facing", [{ value: "left", label: "Left" }, { value: "right", label: "Right" }], "left");
+    const arcFacingChoice = makeSegmentedChoice<"left" | "right">("Arc", "Arc direction", [{ value: "left", label: "Forward" }, { value: "right", label: "Backward" }], "left");
     const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
     const formationWrap = formationChoice.wrap;
     const cohesionWrap = cohesionChoice.wrap;
@@ -764,14 +770,18 @@ export class DevSummoner {
     const depthStepper = makeParamStepper("Depth", "depth", ENEMY_GROUP_PARAM_LIMITS.formation.depth.default);
     const radiusStepper = makeParamStepper("Radius", "radius", ENEMY_GROUP_PARAM_LIMITS.formation.radius.default);
     const angleStepper = makeParamStepper("Angle", "angle", ENEMY_GROUP_PARAM_LIMITS.formation.angle.default);
+    const startAngleStepper = makeParamStepper("Start", "startAngle", 0);
     const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
     const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
     const paramRow1 = document.createElement("div");
     paramRow1.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
+    paramRow1.appendChild(wedgeFacingChoice.wrap);
+    paramRow1.appendChild(arcFacingChoice.wrap);
     paramRow1.appendChild(spacingStepper.wrap);
     paramRow1.appendChild(depthStepper.wrap);
     paramRow1.appendChild(radiusStepper.wrap);
     paramRow1.appendChild(angleStepper.wrap);
+    paramRow1.appendChild(startAngleStepper.wrap);
     groupControls.appendChild(paramRow1);
     const paramRow2 = document.createElement("div");
     paramRow2.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
@@ -782,17 +792,24 @@ export class DevSummoner {
     const setStepperVisible = (wrap: HTMLElement, visible: boolean) => {
       wrap.style.display = visible ? "grid" : "none";
       wrap.setAttribute("aria-hidden", String(!visible));
+      for (const el of Array.from(wrap.querySelectorAll("button,input,select"))) {
+        (el as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).tabIndex = visible ? 0 : -1;
+      }
     };
     const refreshGroupParamVisibility = () => {
       const formation = formationChoice.value;
+      setStepperVisible(wedgeFacingChoice.wrap, formation === "wedge");
+      setStepperVisible(arcFacingChoice.wrap, formation === "arc.forward");
       setStepperVisible(spacingStepper.wrap, formation === "line.horizontal" || formation === "wedge" || formation === "column.vertical");
       setStepperVisible(depthStepper.wrap, formation === "wedge");
       setStepperVisible(radiusStepper.wrap, formation === "arc.forward" || formation === "ring");
       setStepperVisible(angleStepper.wrap, formation === "arc.forward");
+      setStepperVisible(startAngleStepper.wrap, formation === "ring");
       spacingStepper.refresh();
       depthStepper.refresh();
       radiusStepper.refresh();
       angleStepper.refresh();
+      startAngleStepper.refresh();
       responseStepper.refresh();
       catchStepper.refresh();
     };
@@ -975,6 +992,8 @@ export class DevSummoner {
               depth: depthStepper.value,
               radius: radiusStepper.value,
               angle: angleStepper.value,
+              facing: formationChoice.value === "arc.forward" ? arcFacingChoice.value : formationChoice.value === "wedge" ? wedgeFacingChoice.value : undefined,
+              startAngle: formationChoice.value === "ring" ? startAngleStepper.value : undefined,
             },
             cohesion: {
               response: responseStepper.value,

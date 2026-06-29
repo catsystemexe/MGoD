@@ -77,7 +77,7 @@ export type CMEventMap = {
     cohesionId: string;
     spacing?: number;
     params?: {
-      formation?: { spacing?: number; depth?: number; radius?: number; angle?: number };
+      formation?: { spacing?: number; depth?: number; radius?: number; angle?: number; facing?: string; startAngle?: number };
       cohesion?: { response?: number; maxCatchupSpeed?: number };
     };
   };
