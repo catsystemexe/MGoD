@@ -549,6 +549,71 @@ export class WebGLSceneRenderer {
   }
   
   
+  private drawPickupSymbolAt(gl: WebGL2RenderingContext, cx: number, cy: number, symbol: string): boolean {
+    const bitsBySymbol: Record<string, string[]> = {
+      "1": [
+        "010",
+        "110",
+        "010",
+        "010",
+        "111",
+      ],
+      "2": [
+        "111",
+        "001",
+        "111",
+        "100",
+        "111",
+      ],
+      "+": [
+        "000",
+        "010",
+        "111",
+        "010",
+        "000",
+      ],
+      B: [
+        "110",
+        "101",
+        "110",
+        "101",
+        "110",
+      ],
+    };
+
+    const rows = bitsBySymbol[symbol];
+    if (!rows) return false;
+
+    const cell = 2;
+    const cols = rows[0]?.length ?? 0;
+    const outW = cols * cell;
+    const outH = rows.length * cell;
+    const baseX = Math.round(cx - outW * 0.5 + cell * 0.5);
+    const baseY = Math.round(cy - outH * 0.5 + cell * 0.5);
+
+    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+    for (let y = 0; y < rows.length; y++) {
+      const row = rows[y];
+      for (let x = 0; x < cols; x++) {
+        if (row.charCodeAt(x) !== 49) continue;
+        gl.uniform2f(this.uPos, baseX + x * cell, baseY + y * cell);
+        gl.uniform2f(this.uSize, cell, cell);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+    }
+    return true;
+  }
+
+  private pickupSymbolForDefId(defId: string): string | null {
+    switch (defId) {
+      case "w1": return "1";
+      case "w2": return "2";
+      case "energy": return "+";
+      case "bomb": return "B";
+      default: return null;
+    }
+  }
+
   private drawGlyphAt(gl: WebGL2RenderingContext, cx: number, cy: number, glyphId: string): boolean {
     const g = getGlyph(glyphId);
     if (!g) return false;
@@ -913,6 +978,8 @@ export class WebGLSceneRenderer {
         if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
         else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
         else if (defId === "score") gl.uniform4f(this.uColor, 0, 1, 1, 1);
+        else if (defId === "w1") gl.uniform4f(this.uColor, 0.25, 0.65, 1, 1);
+        else if (defId === "w2") gl.uniform4f(this.uColor, 1, 0.35, 1, 1);
         else gl.uniform4f(this.uColor, 1, 0, 1, 1);
       } else if (kind === "particle") {
         const sz = Number((e as any).size ?? 2);
@@ -1350,6 +1417,11 @@ export class WebGLSceneRenderer {
       gl.uniform2f(this.uPos, ix, iy);
       gl.uniform2f(this.uSize, w, h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      if (kind === "pickup") {
+        const symbol = this.pickupSymbolForDefId(String((e as any).defId ?? ""));
+        if (symbol) this.drawPickupSymbolAt(gl, ix, iy, symbol);
+      }
     });
 
     for (const fx of deathGhostFx) {
