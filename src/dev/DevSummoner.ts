@@ -4,13 +4,96 @@ import type { WorldState } from "../game/data/WorldState";
 import { ENEMY_DEFS } from "../game/defs/EnemyDefs";
 import { EnemyBehaviorPresets } from "../game/enemies/EnemyBehaviorPresets";
 import { BEHAVIOR_GRAPHS } from "../game/content/CONTENT";
+import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS, ENEMY_GROUP_PARAM_LIMITS, normalizeEnemyGroupParams, normalizeGroupFormationStartAngle } from "../game/enemies/EnemyGroups";
+import type { CohesionId, FormationId } from "../game/enemies/EnemyGroups";
 
 const EMPTY_ENEMY_LAB = "No FSM enemy selected/spawned.";
 type MovementClassId = "dumb" | "smart";
+type SpawnMode = "enemy" | "group";
 
 type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
+
+export function groupFormationSelectOptions(): Array<{ value: FormationId; label: string }> {
+  const formationLabel = (id: FormationId) => id === "line.horizontal" ? "Line"
+    : id === "wedge" ? "Wedge"
+      : id === "column.vertical" ? "Column"
+        : id === "arc.forward" ? "Arc"
+          : "Ring";
+  return ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: formationLabel(id) }));
+}
+
+const CONTROL_HEIGHT_PX = 26;
+const CONTROL_RADIUS_PX = 2;
+const CONTROL_FONT = "12px monospace";
+const CONTROL_BG = "#111";
+const CONTROL_BORDER = "1px solid rgba(255,255,255,0.24)";
+const LABEL_WEIGHT = "800";
+
+function applyControlBaseStyle(el: HTMLElement): void {
+  el.style.boxSizing = "border-box";
+  el.style.minHeight = `${CONTROL_HEIGHT_PX}px`;
+  el.style.font = CONTROL_FONT;
+  el.style.color = "#eee";
+  el.style.background = CONTROL_BG;
+  el.style.border = CONTROL_BORDER;
+  el.style.borderRadius = `${CONTROL_RADIUS_PX}px`;
+}
+
+function applyNativeSelectStyle(select: HTMLSelectElement): void {
+  applyControlBaseStyle(select);
+  select.style.width = "100%";
+  select.style.minWidth = "0";
+  select.style.padding = "2px 18px 2px 5px";
+  select.style.cursor = "pointer";
+  select.style.appearance = "none";
+  select.style.setProperty("-webkit-appearance", "none");
+  select.style.textOverflow = "ellipsis";
+  select.style.overflow = "hidden";
+  select.style.whiteSpace = "nowrap";
+}
+
+function applyValueInputStyle(input: HTMLInputElement): void {
+  applyControlBaseStyle(input);
+  input.style.width = "52px";
+  input.style.padding = "2px 4px";
+  input.style.textAlign = "center";
+  input.style.appearance = "textfield";
+  input.style.setProperty("-webkit-appearance", "none");
+}
+
+function applyLabelTextStyle(el: HTMLElement, prominence: "primary" | "secondary" = "primary"): void {
+  el.style.fontFamily = "monospace";
+  el.style.fontSize = "12px";
+  el.style.fontWeight = LABEL_WEIGHT;
+  el.style.color = prominence === "primary" ? "#f2f2f2" : "#d7d7d7";
+  el.style.opacity = prominence === "primary" ? "0.98" : "0.88";
+  el.style.lineHeight = "1.05";
+  el.style.whiteSpace = "nowrap";
+}
+
+function applyInlineStepperButtonStyle(button: HTMLButtonElement): void {
+  button.style.cssText = [
+    "font:12px monospace",
+    "min-width:24px",
+    "min-height:26px",
+    "padding:0 5px",
+    "border:0",
+    "border-radius:2px",
+    "background:transparent",
+    "color:#ddd",
+    "cursor:pointer",
+    "box-sizing:border-box",
+  ].join(";");
+}
+
+function createSectionGap(): HTMLDivElement {
+  const gap = document.createElement("div");
+  gap.style.cssText = "height:4px;min-height:4px;";
+  gap.setAttribute("aria-hidden", "true");
+  return gap;
+}
 
 const KNOWN_PRIMITIVE_ORDER = ["straight", "diagonal", "sine", "zigzag", "loop", "track", "align", "evade", "range", "orbit", "invaders", "none"] as const;
 const KNOWN_PRIMITIVE_INDEX = new Map<string, number>(KNOWN_PRIMITIVE_ORDER.map((id, index) => [id, index]));
@@ -108,11 +191,12 @@ function getFsmRuntimeDebug(enemy: any) {
   };
 }
 
-function createSelectLabel(text: string): HTMLLabelElement {
+function createSelectLabel(text: string, prominence: "primary" | "secondary" = "primary"): HTMLLabelElement {
   const label = document.createElement("label");
-  label.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  label.style.cssText = "display:flex;flex-direction:column;gap:2px;min-width:0;";
   const span = document.createElement("span");
   span.textContent = text;
+  applyLabelTextStyle(span, prominence);
   label.appendChild(span);
   return label;
 }
@@ -169,10 +253,11 @@ function createCompactSelect(id: string): {
     "box-sizing:border-box",
     "text-align:left",
     "font:12px monospace",
-    "padding:2px 18px 2px 4px",
+    "min-height:26px",
+    "padding:2px 18px 2px 5px",
     "background:#111",
     "color:#eee",
-    "border:1px solid #555",
+    "border:1px solid rgba(255,255,255,0.24)",
     "border-radius:2px",
     "cursor:pointer",
   ].join(";");
@@ -237,6 +322,7 @@ function createCompactSelect(id: string): {
         "box-sizing:border-box",
         "text-align:left",
         "font:12px monospace",
+        "min-height:26px",
         "padding:3px 5px",
         "background:" + (option.value === value ? "#26384f" : "#111"),
         "color:#eee",
@@ -318,6 +404,96 @@ export function createDevSummonerSpawnPayload(input: {
   };
 }
 
+export function normalizeGroupCount(value: unknown): number {
+  const raw = Number(value);
+  const n = Number.isFinite(raw) ? Math.floor(raw) : 5;
+  return Math.min(10, Math.max(2, n));
+}
+
+export function stepGroupCount(value: unknown, delta: -1 | 1): number {
+  return normalizeGroupCount(normalizeGroupCount(value) + delta);
+}
+
+type GroupParamKey = "spacing" | "depth" | "radius" | "angle" | "startAngle" | "response" | "maxCatchupSpeed";
+
+export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, cohesionId: CohesionId = "rigid"): number {
+  const params = normalizeEnemyGroupParams({
+    formation: {
+      spacing: key === "spacing" ? Number(value) : undefined,
+      depth: key === "depth" ? Number(value) : undefined,
+      radius: key === "radius" ? Number(value) : undefined,
+      angle: key === "angle" ? Number(value) : undefined,
+      startAngle: key === "startAngle" ? Number(value) : undefined,
+    },
+    cohesion: {
+      response: key === "response" ? Number(value) : undefined,
+      maxCatchupSpeed: key === "maxCatchupSpeed" ? Number(value) : undefined,
+    },
+  }, cohesionId);
+  if (key === "spacing") return params.formation.spacing;
+  if (key === "depth") return params.formation.depth;
+  if (key === "radius") return params.formation.radius;
+  if (key === "angle") return params.formation.angle;
+  if (key === "startAngle") return params.formation.startAngle;
+  if (key === "response") return params.cohesion.response;
+  return params.cohesion.maxCatchupSpeed;
+}
+
+export function stepGroupParamValue(key: GroupParamKey, value: unknown, delta: -1 | 1, cohesionId: CohesionId = "rigid"): number {
+  const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
+    : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
+      : key === "radius" ? ENEMY_GROUP_PARAM_LIMITS.formation.radius
+        : key === "angle" ? ENEMY_GROUP_PARAM_LIMITS.formation.angle
+          : key === "startAngle" ? { min: 0, max: 359, default: 0, step: 15 }
+          : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+            : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+  if (key === "startAngle") return normalizeGroupFormationStartAngle(normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step);
+  return normalizeGroupStepperValue(key, normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step, cohesionId);
+}
+
+function isValidEnemyTypeId(typeId: string): boolean {
+  return !!ENEMY_DEFS[typeId];
+}
+
+function isValidFormationId(id: string): id is FormationId {
+  return (ENEMY_GROUP_FORMATION_IDS as readonly string[]).includes(id);
+}
+
+function isValidCohesionId(id: string): id is CohesionId {
+  return (ENEMY_GROUP_COHESION_IDS as readonly string[]).includes(id);
+}
+
+function isValidMovementPresetId(id: string): boolean {
+  return !!EnemyBehaviorPresets[id];
+}
+
+export function createDevSummonerGroupSpawnPayload(input: {
+  enemyTypeId: string;
+  count: unknown;
+  anchorX: number;
+  anchorY: number;
+  formationId: string;
+  movementPresetId: string;
+  cohesionId: string;
+  params?: CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP]["params"];
+}): CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP] | null {
+  if (!isValidEnemyTypeId(input.enemyTypeId)) return null;
+  if (!isValidFormationId(input.formationId)) return null;
+  if (!isValidCohesionId(input.cohesionId)) return null;
+  if (!isValidMovementPresetId(input.movementPresetId)) return null;
+  if (!Number.isFinite(input.anchorX) || !Number.isFinite(input.anchorY)) return null;
+  const params = normalizeEnemyGroupParams(input.params, input.cohesionId);
+  return {
+    enemyTypeId: input.enemyTypeId,
+    count: normalizeGroupCount(input.count),
+    anchor: { x: input.anchorX, y: input.anchorY },
+    formationId: input.formationId,
+    movementPresetId: input.movementPresetId,
+    cohesionId: input.cohesionId,
+    params,
+  };
+}
+
 export function buildMovementGroups(): MovementGroups {
   const groups: MovementGroups = { dumb: {}, smart: {} };
 
@@ -356,7 +532,7 @@ export class DevSummoner {
       "position:fixed","top:8px","right:8px","z-index:9999",
       "background:rgba(0,0,0,0.75)","border:1px solid #444",
       "color:#eee","font:12px monospace","padding:3px",
-      "border-radius:2px","display:flex","flex-direction:column","gap:3px",
+      "border-radius:2px","display:flex","flex-direction:column","gap:5px",
       "width:220px",
       "min-width:220px",
       "max-width:220px",
@@ -370,13 +546,50 @@ export class DevSummoner {
     panel.appendChild(title);
 
     const spawnSection = document.createElement("div");
-    spawnSection.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    spawnSection.style.cssText = "display:flex;flex-direction:column;gap:6px;";
     panel.appendChild(spawnSection);
 
     const spawnTitle = document.createElement("div");
     spawnTitle.textContent = "Spawn";
-    spawnTitle.style.cssText = "font-weight:bold;opacity:0.9;";
+    spawnTitle.style.cssText = "font-weight:800;opacity:0.95;";
     spawnSection.appendChild(spawnTitle);
+
+    const modeRow = document.createElement("div");
+    modeRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+    const modeLabel = document.createElement("span");
+    modeLabel.textContent = "Spawn Mode";
+    applyLabelTextStyle(modeLabel);
+    const modeSegment = document.createElement("div");
+    modeSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+    const enemyModeButton = document.createElement("button");
+    const groupModeButton = document.createElement("button");
+    modeSegment.appendChild(enemyModeButton);
+    modeSegment.appendChild(groupModeButton);
+    modeRow.appendChild(modeLabel);
+    modeRow.appendChild(modeSegment);
+    spawnSection.appendChild(modeRow);
+
+    let spawnMode: SpawnMode = "enemy";
+    const styleSegmentButton = (button: HTMLButtonElement, active: boolean, disabled = false) => {
+      button.style.cssText = [
+        "font:12px monospace",
+        "min-height:26px",
+        "padding:2px 6px",
+        "border:1px solid rgba(255,255,255,0.24)",
+        "background:" + (active ? "#26384f" : "#111"),
+        "color:" + (disabled ? "#777" : active ? "#fff" : "#bbb"),
+        "cursor:" + (disabled ? "not-allowed" : "pointer"),
+        "box-sizing:border-box",
+        "min-width:0",
+      ].join(";");
+    };
+
+    const enemyControls = document.createElement("div");
+    enemyControls.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+    const groupControls = document.createElement("div");
+    groupControls.style.cssText = "display:none;flex-direction:column;gap:6px;";
+    spawnSection.appendChild(enemyControls);
+    spawnSection.appendChild(groupControls);
 
     const enemySelect = document.createElement("select");
     enemySelect.id = "ds-enemy";
@@ -385,159 +598,429 @@ export class DevSummoner {
       opt.value = id; opt.textContent = id;
       enemySelect.appendChild(opt);
     }
-    spawnSection.appendChild(enemySelect);
+    applyNativeSelectStyle(enemySelect);
+    const enemyTypeRow = document.createElement("label");
+    enemyTypeRow.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;align-items:center;min-width:0;";
+    const enemyTypeLabel = document.createElement("span");
+    enemyTypeLabel.textContent = "Type";
+    applyLabelTextStyle(enemyTypeLabel);
+    enemyTypeRow.appendChild(enemyTypeLabel);
+    enemyTypeRow.appendChild(enemySelect);
+    enemyControls.appendChild(enemyTypeRow);
+    enemyControls.appendChild(createSectionGap());
+
+    const groupTypeRow = document.createElement("div");
+    groupTypeRow.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px;align-items:center;min-width:0;";
+    const groupTypeLabel = document.createElement("span");
+    groupTypeLabel.textContent = "Type";
+    applyLabelTextStyle(groupTypeLabel);
+    const groupEnemySelect = document.createElement("select");
+    groupEnemySelect.id = "ds-group-enemy";
+    applyNativeSelectStyle(groupEnemySelect);
+    for (const id of Object.keys(ENEMY_DEFS)) appendOption(groupEnemySelect, id);
+    groupTypeRow.appendChild(groupTypeLabel);
+    groupTypeRow.appendChild(groupEnemySelect);
+
+    let groupCount = 5;
+    const countSegment = document.createElement("div");
+    countSegment.id = "ds-group-count";
+    countSegment.setAttribute("role", "spinbutton");
+    countSegment.setAttribute("aria-label", "Group count");
+    countSegment.style.cssText = "display:grid;grid-template-columns:24px 22px 24px;gap:1px;align-items:center;align-self:end;min-width:72px;";
+    const countDecButton = document.createElement("button");
+    const countValue = document.createElement("span");
+    const countIncButton = document.createElement("button");
+    countDecButton.type = "button";
+    countIncButton.type = "button";
+    countDecButton.textContent = "−";
+    countIncButton.textContent = "+";
+    countDecButton.setAttribute("aria-label", "Decrease group count");
+    countIncButton.setAttribute("aria-label", "Increase group count");
+    countValue.textContent = String(groupCount);
+    countValue.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:26px;box-sizing:border-box;font-weight:800;";
+    const styleCountButton = (button: HTMLButtonElement) => {
+      applyInlineStepperButtonStyle(button);
+    };
+    const refreshGroupCount = () => {
+      groupCount = normalizeGroupCount(groupCount);
+      countValue.textContent = String(groupCount);
+      countSegment.setAttribute("aria-valuemin", "2");
+      countSegment.setAttribute("aria-valuemax", "10");
+      countSegment.setAttribute("aria-valuenow", String(groupCount));
+    };
+    countDecButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, -1); refreshGroupCount(); });
+    countIncButton.addEventListener("click", () => { groupCount = stepGroupCount(groupCount, 1); refreshGroupCount(); });
+    styleCountButton(countDecButton);
+    styleCountButton(countIncButton);
+    countSegment.appendChild(countDecButton);
+    countSegment.appendChild(countValue);
+    countSegment.appendChild(countIncButton);
+    refreshGroupCount();
+    groupTypeRow.appendChild(countSegment);
+    groupControls.appendChild(groupTypeRow);
+    groupControls.appendChild(createSectionGap());
+
+    const groupOptionRow = document.createElement("div");
+    groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    const makeCompactChoice = <T extends string>(label: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
+      const wrap = createSelectLabel(label);
+      const select = createCompactSelect(`ds-group-${label.toLowerCase()}`);
+      select.setOptions([...options], defaultValue);
+      this.cleanupHandlers.push(() => select.destroy());
+      wrap.appendChild(select.root);
+      return { wrap, get value() { return select.value as T; }, addEventListener(listener: () => void) { select.addEventListener("change", listener); } };
+    };
+    const makeSegmentedChoice = <T extends string>(label: string, ariaLabel: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
+      let value = defaultValue;
+      const listeners: Array<() => void> = [];
+      const wrap = createSelectLabel(label);
+      const segment = document.createElement("div");
+      segment.setAttribute("role", "radiogroup");
+      segment.setAttribute("aria-label", ariaLabel);
+      segment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+      const buttons = options.map((option, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = option.label;
+        button.setAttribute("role", "radio");
+        button.addEventListener("click", () => {
+          value = option.value;
+          refresh();
+          for (const listener of listeners) listener();
+        });
+        segment.appendChild(button);
+        if (index > 0) button.style.borderLeft = "0";
+        button.style.borderRadius = index === 0 ? "2px 0 0 2px" : index === options.length - 1 ? "0 2px 2px 0" : "0";
+        return { button, value: option.value };
+      });
+      const refresh = () => {
+        buttons.forEach((option, index) => {
+          const active = value === option.value;
+          option.button.setAttribute("aria-checked", String(active));
+          option.button.setAttribute("aria-pressed", String(active));
+          styleSegmentButton(option.button, active);
+          if (index > 0) option.button.style.borderLeft = "0";
+          option.button.style.borderRadius = index === 0 ? "2px 0 0 2px" : index === buttons.length - 1 ? "0 2px 2px 0" : "0";
+        });
+      };
+      refresh();
+      wrap.appendChild(segment);
+      return { wrap, get value() { return value; }, addEventListener(listener: () => void) { listeners.push(listener); } };
+    };
+    const formationChoice = makeCompactChoice<FormationId>("Form", groupFormationSelectOptions(), "line.horizontal");
+    const wedgeFacingChoice = makeSegmentedChoice<"left" | "right">("Facing", "Wedge facing", [{ value: "left", label: "Left" }, { value: "right", label: "Right" }], "left");
+    const arcFacingChoice = makeSegmentedChoice<"left" | "right">("Arc", "Arc direction", [{ value: "left", label: "Forward" }, { value: "right", label: "Backward" }], "left");
+    const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
+    const formationWrap = formationChoice.wrap;
+    const cohesionWrap = cohesionChoice.wrap;
+    groupOptionRow.appendChild(formationWrap);
+    groupOptionRow.appendChild(cohesionWrap);
+    groupControls.appendChild(groupOptionRow);
+
+    const makeParamStepper = (label: string, key: GroupParamKey, defaultValue: number) => {
+      let value = defaultValue;
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:grid;grid-template-columns:max-content minmax(0,1fr);gap:1px;align-items:center;min-width:0;";
+      const labelNode = document.createElement("span");
+      labelNode.textContent = label;
+      applyLabelTextStyle(labelNode, "secondary");
+      const segment = document.createElement("div");
+      segment.setAttribute("role", "spinbutton");
+      segment.setAttribute("aria-label", `Group ${label}`);
+      segment.style.cssText = "display:grid;grid-template-columns:22px minmax(20px,1fr) 22px;gap:0;align-items:center;min-width:0;";
+      const decButton = document.createElement("button");
+      const valueLabel = document.createElement("span");
+      const incButton = document.createElement("button");
+      decButton.type = "button";
+      incButton.type = "button";
+      decButton.textContent = "−";
+      incButton.textContent = "+";
+      decButton.setAttribute("aria-label", `Decrease ${label}`);
+      incButton.setAttribute("aria-label", `Increase ${label}`);
+      valueLabel.style.cssText = "display:flex;align-items:center;justify-content:center;color:#eee;min-height:26px;box-sizing:border-box;font-weight:800;";
+      styleCountButton(decButton);
+      styleCountButton(incButton);
+      decButton.style.minWidth = "22px";
+      incButton.style.minWidth = "22px";
+      const refresh = () => {
+        value = normalizeGroupStepperValue(key, value, cohesionChoice.value);
+        const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
+          : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
+            : key === "radius" ? ENEMY_GROUP_PARAM_LIMITS.formation.radius
+              : key === "angle" ? ENEMY_GROUP_PARAM_LIMITS.formation.angle
+                : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+                  : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+        valueLabel.textContent = String(value);
+        segment.setAttribute("aria-valuemin", String(limits.min));
+        segment.setAttribute("aria-valuemax", String(limits.max));
+        segment.setAttribute("aria-valuenow", String(value));
+      };
+      decButton.addEventListener("click", () => { value = stepGroupParamValue(key, value, -1, cohesionChoice.value); refresh(); });
+      incButton.addEventListener("click", () => { value = stepGroupParamValue(key, value, 1, cohesionChoice.value); refresh(); });
+      segment.appendChild(decButton);
+      segment.appendChild(valueLabel);
+      segment.appendChild(incButton);
+      wrap.appendChild(labelNode);
+      wrap.appendChild(segment);
+      refresh();
+      return { wrap, refresh, get value() { return value; } };
+    };
+
+    const spacingStepper = makeParamStepper("Space", "spacing", ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default);
+    const depthStepper = makeParamStepper("Depth", "depth", ENEMY_GROUP_PARAM_LIMITS.formation.depth.default);
+    const radiusStepper = makeParamStepper("Radius", "radius", ENEMY_GROUP_PARAM_LIMITS.formation.radius.default);
+    const angleStepper = makeParamStepper("Angle", "angle", ENEMY_GROUP_PARAM_LIMITS.formation.angle.default);
+    const startAngleStepper = makeParamStepper("Start", "startAngle", 0);
+    const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
+    const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
+    const paramRow1 = document.createElement("div");
+    paramRow1.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
+    paramRow1.appendChild(wedgeFacingChoice.wrap);
+    paramRow1.appendChild(arcFacingChoice.wrap);
+    paramRow1.appendChild(spacingStepper.wrap);
+    paramRow1.appendChild(depthStepper.wrap);
+    paramRow1.appendChild(radiusStepper.wrap);
+    paramRow1.appendChild(angleStepper.wrap);
+    paramRow1.appendChild(startAngleStepper.wrap);
+    groupControls.appendChild(paramRow1);
+    const paramRow2 = document.createElement("div");
+    paramRow2.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
+    paramRow2.appendChild(responseStepper.wrap);
+    paramRow2.appendChild(catchStepper.wrap);
+    groupControls.appendChild(paramRow2);
+    groupControls.appendChild(createSectionGap());
+    const setStepperVisible = (wrap: HTMLElement, visible: boolean) => {
+      wrap.style.display = visible ? "grid" : "none";
+      wrap.setAttribute("aria-hidden", String(!visible));
+      for (const el of Array.from(wrap.querySelectorAll("button,input,select"))) {
+        (el as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).tabIndex = visible ? 0 : -1;
+      }
+    };
+    const refreshGroupParamVisibility = () => {
+      const formation = formationChoice.value;
+      setStepperVisible(wedgeFacingChoice.wrap, formation === "wedge");
+      setStepperVisible(arcFacingChoice.wrap, formation === "arc.forward");
+      setStepperVisible(spacingStepper.wrap, formation === "line.horizontal" || formation === "wedge" || formation === "column.vertical");
+      setStepperVisible(depthStepper.wrap, formation === "wedge");
+      setStepperVisible(radiusStepper.wrap, formation === "arc.forward" || formation === "ring");
+      setStepperVisible(angleStepper.wrap, formation === "arc.forward");
+      setStepperVisible(startAngleStepper.wrap, formation === "ring");
+      spacingStepper.refresh();
+      depthStepper.refresh();
+      radiusStepper.refresh();
+      angleStepper.refresh();
+      startAngleStepper.refresh();
+      responseStepper.refresh();
+      catchStepper.refresh();
+    };
+    formationChoice.addEventListener(refreshGroupParamVisibility);
+    cohesionChoice.addEventListener(refreshGroupParamVisibility);
+    refreshGroupParamVisibility();
 
     const movementGroups = buildMovementGroups();
-    const primitiveSelect = createCompactSelect("ds-movement-primitive");
-    const presetSelect = createCompactSelect("ds-movement-preset");
-    this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
-
-    const movementClassRow = document.createElement("div");
-    movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
-    const movementClassLabel = document.createElement("span");
-    movementClassLabel.textContent = "Movement";
-    movementClassLabel.style.cssText = "opacity:0.85;white-space:nowrap;";
-    const movementClassSegment = document.createElement("div");
-    movementClassSegment.id = "ds-movement-class";
-    movementClassSegment.setAttribute("role", "radiogroup");
-    movementClassSegment.setAttribute("aria-label", "Movement class");
-    movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
-    const dumbButton = document.createElement("button");
-    const smartButton = document.createElement("button");
-    let movementClass: MovementClassId = "dumb";
-    const primitiveWrap = createSelectLabel("Primitive");
-    const presetWrap = createSelectLabel("Preset");
-    primitiveWrap.appendChild(primitiveSelect.root);
-    presetWrap.appendChild(presetSelect.root);
-    const movementPresetRow = document.createElement("div");
-    movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
-    movementPresetRow.appendChild(primitiveWrap);
-    movementPresetRow.appendChild(presetWrap);
-    movementClassRow.appendChild(movementClassLabel);
-    movementClassRow.appendChild(movementClassSegment);
-    spawnSection.appendChild(movementClassRow);
-    spawnSection.appendChild(movementPresetRow);
-
-    const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
-    const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
-    const styleMovementClassButton = (button: HTMLButtonElement, active: boolean, disabled: boolean) => {
-      button.style.cssText = [
-        "font:12px monospace",
-        "padding:2px 6px",
-        "border:1px solid #555",
-        "background:" + (active ? "#26384f" : "#111"),
-        "color:" + (disabled ? "#777" : active ? "#fff" : "#bbb"),
-        "cursor:" + (disabled ? "not-allowed" : "pointer"),
-        "box-sizing:border-box",
-        "min-width:0",
-      ].join(";");
-    };
-    const refreshMovementClassButtons = () => {
-      for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
-        const active = movementClass === value;
-        button.type = "button";
-        button.textContent = value === "dumb" ? "Dumb" : "Smart";
-        button.disabled = !enabled;
-        button.setAttribute("role", "radio");
-        button.setAttribute("aria-checked", String(active));
-        styleMovementClassButton(button, active, !enabled);
-      }
-      dumbButton.style.borderRadius = "2px 0 0 2px";
-      smartButton.style.borderLeft = "0";
-      smartButton.style.borderRadius = "0 2px 2px 0";
-    };
-    movementClassSegment.appendChild(dumbButton);
-    movementClassSegment.appendChild(smartButton);
-
-    const repopulatePresetSelect = () => {
-      const primitive = primitiveSelect.value;
-      const presets = movementGroups[movementClass]?.[primitive] ?? [];
-      if (presets.length === 0) {
-        presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
-        return;
-      }
-      presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), presetSelect.value);
-    };
-
-    const repopulatePrimitiveSelect = () => {
-      const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
-      if (primitives.length === 0) {
-        primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+    const makeMovementControls = (prefix: string, labelText: string, primitiveLabel = "Primitive") => {
+      const primitiveSelect = createCompactSelect(`${prefix}-movement-primitive`);
+      const presetSelect = createCompactSelect(`${prefix}-movement-preset`);
+      this.cleanupHandlers.push(() => primitiveSelect.destroy(), () => presetSelect.destroy());
+      const movementClassRow = document.createElement("div");
+      movementClassRow.style.cssText = "display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;";
+      const movementClassLabel = document.createElement("span");
+      movementClassLabel.textContent = labelText;
+      applyLabelTextStyle(movementClassLabel);
+      const movementClassSegment = document.createElement("div");
+      movementClassSegment.id = `${prefix}-movement-class`;
+      movementClassSegment.setAttribute("role", "radiogroup");
+      movementClassSegment.setAttribute("aria-label", labelText);
+      movementClassSegment.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:0;min-width:0;";
+      const dumbButton = document.createElement("button");
+      const smartButton = document.createElement("button");
+      let movementClass: MovementClassId = "dumb";
+      const primitiveWrap = createSelectLabel(primitiveLabel, "secondary");
+      const presetWrap = createSelectLabel("Preset", "secondary");
+      primitiveWrap.appendChild(primitiveSelect.root);
+      presetWrap.appendChild(presetSelect.root);
+      const movementPresetRow = document.createElement("div");
+      movementPresetRow.style.cssText = "display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:4px;align-items:end;";
+      movementPresetRow.appendChild(primitiveWrap);
+      movementPresetRow.appendChild(presetWrap);
+      movementClassRow.appendChild(movementClassLabel);
+      movementClassRow.appendChild(movementClassSegment);
+      const hasDumbPresets = Object.keys(movementGroups.dumb).length > 0;
+      const hasSmartPresets = Object.keys(movementGroups.smart).length > 0;
+      const refreshMovementClassButtons = () => {
+        for (const [button, value, enabled] of [[dumbButton, "dumb", hasDumbPresets], [smartButton, "smart", hasSmartPresets]] as const) {
+          const active = movementClass === value;
+          button.type = "button";
+          button.textContent = value === "dumb" ? "Dumb" : "Smart";
+          button.disabled = !enabled;
+          button.setAttribute("role", "radio");
+          button.setAttribute("aria-checked", String(active));
+          styleSegmentButton(button, active, !enabled);
+        }
+        dumbButton.style.borderRadius = "2px 0 0 2px";
+        smartButton.style.borderLeft = "0";
+        smartButton.style.borderRadius = "0 2px 2px 0";
+      };
+      movementClassSegment.appendChild(dumbButton);
+      movementClassSegment.appendChild(smartButton);
+      const repopulatePresetSelect = () => {
+        const primitive = primitiveSelect.value;
+        const presets = movementGroups[movementClass]?.[primitive] ?? [];
+        if (presets.length === 0) {
+          presetSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+          return;
+        }
+        const preferredPreset = prefix === "ds-group" && presets.includes("straight.basic") ? "straight.basic" : presetSelect.value;
+        presetSelect.setOptions(presets.map((presetId) => ({ value: presetId, label: presetId })), preferredPreset);
+      };
+      const repopulatePrimitiveSelect = () => {
+        const primitives = sortPrimitiveIds(Object.keys(movementGroups[movementClass] ?? {}));
+        if (primitives.length === 0) {
+          primitiveSelect.setOptions([{ value: "", label: "(none)", disabled: true }]);
+          repopulatePresetSelect();
+          return;
+        }
+        const preferredPrimitive = prefix === "ds-group" && primitives.includes("straight") ? "straight" : primitiveSelect.value;
+        primitiveSelect.setOptions(primitives.map((primitive) => ({ value: primitive, label: formatPrimitiveLabel(primitive) })), preferredPrimitive);
         repopulatePresetSelect();
-        return;
-      }
-      primitiveSelect.setOptions(primitives.map((primitive) => ({
-        value: primitive,
-        label: formatPrimitiveLabel(primitive),
-      })));
-      repopulatePresetSelect();
-    };
-
-    const setMovementClass = (next: MovementClassId) => {
-      if (next === "dumb" && !hasDumbPresets) return;
-      if (next === "smart" && !hasSmartPresets) return;
-      movementClass = next;
+      };
+      const setMovementClass = (next: MovementClassId) => {
+        if (next === "dumb" && !hasDumbPresets) return;
+        if (next === "smart" && !hasSmartPresets) return;
+        movementClass = next;
+        refreshMovementClassButtons();
+        repopulatePrimitiveSelect();
+      };
+      dumbButton.addEventListener("click", () => setMovementClass("dumb"));
+      smartButton.addEventListener("click", () => setMovementClass("smart"));
+      primitiveSelect.addEventListener("change", repopulatePresetSelect);
       refreshMovementClassButtons();
       repopulatePrimitiveSelect();
+      return { movementClassRow, movementPresetRow, presetSelect, setMovementClass };
     };
-    dumbButton.addEventListener("click", () => setMovementClass("dumb"));
-    smartButton.addEventListener("click", () => setMovementClass("smart"));
-    refreshMovementClassButtons();
-    primitiveSelect.addEventListener("change", repopulatePresetSelect);
-    repopulatePrimitiveSelect();
 
-    const screenYWrap = document.createElement("label");
-    screenYWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
-    const screenYLabel = document.createElement("span");
-    screenYLabel.textContent = "screenY: 260";
-    const screenYRow = document.createElement("div");
-    screenYRow.style.cssText = "display:grid;grid-template-columns:1fr 56px;gap:4px;align-items:center;";
-    const screenY = document.createElement("input");
-    screenY.id = "ds-screen-y";
-    screenY.type = "range";
-    screenY.min = "0";
-    screenY.max = String(Math.max(0, this.logicH));
-    screenY.step = "1";
-    screenY.value = "260";
-    screenY.style.width = "100%";
-    const screenYInput = document.createElement("input");
-    screenYInput.id = "ds-screen-y-input";
-    screenYInput.type = "number";
-    screenYInput.min = screenY.min;
-    screenYInput.max = screenY.max;
-    screenYInput.step = screenY.step;
-    screenYInput.value = screenY.value;
-    screenYInput.style.cssText = "width:56px;box-sizing:border-box;";
-    const setScreenY = (value: unknown) => {
-      const maxY = Math.max(0, this.logicH);
-      const raw = Number(value);
-      const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
-      screenY.value = String(y);
-      screenYInput.value = String(y);
-      screenYLabel.textContent = `screenY: ${formatNum(y)}`;
+    const enemyMovement = makeMovementControls("ds", "Movement");
+    enemyControls.appendChild(enemyMovement.movementClassRow);
+    enemyControls.appendChild(enemyMovement.movementPresetRow);
+    enemyControls.appendChild(createSectionGap());
+    const groupMovement = makeMovementControls("ds-group", "Move", "Prim");
+    groupControls.appendChild(groupMovement.movementClassRow);
+    groupControls.appendChild(groupMovement.movementPresetRow);
+    groupControls.appendChild(createSectionGap());
+
+    const createSpawnYControl = (idPrefix: string) => {
+      const wrap = document.createElement("label");
+      wrap.style.cssText = "display:grid;grid-template-columns:auto minmax(0,1fr) 52px;gap:6px;align-items:center;min-width:0;";
+      const label = document.createElement("span");
+      label.textContent = "Y Spawn";
+      applyLabelTextStyle(label);
+      const slider = document.createElement("input");
+      slider.id = `${idPrefix}-screen-y`;
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = String(Math.max(0, this.logicH));
+      slider.step = "1";
+      slider.value = "260";
+      slider.style.cssText = "width:100%;min-width:0;box-sizing:border-box;accent-color:#6f8fc0;";
+      const valueInput = document.createElement("input");
+      valueInput.id = `${idPrefix}-screen-y-input`;
+      valueInput.type = "number";
+      valueInput.min = slider.min;
+      valueInput.max = slider.max;
+      valueInput.step = slider.step;
+      valueInput.value = slider.value;
+      applyValueInputStyle(valueInput);
+      const setValue = (value: unknown) => {
+        const maxY = Math.max(0, this.logicH);
+        const raw = Number(value);
+        const y = Number.isFinite(raw) ? Math.min(maxY, Math.max(0, raw)) : 260;
+        slider.value = String(y);
+        valueInput.value = String(y);
+      };
+      slider.addEventListener("input", () => setValue(slider.value));
+      valueInput.addEventListener("input", () => setValue(valueInput.value));
+      wrap.appendChild(label);
+      wrap.appendChild(slider);
+      wrap.appendChild(valueInput);
+      setValue(260);
+      return { wrap, slider, valueInput, setValue, get value() { return Number(slider.value); } };
     };
-    screenY.addEventListener("input", () => setScreenY(screenY.value));
-    screenYInput.addEventListener("input", () => setScreenY(screenYInput.value));
-    screenYRow.appendChild(screenY);
-    screenYRow.appendChild(screenYInput);
-    screenYWrap.appendChild(screenYLabel);
-    screenYWrap.appendChild(screenYRow);
-    spawnSection.appendChild(screenYWrap);
+
+    const screenYControl = createSpawnYControl("ds");
+    enemyControls.appendChild(screenYControl.wrap);
+
+    const groupYControl = createSpawnYControl("ds-group");
+    groupControls.appendChild(groupYControl.wrap);
 
     const btn = document.createElement("button");
     btn.textContent = "RELEASE";
-    btn.style.cssText = "cursor:pointer;margin-top:2px;";
+    btn.style.cssText = "cursor:pointer;margin-top:2px;font:12px monospace;font-weight:800;min-height:28px;background:#26384f;color:#fff;border:1px solid rgba(255,255,255,0.28);border-radius:2px;";
+    const refreshModeButtons = () => {
+      enemyModeButton.type = "button";
+      groupModeButton.type = "button";
+      enemyModeButton.textContent = "Single";
+      groupModeButton.textContent = "Group";
+      enemyModeButton.setAttribute("aria-pressed", String(spawnMode === "enemy"));
+      groupModeButton.setAttribute("aria-pressed", String(spawnMode === "group"));
+      styleSegmentButton(enemyModeButton, spawnMode === "enemy");
+      styleSegmentButton(groupModeButton, spawnMode === "group");
+      enemyModeButton.style.borderRadius = "2px 0 0 2px";
+      groupModeButton.style.borderLeft = "0";
+      groupModeButton.style.borderRadius = "0 2px 2px 0";
+      enemyControls.style.display = spawnMode === "enemy" ? "flex" : "none";
+      groupControls.style.display = spawnMode === "group" ? "flex" : "none";
+      btn.textContent = spawnMode === "enemy" ? "RELEASE" : "Spawn Group";
+    };
+    enemyModeButton.addEventListener("click", () => { spawnMode = "enemy"; refreshModeButtons(); });
+    groupModeButton.addEventListener("click", () => { spawnMode = "group"; refreshModeButtons(); });
+    refreshModeButtons();
     btn.addEventListener("click", () => {
       this.latestManualSpawnId += 1;
+      if (spawnMode === "group") {
+        const anchorY = groupYControl.value;
+        const payload = createDevSummonerGroupSpawnPayload({
+          enemyTypeId: groupEnemySelect.value,
+          count: groupCount,
+          anchorX: this.logicW - 40,
+          anchorY,
+          formationId: formationChoice.value,
+          movementPresetId: groupMovement.presetSelect.value,
+          cohesionId: cohesionChoice.value,
+          params: {
+            formation: {
+              spacing: spacingStepper.value,
+              depth: depthStepper.value,
+              radius: radiusStepper.value,
+              angle: angleStepper.value,
+              facing: formationChoice.value === "arc.forward" ? arcFacingChoice.value : formationChoice.value === "wedge" ? wedgeFacingChoice.value : undefined,
+              startAngle: formationChoice.value === "ring" ? startAngleStepper.value : undefined,
+            },
+            cohesion: {
+              response: responseStepper.value,
+              maxCatchupSpeed: catchStepper.value,
+            },
+          },
+        });
+        if (!payload) {
+          console.warn("[DevSummoner] invalid group spawn payload");
+          return;
+        }
+        groupCount = payload.count;
+        refreshGroupCount();
+        groupYControl.setValue(payload.anchor.y);
+        this.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, payload);
+        return;
+      }
       this.bus.emitNext(EventType.SPAWN_ENEMY, createDevSummonerSpawnPayload({
         typeId: enemySelect.value,
         spawnX: this.logicW - 40,
-        spawnY: Number(screenY.value),
-        behaviorPresetId: presetSelect.value,
+        spawnY: screenYControl.value,
+        behaviorPresetId: enemyMovement.presetSelect.value,
         devManualSpawnId: this.latestManualSpawnId,
       }) as any);
     });
     spawnSection.appendChild(btn);
+    panel.appendChild(createSectionGap());
 
     const labPanel = document.createElement("div");
     labPanel.id = "ds-enemy-lab-debug";

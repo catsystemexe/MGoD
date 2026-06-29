@@ -7,6 +7,7 @@ export const EventType = {
   SPAWN_PROJECTILE: "SPAWN_PROJECTILE",
   SPAWN_BOMB: "SPAWN_BOMB",
   SPAWN_PICKUP: "SPAWN_PICKUP",
+  SPAWN_ENEMY_GROUP: "SPAWN_ENEMY_GROUP",
 
   PLAYER_FIRE_PRIMARY: "PLAYER_FIRE_PRIMARY",
   PLAYER_FIRE_BOMB: "PLAYER_FIRE_BOMB",
@@ -36,6 +37,7 @@ export const SPAWN_EVENT_TYPES = [
   "SPAWN_PROJECTILE",
   "SPAWN_BOMB",
   "SPAWN_PICKUP",
+  "SPAWN_ENEMY_GROUP",
 ] as const;
 
 export type SpawnEventType = typeof SPAWN_EVENT_TYPES[number];
@@ -65,6 +67,20 @@ export type CMEventMap = {
   };
 
   [EventType.SPAWN_PICKUP]: { defId: string; pos: Vec2 };
+
+  [EventType.SPAWN_ENEMY_GROUP]: {
+    enemyTypeId: string;
+    count: number;
+    anchor: Vec2;
+    formationId: string;
+    movementPresetId: string;
+    cohesionId: string;
+    spacing?: number;
+    params?: {
+      formation?: { spacing?: number; depth?: number; radius?: number; angle?: number; facing?: string; startAngle?: number };
+      cohesion?: { response?: number; maxCatchupSpeed?: number };
+    };
+  };
 
   [EventType.PLAYER_FIRE_PRIMARY]: { owner: EntityRef };
   [EventType.PLAYER_FIRE_BOMB]: { owner: EntityRef; target: Vec2 };
