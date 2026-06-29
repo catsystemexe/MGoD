@@ -330,4 +330,93 @@ function enemiesOf(store: EntityStore<any>) {
   assert.equal(limited.groups.snapshot()[0].members.length, 2, "capacity-limited group retains registered partial membership");
 }
 
+
+{
+  const params = normalizeEnemyGroupParams({ formation: { spacing: 20, radius: 48, angle: 100 } }, "rigid");
+  assert.deepEqual([0].map((i) => formationOffset("column.vertical", i, 1, params)), [{ x: 0, y: 0 }]);
+  assert.deepEqual([0, 1, 2, 3].map((i) => formationOffset("column.vertical", i, 4, params)), [{ x: 0, y: -30 }, { x: 0, y: -10 }, { x: 0, y: 10 }, { x: 0, y: 30 }]);
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => formationOffset("column.vertical", i, 5, params)), [{ x: 0, y: -40 }, { x: 0, y: -20 }, { x: 0, y: 0 }, { x: 0, y: 20 }, { x: 0, y: 40 }]);
+}
+
+{
+  const params = normalizeEnemyGroupParams({ formation: { radius: 60, angle: 120 } }, "rigid");
+  assert.deepEqual(formationOffset("arc.forward", 0, 1, params), { x: 0, y: 0 });
+  const arc3 = [0, 1, 2].map((i) => formationOffset("arc.forward", i, 3, params));
+  assert(close(arc3[0].y, -arc3[2].y) && close(arc3[1].y, 0), "arc top and bottom mirror around anchor Y");
+  assert(close(arc3[1].x, 0), "arc center slot is forward-most at anchor X");
+  assert(arc3[0].x > arc3[1].x && arc3[2].x > arc3[1].x, "arc outer slots trail center in positive X for right-to-left travel");
+  assert(Math.abs(arc3[0].y) > Math.abs(arc3[1].y), "arc outer slots have greater absolute Y");
+  assert(arc3.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), "arc offsets remain finite");
+  const arc5 = [0, 1, 2, 3, 4].map((i) => formationOffset("arc.forward", i, 5, params));
+  assert(close(arc5[0].y, -arc5[4].y) && close(arc5[1].y, -arc5[3].y), "arc five-slot order is symmetric");
+  const wider = [0, 1, 2].map((i) => formationOffset("arc.forward", i, 3, normalizeEnemyGroupParams({ formation: { radius: 80, angle: 160 } }, "rigid")));
+  assert(wider[0].x > arc3[0].x && Math.abs(wider[0].y) > Math.abs(arc3[0].y), "arc radius and angle affect geometry");
+}
+
+{
+  const params = normalizeEnemyGroupParams({ formation: { radius: 40 } }, "rigid");
+  assert.deepEqual(formationOffset("ring", 0, 1, params), { x: 0, y: 0 });
+  const ring2 = [0, 1].map((i) => formationOffset("ring", i, 2, params));
+  assert(close(ring2[0].x, 40) && close(ring2[0].y, 0), "ring slot 0 starts at the rightmost point");
+  assert(close(ring2[1].x, -40) && close(ring2[1].y, 0), "ring count two uses opposite points");
+  const ring4 = [0, 1, 2, 3].map((i) => formationOffset("ring", i, 4, params));
+  assert(ring4.every((p) => close(Math.hypot(p.x, p.y), 40)), "ring count four keeps each member on radius");
+  assert(close(ring4[0].x, 40) && close(ring4[1].y, 40) && close(ring4[2].x, -40) && close(ring4[3].y, -40), "ring count four uses cardinal points");
+  const ring8 = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => formationOffset("ring", i, 8, params));
+  const chord = Math.hypot(ring8[1].x - ring8[0].x, ring8[1].y - ring8[0].y);
+  for (let i = 0; i < ring8.length; i++) {
+    const next = ring8[(i + 1) % ring8.length];
+    assert(close(Math.hypot(next.x - ring8[i].x, next.y - ring8[i].y), chord), "ring adjacent spacing is uniform");
+    assert(Number.isFinite(ring8[i].x) && Number.isFinite(ring8[i].y), "ring offsets remain finite");
+  }
+}
+
+{
+  const defaults = normalizeEnemyGroupParams({}, "rigid");
+  assert.equal(defaults.formation.radius, 48, "omitted radius uses default");
+  assert.equal(defaults.formation.angle, 100, "omitted angle uses default degrees");
+  const malformed = normalizeEnemyGroupParams({ formation: { spacing: 4, depth: 999, radius: -99, angle: Infinity } }, "rigid");
+  assert.equal(malformed.formation.spacing, 16, "existing spacing clamp remains unchanged");
+  assert.equal(malformed.formation.depth, 80, "existing depth clamp remains unchanged");
+  assert.equal(malformed.formation.radius, 12, "negative radius clamps safely");
+  assert.equal(malformed.formation.angle, 100, "invalid angle falls back safely");
+  const high = normalizeEnemyGroupParams({ formation: { radius: 999, angle: 999 } }, "rigid");
+  assert.equal(high.formation.radius, 140, "excessive radius clamps");
+  assert.equal(high.formation.angle, 180, "excessive angle clamps");
+}
+
+{
+  for (const formationId of ["column.vertical", "arc.forward", "ring"] as const) {
+    const { store, groups } = spawnGroup(formationId, "none.hold", "rigid", 4, { formation: { spacing: 20, radius: 40, angle: 120 }, cohesion: { maxCatchupSpeed: 600 } });
+    const [snapshot] = groups.snapshot();
+    const group = groups.get(snapshot.id) as any;
+    const es = enemiesOf(store);
+    assert.equal(group.formationId, formationId, `${formationId} is stored on group registry`);
+    assert.equal(group.params.formation.radius, 40, `${formationId} normalized radius is stored`);
+    assert.equal(group.params.formation.angle, 120, `${formationId} normalized angle is stored`);
+    assert.deepEqual(es.map((e) => e.group.slotIndex), [0, 1, 2, 3], `${formationId} stable slot IDs are preserved`);
+    for (let i = 0; i < es.length; i++) {
+      const expected = formationOffset(formationId, i, 4, group.params);
+      assert(close(es[i].pos.x, 200 + expected.x) && close(es[i].pos.y, 90 + expected.y), `${formationId} members spawn at anchor plus offset`);
+    }
+  }
+}
+
+{
+  const diagonal = spawnGroup("column.vertical", "diagonal.down", "rigid", 3, { formation: { spacing: 20 }, cohesion: { maxCatchupSpeed: 600 } });
+  const before = enemiesOf(diagonal.store).map((e) => ({ x: e.pos.x, y: e.pos.y }));
+  diagonal.enemies.update({ dt: DT, tick: 2, time: DT * 2 } as any);
+  const after = enemiesOf(diagonal.store);
+  assert(after.every((e, i) => e.pos.x < before[i].x && e.pos.y > before[i].y), "column formation follows diagonal.down without deformation");
+
+  const sine = spawnGroup("ring", "sine.wide", "rigid", 4, { formation: { radius: 32 }, cohesion: { maxCatchupSpeed: 600 } });
+  const initial = enemiesOf(sine.store).map((e) => ({ x: e.pos.x, y: e.pos.y }));
+  for (let i = 0; i < 90; i++) sine.enemies.update({ dt: DT, tick: i + 2, time: DT * (i + 2) } as any);
+  const moved = enemiesOf(sine.store);
+  const initialDx = initial[0].x - initial[2].x;
+  const movedDx = moved[0].pos.x - moved[2].pos.x;
+  assert(!close(moved[0].pos.y, initial[0].y), "ring follows sine.wide anchor movement");
+  assert(close(movedDx, initialDx, 0.01), "ring rigid cohesion preserves formation width under sine movement");
+}
+
 console.log("[EnemyGroups] ok");

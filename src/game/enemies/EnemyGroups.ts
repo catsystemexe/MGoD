@@ -5,7 +5,7 @@ import { EnemyBehaviorPresets } from "./EnemyBehaviorPresets";
 
 type Vec2 = { x: number; y: number };
 export type GroupId = number;
-export type FormationId = "line.horizontal" | "wedge";
+export type FormationId = typeof ENEMY_GROUP_FORMATION_IDS[number];
 export type CohesionId = "rigid" | "elastic";
 
 export type EnemyGroupMembership = { groupId: GroupId; slotIndex: number };
@@ -14,6 +14,8 @@ export type EnemyGroupParams = {
   formation?: {
     spacing?: number;
     depth?: number;
+    radius?: number;
+    angle?: number;
   };
   cohesion?: {
     response?: number;
@@ -22,7 +24,7 @@ export type EnemyGroupParams = {
 };
 
 export type NormalizedEnemyGroupParams = {
-  formation: { spacing: number; depth: number };
+  formation: { spacing: number; depth: number; radius: number; angle: number };
   cohesion: { response: number; maxCatchupSpeed: number };
 };
 
@@ -54,7 +56,7 @@ type Group = {
   members: Member[];
 };
 
-export const ENEMY_GROUP_FORMATION_IDS = ["line.horizontal", "wedge"] as const;
+export const ENEMY_GROUP_FORMATION_IDS = ["line.horizontal", "wedge", "column.vertical", "arc.forward", "ring"] as const;
 export const ENEMY_GROUP_COHESION_IDS = ["rigid", "elastic"] as const;
 const FORMATIONS = new Set<string>(ENEMY_GROUP_FORMATION_IDS);
 const COHESION = new Set<string>(ENEMY_GROUP_COHESION_IDS);
@@ -65,6 +67,8 @@ export const ENEMY_GROUP_PARAM_LIMITS = {
   formation: {
     spacing: { min: 16, max: 96, default: 18, step: 4 },
     depth: { min: 8, max: 80, default: 18, step: 4 },
+    radius: { min: 12, max: 140, default: 48, step: 4 },
+    angle: { min: 20, max: 180, default: 100, step: 10 },
   },
   cohesion: {
     response: { min: 1, max: 20, default: 7, step: 1 },
@@ -86,6 +90,8 @@ export function normalizeEnemyGroupParams(input: EnemyGroupParams | undefined, c
     formation: {
       spacing: finiteClamped(spacingInput, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.min, ENEMY_GROUP_PARAM_LIMITS.formation.spacing.max),
       depth: finiteClamped(depthInput, ENEMY_GROUP_PARAM_LIMITS.formation.depth.default, ENEMY_GROUP_PARAM_LIMITS.formation.depth.min, ENEMY_GROUP_PARAM_LIMITS.formation.depth.max),
+      radius: finiteClamped(input?.formation?.radius, ENEMY_GROUP_PARAM_LIMITS.formation.radius.default, ENEMY_GROUP_PARAM_LIMITS.formation.radius.min, ENEMY_GROUP_PARAM_LIMITS.formation.radius.max),
+      angle: finiteClamped(input?.formation?.angle, ENEMY_GROUP_PARAM_LIMITS.formation.angle.default, ENEMY_GROUP_PARAM_LIMITS.formation.angle.min, ENEMY_GROUP_PARAM_LIMITS.formation.angle.max),
     },
     cohesion: {
       response: finiteClamped(input?.cohesion?.response, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.min, ENEMY_GROUP_PARAM_LIMITS.cohesion.response.max),
@@ -115,6 +121,24 @@ export function formationOffset(id: FormationId, slotIndex: number, slotCount: n
     const pair = Math.ceil(slot / 2);
     const side = slot % 2 === 1 ? -1 : 1;
     return { x: pair * depth, y: side * pair * spacing };
+  }
+  if (id === "column.vertical") {
+    return { x: 0, y: (slot - (count - 1) / 2) * spacing };
+  }
+  if (id === "arc.forward") {
+    if (count === 1) return { x: 0, y: 0 };
+    const u = count === 1 ? 0 : (slot / (count - 1)) * 2 - 1;
+    const theta = u * (params.formation.angle * Math.PI / 180) / 2;
+    return {
+      // Positive X trails the center for right-to-left enemy travel; the center slot is forward-most.
+      x: params.formation.radius * (1 - Math.cos(theta)),
+      y: params.formation.radius * Math.sin(theta),
+    };
+  }
+  if (id === "ring") {
+    if (count === 1) return { x: 0, y: 0 };
+    const theta = slot * Math.PI * 2 / count;
+    return { x: Math.cos(theta) * params.formation.radius, y: Math.sin(theta) * params.formation.radius };
   }
   return { x: 0, y: (slot - (count - 1) / 2) * spacing };
 }

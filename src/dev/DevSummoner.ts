@@ -405,13 +405,15 @@ export function stepGroupCount(value: unknown, delta: -1 | 1): number {
   return normalizeGroupCount(normalizeGroupCount(value) + delta);
 }
 
-type GroupParamKey = "spacing" | "depth" | "response" | "maxCatchupSpeed";
+type GroupParamKey = "spacing" | "depth" | "radius" | "angle" | "response" | "maxCatchupSpeed";
 
 export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, cohesionId: CohesionId = "rigid"): number {
   const params = normalizeEnemyGroupParams({
     formation: {
       spacing: key === "spacing" ? Number(value) : undefined,
       depth: key === "depth" ? Number(value) : undefined,
+      radius: key === "radius" ? Number(value) : undefined,
+      angle: key === "angle" ? Number(value) : undefined,
     },
     cohesion: {
       response: key === "response" ? Number(value) : undefined,
@@ -420,6 +422,8 @@ export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, c
   }, cohesionId);
   if (key === "spacing") return params.formation.spacing;
   if (key === "depth") return params.formation.depth;
+  if (key === "radius") return params.formation.radius;
+  if (key === "angle") return params.formation.angle;
   if (key === "response") return params.cohesion.response;
   return params.cohesion.maxCatchupSpeed;
 }
@@ -427,8 +431,10 @@ export function normalizeGroupStepperValue(key: GroupParamKey, value: unknown, c
 export function stepGroupParamValue(key: GroupParamKey, value: unknown, delta: -1 | 1, cohesionId: CohesionId = "rigid"): number {
   const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
     : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
-      : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
-        : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+      : key === "radius" ? ENEMY_GROUP_PARAM_LIMITS.formation.radius
+        : key === "angle" ? ENEMY_GROUP_PARAM_LIMITS.formation.angle
+          : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+            : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
   return normalizeGroupStepperValue(key, normalizeGroupStepperValue(key, value, cohesionId) + delta * limits.step, cohesionId);
 }
 
@@ -643,6 +649,14 @@ export class DevSummoner {
 
     const groupOptionRow = document.createElement("div");
     groupOptionRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:end;";
+    const makeCompactChoice = <T extends string>(label: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
+      const wrap = createSelectLabel(label);
+      const select = createCompactSelect(`ds-group-${label.toLowerCase()}`);
+      select.setOptions([...options], defaultValue);
+      this.cleanupHandlers.push(() => select.destroy());
+      wrap.appendChild(select.root);
+      return { wrap, get value() { return select.value as T; }, addEventListener(listener: () => void) { select.addEventListener("change", listener); } };
+    };
     const makeSegmentedChoice = <T extends string>(label: string, ariaLabel: string, options: ReadonlyArray<{ value: T; label: string }>, defaultValue: T) => {
       let value = defaultValue;
       const listeners: Array<() => void> = [];
@@ -680,7 +694,12 @@ export class DevSummoner {
       wrap.appendChild(segment);
       return { wrap, get value() { return value; }, addEventListener(listener: () => void) { listeners.push(listener); } };
     };
-    const formationChoice = makeSegmentedChoice<FormationId>("Form", "Group formation", ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: id === "line.horizontal" ? "Line" : "Wedge" })), "line.horizontal");
+    const formationLabel = (id: FormationId) => id === "line.horizontal" ? "Line"
+      : id === "wedge" ? "Wedge"
+        : id === "column.vertical" ? "Column"
+          : id === "arc.forward" ? "Arc"
+            : "Ring";
+    const formationChoice = makeCompactChoice<FormationId>("Form", ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: formationLabel(id) })), "line.horizontal");
     const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
     const formationWrap = formationChoice.wrap;
     const cohesionWrap = cohesionChoice.wrap;
@@ -717,8 +736,10 @@ export class DevSummoner {
         value = normalizeGroupStepperValue(key, value, cohesionChoice.value);
         const limits = key === "spacing" ? ENEMY_GROUP_PARAM_LIMITS.formation.spacing
           : key === "depth" ? ENEMY_GROUP_PARAM_LIMITS.formation.depth
-            : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
-              : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
+            : key === "radius" ? ENEMY_GROUP_PARAM_LIMITS.formation.radius
+              : key === "angle" ? ENEMY_GROUP_PARAM_LIMITS.formation.angle
+                : key === "response" ? ENEMY_GROUP_PARAM_LIMITS.cohesion.response
+                  : ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed;
         valueLabel.textContent = String(value);
         segment.setAttribute("aria-valuemin", String(limits.min));
         segment.setAttribute("aria-valuemax", String(limits.max));
@@ -737,12 +758,16 @@ export class DevSummoner {
 
     const spacingStepper = makeParamStepper("Space", "spacing", ENEMY_GROUP_PARAM_LIMITS.formation.spacing.default);
     const depthStepper = makeParamStepper("Depth", "depth", ENEMY_GROUP_PARAM_LIMITS.formation.depth.default);
+    const radiusStepper = makeParamStepper("Radius", "radius", ENEMY_GROUP_PARAM_LIMITS.formation.radius.default);
+    const angleStepper = makeParamStepper("Angle", "angle", ENEMY_GROUP_PARAM_LIMITS.formation.angle.default);
     const responseStepper = makeParamStepper("Tight", "response", ENEMY_GROUP_PARAM_LIMITS.cohesion.response.default);
     const catchStepper = makeParamStepper("Catch", "maxCatchupSpeed", ENEMY_GROUP_PARAM_LIMITS.cohesion.maxCatchupSpeed.rigidDefault);
     const paramRow1 = document.createElement("div");
     paramRow1.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
     paramRow1.appendChild(spacingStepper.wrap);
     paramRow1.appendChild(depthStepper.wrap);
+    paramRow1.appendChild(radiusStepper.wrap);
+    paramRow1.appendChild(angleStepper.wrap);
     groupControls.appendChild(paramRow1);
     const paramRow2 = document.createElement("div");
     paramRow2.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px;align-items:center;min-width:0;";
@@ -750,11 +775,20 @@ export class DevSummoner {
     paramRow2.appendChild(catchStepper.wrap);
     groupControls.appendChild(paramRow2);
     groupControls.appendChild(createSectionGap());
+    const setStepperVisible = (wrap: HTMLElement, visible: boolean) => {
+      wrap.style.display = visible ? "grid" : "none";
+      wrap.setAttribute("aria-hidden", String(!visible));
+    };
     const refreshGroupParamVisibility = () => {
-      depthStepper.wrap.style.visibility = formationChoice.value === "wedge" ? "visible" : "hidden";
-      depthStepper.wrap.setAttribute("aria-hidden", String(formationChoice.value !== "wedge"));
+      const formation = formationChoice.value;
+      setStepperVisible(spacingStepper.wrap, formation === "line.horizontal" || formation === "wedge" || formation === "column.vertical");
+      setStepperVisible(depthStepper.wrap, formation === "wedge");
+      setStepperVisible(radiusStepper.wrap, formation === "arc.forward" || formation === "ring");
+      setStepperVisible(angleStepper.wrap, formation === "arc.forward");
       spacingStepper.refresh();
       depthStepper.refresh();
+      radiusStepper.refresh();
+      angleStepper.refresh();
       responseStepper.refresh();
       catchStepper.refresh();
     };
@@ -935,6 +969,8 @@ export class DevSummoner {
             formation: {
               spacing: spacingStepper.value,
               depth: depthStepper.value,
+              radius: radiusStepper.value,
+              angle: angleStepper.value,
             },
             cohesion: {
               response: responseStepper.value,
