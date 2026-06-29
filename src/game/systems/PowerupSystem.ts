@@ -8,11 +8,16 @@ type SessionLike = {
   score: number;
 };
 
+type PowerupSystemOptions = {
+  upgradeWeaponSlot?: (slot: "w1" | "w2") => void;
+};
+
 export class PowerupSystem {
   constructor(
     private readonly session: SessionLike,
     private readonly store: EntityStore<any>,
     private readonly getPlayerRef: () => EntityRef,
+    private readonly opts: PowerupSystemOptions = {},
   ) {}
 
   onFlowEvents(events: AnyCMEvent[]): void {
@@ -39,6 +44,14 @@ export class PowerupSystem {
         }
         case "score": {
           this.session.score += 50;
+          break;
+        }
+        case "w1": {
+          this.opts.upgradeWeaponSlot?.("w1");
+          break;
+        }
+        case "w2": {
+          this.opts.upgradeWeaponSlot?.("w2");
           break;
         }
         default:

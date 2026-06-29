@@ -167,10 +167,15 @@ export async function createGame(
     { dropChance: 0.25, rng01: Math.random }
   );
 
+  let upgradeWeaponSlot: ((slot: "w1" | "w2") => void) | null = null;
+
   const powerups = new PowerupSystem(
     session as any,
     store as any,
-    () => playerRef
+    () => playerRef,
+    {
+      upgradeWeaponSlot: (slot) => { upgradeWeaponSlot?.(slot); },
+    }
   );
 
   const flowDispatcher = new FlowDispatcher([
@@ -383,6 +388,7 @@ export async function createGame(
             }
           },
         });
+        upgradeWeaponSlot = (slot: "w1" | "w2") => { weaponSystem.upgradeSlot(slot); };
         if (typeof window !== "undefined") {
           (window as any).__CM.weapons = {
             setLevel: (slot: "w1" | "w2", level: number) => weaponSystem.setLevel(slot, level),
