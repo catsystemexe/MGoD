@@ -20,6 +20,8 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import {
   ACTIVE_W1_WEAPON_ID,
   ACTIVE_W2_WEAPON_ID,
+  getWeaponMaxLevel,
+  normalizeWeaponLevel,
   resolveEffectiveWeaponSpec,
   type EffectiveWeaponSpec,
   type WeaponDB,
@@ -44,7 +46,10 @@ type WeaponSystemState = {
 
 type BeamRuntime = {
   activeDurationRemainingSec: number;
+  activeDurationTotalSec: number;
 };
+
+const W1_SHOT_SPACING_PX = 10;
 
 function safeUnitDir(dir: Vec2): Vec2 {
   const l = Math.hypot(dir.x, dir.y);
@@ -90,7 +95,7 @@ export class WeaponSystem {
     w2: makeSlot("w2", ACTIVE_W2_WEAPON_ID),
   };
 
-  private readonly beam: BeamRuntime = { activeDurationRemainingSec: 0 };
+  private readonly beam: BeamRuntime = { activeDurationRemainingSec: 0, activeDurationTotalSec: 0 };
 
   constructor(
     private readonly bus: EventBus<CMEventMap>,
@@ -118,6 +123,23 @@ export class WeaponSystem {
     };
   }
 
+  public getLevel(slot: WeaponSlotId): number {
+    return this.slots[slot].level;
+  }
+
+  public getMaxLevel(slot: WeaponSlotId): number {
+    return getWeaponMaxLevel(this.slots[slot].weaponId, this.db);
+  }
+
+  public setLevel(slot: WeaponSlotId, level: number): void {
+    if (!Number.isFinite(level)) return;
+    this.slots[slot].level = normalizeWeaponLevel(level, this.getMaxLevel(slot));
+  }
+
+  public upgradeSlot(slot: WeaponSlotId): void {
+    this.setLevel(slot, this.getLevel(slot) + 1);
+  }
+
   /** Compatibility bridge for the existing DOM HUD. */
   public getW2State(): { active: boolean; charge01: number } {
     const snap = this.getSnapshot().slots.w2;
@@ -128,7 +150,7 @@ export class WeaponSystem {
     const spec = resolveEffectiveWeaponSpec(slot, this.db);
     const total = cooldownTotal(spec);
     const remaining = Math.max(0, Number(slot.cooldownRemainingSec ?? 0));
-    const beamDuration = Math.max(0.001, Number(spec.beam?.durationSec ?? 0));
+    const beamDuration = Math.max(0.001, Number(slot.active ? this.beam.activeDurationTotalSec : spec.beam?.durationSec ?? 0));
     const charge01 = slot.active && spec.fireKind === "beam"
       ? clamp01(this.beam.activeDurationRemainingSec / beamDuration)
       : total > 0
@@ -138,7 +160,8 @@ export class WeaponSystem {
     return {
       slot: slot.slot,
       weaponId: slot.weaponId,
-      level: slot.level,
+      level: spec.level,
+      maxLevel: spec.maxLevel,
       fireKind: spec.fireKind,
       active: slot.active,
       cooldownRemainingSec: remaining,
@@ -146,13 +169,36 @@ export class WeaponSystem {
       charge01,
       ready01: total > 0 ? clamp01(1 - remaining / total) : 1,
       damage: spec.projectile?.damage ?? spec.beam?.damage,
-      durationSec: spec.beam?.durationSec,
+      projectileCount: spec.fireKind === "projectile" ? spec.projectileCount : undefined,
+      durationSec: spec.fireKind === "beam" && slot.active ? beamDuration : spec.beam?.durationSec,
       hitIntervalSec: spec.beam?.hitIntervalSec,
     };
   }
 
-  private emitProjectile(
+  private emitProjectileEvent(
     weaponTypeId: WeaponTypeId,
+    owner: EntityRef,
+    origin: Vec2,
+    dir: Vec2,
+  ): void {
+    this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
+      owner,
+      origin: { x: origin.x, y: origin.y },
+      dir: { x: dir.x, y: dir.y },
+      weaponTypeId: String(weaponTypeId),
+    });
+  }
+
+  private emitShotFeedback(origin: Vec2, dir: Vec2): void {
+    // Existing W1 audio/VFX callback path; createGame currently wires noteFire()
+    // here and leaves tracer output muted. Multi-shot levels still call it once
+    // per trigger pull so stacked bolts do not stack identical fire audio.
+    this.opts?.onSpawnProjectile?.({ x: origin.x, y: origin.y, dx: dir.x, dy: dir.y });
+    this.opts?.onTracer?.({ x: origin.x, y: origin.y, dx: dir.x, dy: dir.y });
+  }
+
+  private emitProjectileVolley(
+    spec: EffectiveWeaponSpec,
     owner: EntityRef,
     shipPos: Vec2,
     dirIn: Vec2,
@@ -165,19 +211,17 @@ export class WeaponSystem {
 
     // spawn point: před přídí (tweak)
     const MUZZLE = 12; // px dopředu od středu ship
-    const ox = shipPos.x + dir.x * MUZZLE;
-    const oy = shipPos.y + dir.y * MUZZLE;
-    this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
-      owner,
-      origin: { x: ox, y: oy },
-      dir: { x: dir.x, y: dir.y },
-      weaponTypeId: String(weaponTypeId),
-    });
+    const baseOrigin = { x: shipPos.x + dir.x * MUZZLE, y: shipPos.y + dir.y * MUZZLE };
+    const projectileCount = Math.max(1, Math.floor(Number(spec.projectileCount ?? 1)));
 
-    // Existing W1 audio/VFX callback path; createGame currently wires noteFire()
-    // here and leaves tracer output muted.
-    this.opts?.onSpawnProjectile?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
-    this.opts?.onTracer?.({ x: ox, y: oy, dx: dir.x, dy: dir.y });
+    // Deterministic top-to-bottom vertical stack. Offsets are applied to origin
+    // only; every bolt keeps the same forward direction and velocity.
+    for (let i = 0; i < projectileCount; i++) {
+      const offsetY = (i - (projectileCount - 1) / 2) * W1_SHOT_SPACING_PX;
+      this.emitProjectileEvent(spec.id, owner, { x: baseOrigin.x, y: baseOrigin.y + offsetY }, dir);
+    }
+
+    this.emitShotFeedback(baseOrigin, dir);
   }
 
   update(dtSec: number, actions: PlayerActions, snap: WeaponSnapshot): void {
@@ -197,13 +241,13 @@ export class WeaponSystem {
       !!actions.firePrimary && (primarySpec?.fireKind ?? "projectile") === "projectile",
       this.slots.w1.cooldownRemainingSec,
       Number(primarySpec?.cooldownSec ?? 0.12),
-      () => this.emitProjectile(this.slots.w1.weaponId, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
+      () => primarySpec && this.emitProjectileVolley(primarySpec, snap.shipRef, snap.shipPos, dir, snap.shipVel, dtSec),
     );
 
     // W2 LASER — hold mechanic, now driven by the active beam definition.
     const beam = secondarySpec?.beam;
-    const laserDuration = Number(beam?.durationSec ?? 5.0);
-    const laserCooldown = Number(secondarySpec?.cooldownSec ?? 10.0);
+    const laserDuration = Math.max(0.001, Number(beam?.durationSec ?? 5.0));
+    const laserCooldown = Math.max(0, Number(secondarySpec?.cooldownSec ?? 10.0));
 
     if (this.slots.w2.cooldownRemainingSec > 0) {
       this.slots.w2.cooldownRemainingSec = Math.max(0, this.slots.w2.cooldownRemainingSec - dtSec);
@@ -224,6 +268,7 @@ export class WeaponSystem {
     } else if (actions.fireSecondary && this.slots.w2.cooldownRemainingSec <= 0 && (secondarySpec?.fireKind ?? "beam") === "beam") {
       this.slots.w2.active = true;
       this.beam.activeDurationRemainingSec = laserDuration;
+      this.beam.activeDurationTotalSec = laserDuration;
       this.opts?.onLaserStart?.({
         originY: snap.shipPos.y,
       });
