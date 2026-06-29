@@ -79,6 +79,7 @@ export class RespawnSystem {
     p.vel = { x: 0, y: 0 };
 
     p.radius = Number.isFinite(Number(p.radius)) ? Number(p.radius) : 3;
+    p.bodyRadius = Number.isFinite(Number(p.bodyRadius)) && Number(p.bodyRadius) > 0 ? Number(p.bodyRadius) : 20;
 
     // energy
     const max0 = Number(p.energyMax ?? this.cfg.spawnEnergy);

@@ -100,6 +100,7 @@ export async function createGame(
    
     ent.speed = 700;
     ent.radius = 3;
+    ent.bodyRadius = 20;
     ent.pendingKill = false;
 
     ent.energyMax = 5;
@@ -449,6 +450,9 @@ export async function createGame(
     
     playerEnt.speed = Number(playerEnt.speed ??700);
     playerEnt.radius = Number(playerEnt.radius ?? 3);
+    playerEnt.bodyRadius = Number.isFinite(Number(playerEnt.bodyRadius)) && Number(playerEnt.bodyRadius) > 0
+      ? Number(playerEnt.bodyRadius)
+      : 20;
     playerEnt.pendingKill = false;
 
     playerEnt.energyMax = RESET_CFG.startEnergy;

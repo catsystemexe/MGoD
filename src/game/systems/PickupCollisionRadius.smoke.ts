@@ -34,6 +34,7 @@ function runPickupCollision(playerDistanceFromPickupCenter: number) {
     e.kind = "player";
     e.pos = { x: 100 + playerDistanceFromPickupCenter, y: 100 };
     e.radius = 3;
+    e.bodyRadius = 20;
     e.pendingKill = false;
     e.invulnT = 999;
   });
@@ -68,13 +69,16 @@ function main() {
   const expectedRadius = DEFAULT_PICKUP_SPAWN_CONFIG.radius;
   assert(expectedRadius === 7.5, "production pickup radius should be half of a 30px square at canonical 2x scale");
 
-  const edgeOverlap = runPickupCollision(expectedRadius + 3 - 0.01);
+  const playerBodyRadius = 20;
+  const edgeOverlap = runPickupCollision(expectedRadius + playerBodyRadius - 0.01);
   assert(edgeOverlap.pickupRadius === expectedRadius, "test must use the production spawn pickup radius");
+  assert(edgeOverlap.player?.radius === 3, "pickup collection must preserve player combat radius 3");
+  assert(edgeOverlap.player?.bodyRadius === playerBodyRadius, "pickup collection must use player body radius 20");
   assert(edgeOverlap.events.length === 1, "player overlapping the visible pickup edge should collect exactly once");
   assert(edgeOverlap.pendingKill === true, "collected pickup should be pendingKill-protected before cleanup");
   assert(edgeOverlap.player?.kind === "player", "player should remain alive after pickup collision smoke");
 
-  const outside = runPickupCollision(expectedRadius + 3 + 1);
+  const outside = runPickupCollision(expectedRadius + playerBodyRadius + 1);
   assert(outside.pickupRadius === expectedRadius, "outside case must use the production spawn pickup radius");
   assert(outside.events.length === 0, "player clearly outside the visible pickup should not collect it");
   assert(outside.pendingKill === false, "uncollected pickup should not become pendingKill");
