@@ -150,6 +150,23 @@ export function classifyFxRenderLayer(entity: { kind?: unknown; type?: unknown; 
   return entity.deathVisual ? "deathGhost" : "explosion";
 }
 
+
+export function computePickupVisualMetrics(screenPixelScaleRaw: unknown): {
+  screenPixelScale: number;
+  backgroundLogicPx: number;
+  symbolHeightLogicPx: number;
+  shadowLogicPx: number;
+} {
+  const raw = Number(screenPixelScaleRaw);
+  const screenPixelScale = Number.isFinite(raw) && raw > 0 ? raw : 1;
+  return {
+    screenPixelScale,
+    backgroundLogicPx: 60 / screenPixelScale,
+    symbolHeightLogicPx: 40 / screenPixelScale,
+    shadowLogicPx: 3 / screenPixelScale,
+  };
+}
+
 export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unknown): {
   width: number;
   height: number;
@@ -549,7 +566,18 @@ export class WebGLSceneRenderer {
   }
   
   
-  private drawPickupSymbolAt(gl: WebGL2RenderingContext, cx: number, cy: number, symbol: string): boolean {
+  private getScreenPixelScale(): number {
+    const canvas = this.gl.canvas as HTMLCanvasElement;
+    const cssW = Number(canvas.clientWidth ?? 0);
+    const cssH = Number(canvas.clientHeight ?? 0);
+    const fallbackW = Number(canvas.width ?? this.gl.drawingBufferWidth ?? this.logicW);
+    const fallbackH = Number(canvas.height ?? this.gl.drawingBufferHeight ?? this.logicH);
+    const w = Number.isFinite(cssW) && cssW > 0 ? cssW : fallbackW;
+    const h = Number.isFinite(cssH) && cssH > 0 ? cssH : fallbackH;
+    return Math.max(1, Math.floor(Math.min(w / this.logicW, h / this.logicH)));
+  }
+
+  private drawPickupSymbolAt(gl: WebGL2RenderingContext, cx: number, cy: number, symbol: string, screenPixelScale: number): boolean {
     const bitsBySymbol: Record<string, string[]> = {
       "1": [
         "010",
@@ -584,23 +612,29 @@ export class WebGLSceneRenderer {
     const rows = bitsBySymbol[symbol];
     if (!rows) return false;
 
-    const cell = 2;
+    const metrics = computePickupVisualMetrics(screenPixelScale);
     const cols = rows[0]?.length ?? 0;
+    const cell = metrics.symbolHeightLogicPx / rows.length;
     const outW = cols * cell;
     const outH = rows.length * cell;
-    const baseX = Math.round(cx - outW * 0.5 + cell * 0.5);
-    const baseY = Math.round(cy - outH * 0.5 + cell * 0.5);
+    const baseX = cx - outW * 0.5 + cell * 0.5;
+    const baseY = cy - outH * 0.5 + cell * 0.5;
 
-    gl.uniform4f(this.uColor, 1, 1, 1, 1);
-    for (let y = 0; y < rows.length; y++) {
-      const row = rows[y];
-      for (let x = 0; x < cols; x++) {
-        if (row.charCodeAt(x) !== 49) continue;
-        gl.uniform2f(this.uPos, baseX + x * cell, baseY + y * cell);
-        gl.uniform2f(this.uSize, cell, cell);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    const drawBits = (r: number, g: number, b: number, a: number, offsetX: number, offsetY: number) => {
+      gl.uniform4f(this.uColor, r, g, b, a);
+      for (let y = 0; y < rows.length; y++) {
+        const row = rows[y];
+        for (let x = 0; x < cols; x++) {
+          if (row.charCodeAt(x) !== 49) continue;
+          gl.uniform2f(this.uPos, baseX + x * cell + offsetX, baseY + y * cell + offsetY);
+          gl.uniform2f(this.uSize, cell, cell);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
       }
-    }
+    };
+
+    drawBits(0, 0, 0, 0.9, metrics.shadowLogicPx, metrics.shadowLogicPx);
+    drawBits(1, 1, 1, 1, 0, 0);
     return true;
   }
 
@@ -920,6 +954,8 @@ export class WebGLSceneRenderer {
 
     let enemyDrawIndex = 0;
 
+    const pickupVisualMetrics = computePickupVisualMetrics(this.getScreenPixelScale());
+
     this.store.debugForEachAlive((_ref, storedEntity: any) => {
       let e = storedEntity;
 
@@ -974,6 +1010,9 @@ export class WebGLSceneRenderer {
       } else if (kind === "bomb") {
         gl.uniform4f(this.uColor, 1, 1, 0, 1);
       } else if (kind === "pickup") {
+        w = pickupVisualMetrics.backgroundLogicPx;
+        h = pickupVisualMetrics.backgroundLogicPx;
+
         const defId = String((e as any).defId ?? "");
         if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
         else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
@@ -1420,7 +1459,7 @@ export class WebGLSceneRenderer {
 
       if (kind === "pickup") {
         const symbol = this.pickupSymbolForDefId(String((e as any).defId ?? ""));
-        if (symbol) this.drawPickupSymbolAt(gl, ix, iy, symbol);
+        if (symbol) this.drawPickupSymbolAt(gl, ix, iy, symbol, pickupVisualMetrics.screenPixelScale);
       }
     });
 
