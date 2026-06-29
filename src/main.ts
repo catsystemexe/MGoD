@@ -16,6 +16,7 @@ import { VFXSystem } from "./game/vfx/VFXSystem";
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 import { ParticlePass } from "./render/webgl/ParticlePass";
 import { createFxToggleState, shouldRenderAtmosphericFx, shouldRenderPostFx, togglePostFx } from "./render/FxToggleState";
+import { handleCollisionOverlayKeydown } from "./debug/CollisionOverlayToggle";
 export {};
 
 console.log("[BOOT] main.ts running");
@@ -274,12 +275,19 @@ async function main() {
   //hud.setPaused?.(false);
   //loop.setPaused?.(false);
 
+  let renderer: WebGLSceneRenderer;
+
   // ---- Keys: Pause (P), Start (Enter/Space), GameOver (Y/N)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
     // First keypress arms the Web Audio context (autoplay policy).
     void armAudio();
+
+    if (renderer && handleCollisionOverlayKeydown(e, renderer)) {
+      console.log("[DEBUG] collision overlay", renderer.getDebugCollisionOverlay() ? "ON" : "OFF");
+      return;
+    }
 
     // Start from TITLE
     if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") {
@@ -383,7 +391,7 @@ async function main() {
     { passive: false, capture: true },
   );
 
-  const renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
+  renderer = new WebGLSceneRenderer(gl, store as any, LOGIC_W, LOGIC_H);
   let particlePass: ParticlePass | null = null;
   try {
     particlePass = new ParticlePass(gl, LOGIC_W, LOGIC_H);

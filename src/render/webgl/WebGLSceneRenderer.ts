@@ -22,6 +22,14 @@ import {
 } from "../../game/fx/EnemyDeathVisual";
 
 const NO_FLOW_DISTURB: FlowDisturbance[] = [];
+const QUAD_VERTS = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]);
+const DEBUG_RING_SEGMENTS = 96;
+const DEBUG_RING_VERTS = new Float32Array(DEBUG_RING_SEGMENTS * 2);
+for (let i = 0; i < DEBUG_RING_SEGMENTS; i++) {
+  const a = (i / DEBUG_RING_SEGMENTS) * Math.PI * 2;
+  DEBUG_RING_VERTS[i * 2] = 0.5 + Math.cos(a) * 0.5;
+  DEBUG_RING_VERTS[i * 2 + 1] = 0.5 + Math.sin(a) * 0.5;
+}
 
 function safeNum(x: unknown, fallback: number): number {
   return typeof x === "number" && Number.isFinite(x) ? x : fallback;
@@ -30,7 +38,7 @@ function safeNum(x: unknown, fallback: number): number {
 type Vec2 = { x: number; y: number };
 type HasPos = { pos: Vec2 };
 type HasKind = { kind?: string; type?: string; tag?: string };
-type HasRadius = { radius?: number };
+type HasRadius = { radius?: number; bodyRadius?: number };
 type HasRender = { render?: { color?: string } };
 type DeathVisualFx = {
   age: number;
@@ -142,6 +150,51 @@ export function selectEnemyDeathGhostFrame<T extends EnemySpriteCandidate>(
   };
 }
 
+
+export type CollisionDebugCircle = {
+  kind: "playerCombat" | "playerBody" | "enemy" | "pickup" | "projectile" | "enemyProjectile" | "bomb";
+  x: number;
+  y: number;
+  radius: number;
+  alpha: number;
+  thicknessPx: number;
+};
+
+function finitePositive(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function collectCollisionDebugCircles(entity: any, x: number, y: number): CollisionDebugCircle[] {
+  const kind = readKind(entity);
+  if (!kind || entity?.pendingKill) return [];
+  const out: CollisionDebugCircle[] = [];
+  if (kind === "player") {
+    const combat = finitePositive(entity.radius);
+    if (combat) out.push({ kind: "playerCombat", x, y, radius: combat, alpha: 0.95, thicknessPx: 1 });
+    const body = finitePositive(entity.bodyRadius);
+    if (body) out.push({ kind: "playerBody", x, y, radius: body, alpha: 0.42, thicknessPx: 2 });
+    return out;
+  }
+  const radius = finitePositive(entity?.radius);
+  if (!radius) return out;
+  if (kind === "enemy") out.push({ kind: "enemy", x, y, radius, alpha: 0.8, thicknessPx: 1 });
+  else if (kind === "pickup") out.push({ kind: "pickup", x, y, radius, alpha: 0.8, thicknessPx: 1 });
+  else if (kind === "projectile") out.push({ kind: "projectile", x, y, radius, alpha: 0.75, thicknessPx: 1 });
+  else if (kind === "enemyProjectile") out.push({ kind: "enemyProjectile", x, y, radius, alpha: 0.75, thicknessPx: 1 });
+  else if (kind === "bomb") out.push({ kind: "bomb", x, y, radius, alpha: 0.85, thicknessPx: 1 });
+  return out;
+}
+
+export function isPickupRenderEligible(entity: any): boolean {
+  if (!entity || readKind(entity) !== "pickup" || entity.pendingKill) return false;
+  const pos = entity.pos;
+  const pp = entity.posPrev;
+  return Number.isFinite(Number(pos?.x)) && Number.isFinite(Number(pos?.y)) &&
+    (!pp || (Number.isFinite(Number(pp.x)) && Number.isFinite(Number(pp.y)))) &&
+    finitePositive(entity.radius) !== null && typeof entity.defId === "string" && entity.defId.length > 0;
+}
+
 export type FxRenderLayerKind = "normal" | "deathGhost" | "explosion";
 
 export function classifyFxRenderLayer(entity: { kind?: unknown; type?: unknown; tag?: unknown; deathVisual?: unknown }): FxRenderLayerKind {
@@ -150,6 +203,26 @@ export function classifyFxRenderLayer(entity: { kind?: unknown; type?: unknown; 
   return entity.deathVisual ? "deathGhost" : "explosion";
 }
 
+
+
+export type SceneRenderPass = "normal" | "pickup" | "deathGhostFx" | "explosionFx" | "collisionDebugOverlay";
+
+export function sceneRenderPassForEntity(entity: any): SceneRenderPass {
+  const fxLayer = classifyFxRenderLayer(entity);
+  if (fxLayer === "deathGhost") return "deathGhostFx";
+  if (fxLayer === "explosion") return "explosionFx";
+  return readKind(entity) === "pickup" ? "pickup" : "normal";
+}
+
+export function sceneRenderPassRank(pass: SceneRenderPass): number {
+  switch (pass) {
+    case "normal": return 0;
+    case "pickup": return 1;
+    case "deathGhostFx": return 2;
+    case "explosionFx": return 3;
+    case "collisionDebugOverlay": return 4;
+  }
+}
 
 export function computePickupVisualMetrics(screenPixelScaleRaw: unknown): {
   screenPixelScale: number;
@@ -296,8 +369,17 @@ export class WebGLSceneRenderer {
   private sprites: SpriteSystem;
   private projSprites: SpriteSystem;
   private enemySpriteMap: Map<string, SpriteSystem> = new Map();
+  private debugCollisionOverlay = false;
 
   
+  setDebugCollisionOverlay(enabled: boolean): void {
+    this.debugCollisionOverlay = !!enabled;
+  }
+
+  getDebugCollisionOverlay(): boolean {
+    return this.debugCollisionOverlay;
+  }
+
   constructor(
     private readonly gl: WebGL2RenderingContext,
     private readonly store: EntityStore<any>,
@@ -344,7 +426,7 @@ export class WebGLSceneRenderer {
     this.uSize = uSize;
     this.uColor = uColor;
 
-      const verts = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]);
+      const verts = QUAD_VERTS
 
     const vao = gl.createVertexArray();
     const vbo = gl.createBuffer();
@@ -860,6 +942,34 @@ export class WebGLSceneRenderer {
     return true;
   }
 
+  private restoreQuadVerts(): void {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, QUAD_VERTS, gl.STATIC_DRAW);
+  }
+
+  private drawDebugCollisionRings(circles: CollisionDebugCircle[]): void {
+    if (!circles.length) return;
+    const gl = this.gl;
+    gl.useProgram(this.prog);
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, DEBUG_RING_VERTS, gl.DYNAMIC_DRAW);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform2f(this.uLogic, this.logicW, this.logicH);
+    for (const c of circles) {
+      gl.uniform4f(this.uColor, 1, 0, 0, c.alpha);
+      gl.uniform2f(this.uPos, c.x, c.y);
+      gl.uniform2f(this.uSize, c.radius * 2, c.radius * 2);
+      gl.lineWidth(Math.max(1, Math.min(2, c.thicknessPx)));
+      gl.drawArrays(gl.LINE_LOOP, 0, DEBUG_RING_SEGMENTS);
+    }
+    gl.disable(gl.BLEND);
+    this.restoreQuadVerts();
+    gl.uniform4f(this.uColor, 1, 1, 1, 1);
+  }
+
   render(alpha: number = 1): void {
     const gl = this.gl;
 
@@ -925,6 +1035,7 @@ export class WebGLSceneRenderer {
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
     const deathGhostFx: Array<{ e: any; ix: number; iy: number }> = [];
     const explosionFx: Array<{ e: any; ix: number; iy: number; w: number; h: number }> = [];
+    const debugCollisionCircles: CollisionDebugCircle[] = [];
 
     // ECS iterates recycled slots, not spawn order. Collect enemies separately
     // and draw older IDs first so every newly spawned enemy appears on top.
@@ -1067,6 +1178,8 @@ export class WebGLSceneRenderer {
       // so every entity converts world -> screen the same way.
       ix -= sx;
       iy -= sy;
+      if (this.debugCollisionOverlay) debugCollisionCircles.push(...collectCollisionDebugCircles(e, ix, iy));
+
       const fxLayer = classifyFxRenderLayer(e as any);
       if (fxLayer === "deathGhost") {
         deathGhostFx.push({ e, ix, iy });
@@ -1474,6 +1587,8 @@ export class WebGLSceneRenderer {
       gl.uniform2f(this.uSize, fx.w, fx.h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
+
+    this.drawDebugCollisionRings(debugCollisionCircles);
 
     gl.bindVertexArray(null);
   }
