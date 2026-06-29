@@ -37,6 +37,8 @@ export class InputManager {
 
   private prevBombDown = false;
   private bombDown = false;
+  private prevCycleW1Down = false;
+  private prevCycleW2Down = false;
   private bound = false;
 
   constructor(private readonly getCanvas: () => HTMLCanvasElement | null) {
@@ -52,6 +54,8 @@ export class InputManager {
       this.mouseDownR = false;
       this.bombDown = false;
       this.prevBombDown = false;
+      this.prevCycleW1Down = false;
+      this.prevCycleW2Down = false;
     });
   }
 
@@ -270,6 +274,15 @@ export class InputManager {
     out.bombPressed = bombPressed;
     out.bombTarget.x = x;
     out.bombTarget.y = y;
+
+    // Temporary weapon level controls. Minus/Equal are intentionally used
+    // instead of Digit1/Digit2 (dev wave hotkeys) or Brackets (BG preset hotswap).
+    const cycleW1Down = this.isDown("Minus");
+    const cycleW2Down = this.isDown("Equal");
+    out.cycleW1LevelPressed = cycleW1Down && !this.prevCycleW1Down;
+    out.cycleW2LevelPressed = cycleW2Down && !this.prevCycleW2Down;
+    this.prevCycleW1Down = cycleW1Down;
+    this.prevCycleW2Down = cycleW2Down;
   }
 
   private isDown(code: string): boolean {

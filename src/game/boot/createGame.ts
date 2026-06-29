@@ -32,6 +32,7 @@ import { EnemySystem } from "../systems/EnemySystem";
 import { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
+import { applyWeaponLevelControlActions } from "../systems/WeaponLevelControls";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
 import { VFXSystem } from "../vfx/VFXSystem";
 
@@ -382,6 +383,13 @@ export async function createGame(
             }
           },
         });
+        if (typeof window !== "undefined") {
+          (window as any).__CM.weapons = {
+            setLevel: (slot: "w1" | "w2", level: number) => weaponSystem.setLevel(slot, level),
+            getSnapshot: () => weaponSystem.getSnapshot(),
+          };
+        }
+
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any, enemyGroups);
         
@@ -451,6 +459,8 @@ export async function createGame(
       inputRt.actions.firePrimary = false as any;
       inputRt.actions.fireSecondary = false as any;
       (inputRt.actions as any).bombPressed = false;
+      (inputRt.actions as any).cycleW1LevelPressed = false;
+      (inputRt.actions as any).cycleW2LevelPressed = false;
     } catch {}
 
     // director runtime reset (keeps same instance)
@@ -493,6 +503,7 @@ export async function createGame(
 
           worldScroll.update(ctx.dt);
         if (Number(playerEnt.deadT ?? 0) <= 0) {
+          applyWeaponLevelControlActions(weaponSystem, inputRt.actions);
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
             shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 },

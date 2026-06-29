@@ -12,6 +12,8 @@ export function makeDefaultActions(): PlayerActions {
     fireSecondary: false,
     bombPressed: false,
     bombTarget: { x: 112, y: 128 },
+    cycleW1LevelPressed: false,
+    cycleW2LevelPressed: false,
   };
 }
 

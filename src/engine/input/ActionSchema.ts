@@ -11,4 +11,7 @@ export type PlayerActions = {
 
   bombPressed: boolean;
   bombTarget: Vec2;
+
+  cycleW1LevelPressed: boolean;
+  cycleW2LevelPressed: boolean;
 };
