@@ -15,7 +15,7 @@ import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
 import { createWorldState } from "../data/WorldState";
 import { WorldScrollSystem } from "../systems/WorldScrollSystem";
-import { SpawnSystem } from "../systems/SpawnSystem";
+import { DEFAULT_PICKUP_SPAWN_CONFIG, SpawnSystem } from "../systems/SpawnSystem";
 import { DirectorSystem } from "../systems/DirectorSystem";
 import { DirectorPhaseSystem } from "../systems/DirectorPhaseSystem";
 
@@ -204,6 +204,7 @@ export async function createGame(
             radius: 6,                 // bomb sprite/collision radius (NOT the blast)
             explosionRadius: EXPLOSION_RADIUS,
           },
+          pickup: DEFAULT_PICKUP_SPAWN_CONFIG,
         };
 
  

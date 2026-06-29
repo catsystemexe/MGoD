@@ -161,9 +161,9 @@ export function computePickupVisualMetrics(screenPixelScaleRaw: unknown): {
   const screenPixelScale = Number.isFinite(raw) && raw > 0 ? raw : 1;
   return {
     screenPixelScale,
-    backgroundLogicPx: 60 / screenPixelScale,
-    symbolHeightLogicPx: 40 / screenPixelScale,
-    shadowLogicPx: 3 / screenPixelScale,
+    backgroundLogicPx: 30 / screenPixelScale,
+    symbolHeightLogicPx: 20 / screenPixelScale,
+    shadowLogicPx: 2 / screenPixelScale,
   };
 }
 

@@ -816,9 +816,9 @@ function testRendererSpriteHelperSeparationSource() {
 function testPickupVisualMetrics() {
   for (const scale of [1, 2, 3, 4]) {
     const metrics = computePickupVisualMetrics(scale);
-    assert(Math.abs(metrics.backgroundLogicPx * metrics.screenPixelScale - 60) < 0.001, `pickup background should render at 60 screen px for scale ${scale}`);
-    assert(Math.abs(metrics.symbolHeightLogicPx * metrics.screenPixelScale - 40) < 0.001, `pickup symbol should render at 40 screen px high for scale ${scale}`);
-    assert(Math.abs(metrics.shadowLogicPx * metrics.screenPixelScale - 3) < 0.001, `pickup outline/shadow should render at 3 screen px for scale ${scale}`);
+    assert(Math.abs(metrics.backgroundLogicPx * metrics.screenPixelScale - 30) < 0.001, `pickup background should render at 30 screen px for scale ${scale}`);
+    assert(Math.abs(metrics.symbolHeightLogicPx * metrics.screenPixelScale - 20) < 0.001, `pickup symbol should render at 20 screen px high for scale ${scale}`);
+    assert(Math.abs(metrics.shadowLogicPx * metrics.screenPixelScale - 2) < 0.001, `pickup outline/shadow should render at 2 screen px for scale ${scale}`);
   }
 }
 
