@@ -1,5 +1,7 @@
 import type { EventBus } from "../../engine/core/EventBus";
 import { EventType, type CMEventMap } from "../../engine/core/events";
+import { WEAPON_DB } from "../defs/WeaponDB";
+import { ACTIVE_W2_WEAPON_ID, resolveWeaponDefinition } from "../defs/Weapons";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
@@ -111,6 +113,10 @@ function dist2(ax: number, ay: number, bx: number, by: number): number {
   return dx * dx + dy * dy;
 }
 
+const ACTIVE_W2_BEAM = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB).beam;
+const W2_LASER_DAMAGE = Number(ACTIVE_W2_BEAM?.damage ?? 15);
+const W2_LASER_HIT_INTERVAL_SEC = Number(ACTIVE_W2_BEAM?.hitIntervalSec ?? 0.08);
+
 export class CollisionSystem {
   constructor(
     private readonly bus: EventBus<CMEventMap>,
@@ -181,10 +187,10 @@ export class CollisionSystem {
           const hitRadius = enemy.radius + 8;
           if (dy < hitRadius && enemy.pos.x > laser.pos.x) {
             if (!(enemy as any).laserHitTimer || (enemy as any).laserHitTimer <= 0) {
-              (enemy as any).laserHitTimer = 0.08;
+              (enemy as any).laserHitTimer = W2_LASER_HIT_INTERVAL_SEC;
               this.bus.emitNext(EventType.PROJECTILE_HIT_ENEMY, {
                 projectile: {
-                  damage: 15,
+                  damage: W2_LASER_DAMAGE,
                   consumed: false,
                   pendingKill: false,
                 } as any,

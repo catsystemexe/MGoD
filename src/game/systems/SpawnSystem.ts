@@ -147,7 +147,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
 
       // weaponTypeId is the concrete weapon type from the spawn payload:
-      //   "w1.basic" = primary slot, "w2.basic" = secondary slot (w2 prefix).
+      //   "w1.basic" = primary slot, "w2.laser" = active secondary slot (laser path; w2 prefix reserved for compatibility).
       // Secondary bolts are visually distinct (magenta + larger) from primary.
       const isSecondary = String(weaponTypeId).startsWith("w2");
       ent.render = {
