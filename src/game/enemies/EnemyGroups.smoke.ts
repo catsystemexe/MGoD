@@ -19,7 +19,7 @@ function sim(capacity = 128) {
   const groups = new EnemyGroupRegistry();
   const spawn = new SpawnSystem(store, { rng01: () => 0.5, logicSize: { w: 320, h: 180 }, weaponDb: WEAPON_DB }, world, groups);
   const enemies = new EnemySystem(store as any, 320, 180, world as any, groups);
-  return { bus, store, groups, spawn, enemies };
+  return { bus, store, world, groups, spawn, enemies };
 }
 
 function spawnGroup(formationId: string, movementPresetId: string, cohesionId: string, count = 3, params?: CMEventMap[typeof EventType.SPAWN_ENEMY_GROUP]["params"]) {
@@ -229,6 +229,67 @@ function enemiesOf(store: EntityStore<any>) {
   assert(close(enemy.pos.x, 12) && close(enemy.pos.y, 34), "ordinary SPAWN_ENEMY preserves spawn coordinates");
 }
 
+{
+  const s = sim();
+  s.world.scrollX = 300;
+  s.world.scrollY = 40;
+  s.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, {
+    enemyTypeId: "red",
+    count: 3,
+    anchor: { x: 200, y: 90 },
+    formationId: "line.horizontal",
+    movementPresetId: "diagonal.down",
+    cohesionId: "rigid",
+    params: { cohesion: { maxCatchupSpeed: 600 } },
+  });
+  s.bus.beginTick(0);
+  s.bus.enterPhase(Phase.Cleanup);
+  s.bus.endTickAndSwap();
+  s.bus.beginTick(1);
+  s.bus.enterPhase(Phase.Simulation);
+  s.spawn.update({ dt: DT } as any, s.bus.drainPhase(Phase.Simulation) as any);
+  let [group] = s.groups.snapshot();
+  let es = enemiesOf(s.store);
+  assert(close(group.anchor.x, 500) && close(group.anchor.y, 130), "group anchor is materialized in world coordinates when the camera is scrolled");
+  assert(es.every((e, i) => close(e.pos.x, 500) && close(e.pos.y, [112, 130, 148][i])), "scrolled group members spawn at the same world-space formation targets as the anchor");
+  s.enemies.update({ dt: DT, tick: 2, time: DT * 2 } as any);
+  group = s.groups.snapshot()[0];
+  es = enemiesOf(s.store);
+  assert(group.anchor.y > 130, "diagonal.down group anchor Y increases from its scrolled world start");
+  assert(es.every((e, i) => e.pos.y > [112, 130, 148][i]), "diagonal.down group members follow increasing world Y under scrolled camera state");
+}
+
+{
+  const s = sim();
+  s.world.scrollX = 240;
+  s.world.scrollY = 30;
+  s.bus.emitNext(EventType.SPAWN_ENEMY_GROUP, {
+    enemyTypeId: "red",
+    count: 3,
+    anchor: { x: 200, y: 90 },
+    formationId: "line.horizontal",
+    movementPresetId: "sine.wide",
+    cohesionId: "rigid",
+    params: { cohesion: { maxCatchupSpeed: 600 } },
+  });
+  s.bus.beginTick(0);
+  s.bus.enterPhase(Phase.Cleanup);
+  s.bus.endTickAndSwap();
+  s.bus.beginTick(1);
+  s.bus.enterPhase(Phase.Simulation);
+  s.spawn.update({ dt: DT } as any, s.bus.drainPhase(Phase.Simulation) as any);
+  const initialY = enemiesOf(s.store)[1].pos.y;
+  const deltas: number[] = [];
+  let previousY = initialY;
+  for (let i = 0; i < 150; i++) {
+    s.enemies.update({ dt: DT, tick: i + 2, time: DT * (i + 2) } as any);
+    const y = enemiesOf(s.store)[1].pos.y;
+    deltas.push(y - previousY);
+    previousY = y;
+  }
+  assert(deltas.some((dy) => dy > 0.01), "sine.wide group member Y increases during the wave");
+  assert(deltas.some((dy) => dy < -0.01), "sine.wide group member Y reverses direction during the wave");
+}
 {
   const zero = spawnGroup("line.horizontal", "straight.basic", "rigid", 0);
   assert.equal(zero.groups.size(), 0, "zero-count group request does not retain an empty group");
