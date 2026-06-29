@@ -27,6 +27,17 @@ export interface SpawnSystemConfig {
   pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
 
+export const PICKUP_COLLISION_SCREEN_DIAMETER_PX = 30;
+export const PICKUP_COLLISION_CANONICAL_SCREEN_PIXEL_SCALE = 2;
+export const PICKUP_COLLISION_RADIUS =
+  (PICKUP_COLLISION_SCREEN_DIAMETER_PX / PICKUP_COLLISION_CANONICAL_SCREEN_PIXEL_SCALE) / 2;
+
+export const DEFAULT_PICKUP_SPAWN_CONFIG: Readonly<NonNullable<SpawnSystemConfig["pickup"]>> = {
+  ttlSec: 10,
+  radius: PICKUP_COLLISION_RADIUS,
+  fallSpeed: 30,
+};
+
 export interface ProjectileEntity extends BaseEntity {
   kind: "projectile";
   owner: EntityRef;
@@ -263,7 +274,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
           case EventType.SPAWN_PICKUP: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-            const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+            const pcfg = this.cfg.pickup ?? DEFAULT_PICKUP_SPAWN_CONFIG;
 
             // p.pos originates from a killed enemy => already WORLD space (unified
             // contract). Do NOT add scroll here (unlike viewport-relative enemy
