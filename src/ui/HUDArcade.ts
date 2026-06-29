@@ -16,6 +16,8 @@ type HudRefs = {
   energy: HTMLDivElement;
   w1: HTMLCanvasElement;
   w2: HTMLCanvasElement;
+  w1Level: HTMLDivElement;
+  w2Level: HTMLDivElement;
   bomb: HTMLDivElement;
   cdFill: HTMLDivElement;
   pause: HTMLDivElement;
@@ -25,12 +27,16 @@ type HudRefs = {
 
 type W2State = { active?: boolean; charge01?: number };
 
+type WeaponSlotHudLike = { level?: number; maxLevel?: number };
+type WeaponSnapshotHudLike = { slots?: { w1?: WeaponSlotHudLike; w2?: WeaponSlotHudLike } };
+
 type PlayerLike = {
   energy?: number;
   energyMax?: number;
   bombs?: number;
   weapon?: "W1" | "W2";
   w2?: W2State;
+  weapons?: WeaponSnapshotHudLike;
 };
 
 type SessionLike = {
@@ -47,6 +53,20 @@ const LABEL_FONT = "'Orbitron', sans-serif";
 
 // --- Palette --------------------------------------------------------------
 const COL_CYAN = "#00ffee";
+
+export type HudWeaponLevels = { w1Level: number; w2Level: number };
+
+function readHudLevel(slot: WeaponSlotHudLike | undefined): number {
+  const n = Number(slot?.level ?? 1);
+  return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1;
+}
+
+export function getHudWeaponLevels(p: Pick<PlayerLike, "weapons">): HudWeaponLevels {
+  return {
+    w1Level: readHudLevel(p.weapons?.slots?.w1),
+    w2Level: readHudLevel(p.weapons?.slots?.w2),
+  };
+}
 
 function mkChild(parent: HTMLElement, id: string, css: string): HTMLDivElement {
   const d = document.createElement("div");
@@ -259,6 +279,13 @@ export function createHUDArcade(root: HTMLElement) {
   const w1 = mkIconCanvas("hudW1", 45, 28);
   const w2 = mkIconCanvas("hudW2", 45, 50);
 
+  const weaponLevelCss =
+    "position:absolute;left:64px;line-height:normal;" +
+    "font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;" +
+    `color:#ffffff;text-shadow:0 0 5px ${COL_CYAN};`;
+  const w1Level = mkChild(weaponFrame, "hudW1Level", `${weaponLevelCss}top:27px;`);
+  const w2Level = mkChild(weaponFrame, "hudW2Level", `${weaponLevelCss}top:49px;`);
+
   // W2 cooldown bar — overlays the "W2" label inside the PNG frame
   const cdTrack = mkChild(
     weaponFrame,
@@ -310,7 +337,7 @@ export function createHUDArcade(root: HTMLElement) {
   gameOver.textContent = "GAME OVER\nTry again? Y/N";
 
   const refs: HudRefs = {
-    layer, panel, lives, wave, score, energy, w1, w2, bomb, cdFill, pause, gameOver, title,
+    layer, panel, lives, wave, score, energy, w1, w2, w1Level, w2Level, bomb, cdFill, pause, gameOver, title,
   };
 
   function applyMode() {
@@ -402,6 +429,10 @@ export function createHUDArcade(root: HTMLElement) {
       const ctx2 = refs.w2.getContext("2d");
       if (ctx1) drawW1(ctx1, 14, 7, activeW === "W1");
       if (ctx2) drawW2(ctx2, 14, 7, activeW === "W2", iconPhase);
+
+      const weaponLevels = getHudWeaponLevels(p);
+      refs.w1Level.textContent = `LVL ${weaponLevels.w1Level}`;
+      refs.w2Level.textContent = `LVL ${weaponLevels.w2Level}`;
 
       // bomb: PNG icon + count (icon degrades to count-only if PNG missing)
       const b = Math.max(0, (p.bombs ?? 0) | 0);

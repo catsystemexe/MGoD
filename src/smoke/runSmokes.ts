@@ -4,6 +4,8 @@ const SMOKES = [
   "../engine/ecs/EntityStore.smoke",
   "../game/systems/PlayerSystem.smoke",
   "../game/systems/WeaponSystem.smoke",
+  "../game/systems/WeaponLevelControls.smoke",
+  "../ui/HUDArcade.smoke",
   "../game/systems/SimulationLoop.smoke",
   "../game/systems/DirectorSystem.smoke",
   "../game/systems/SpawnSystem.smoke",
