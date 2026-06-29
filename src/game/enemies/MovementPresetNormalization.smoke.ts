@@ -9,7 +9,7 @@ import { alignBehavior } from "./behaviors/align";
 import { evadeBehavior } from "./behaviors/evade";
 import { rangeBehavior } from "./behaviors/range";
 import { orbitTargetBehavior } from "./behaviors/orbitTarget";
-import { buildMovementGroups, createDevSummonerGroupSpawnPayload, createDevSummonerSpawnPayload, getPrimitiveFromPresetId, normalizeGroupCount, normalizeGroupStepperValue, stepGroupCount, stepGroupParamValue } from "../../dev/DevSummoner";
+import { buildMovementGroups, createDevSummonerGroupSpawnPayload, createDevSummonerSpawnPayload, getPrimitiveFromPresetId, groupFormationSelectOptions, normalizeGroupCount, normalizeGroupStepperValue, stepGroupCount, stepGroupParamValue } from "../../dev/DevSummoner";
 import { ENEMY_GROUP_COHESION_IDS, ENEMY_GROUP_FORMATION_IDS } from "./EnemyGroups";
 import type { SmartBehaviorContext } from "./behaviors/smartContext";
 
@@ -612,6 +612,9 @@ function assertDevSummonerGroupPayload(): void {
   assert(stepGroupParamValue("maxCatchupSpeed", 80, -1, "rigid") === 80, "catch stepper clamps at min");
   assert(ENEMY_GROUP_FORMATION_IDS.join(",") === "line.horizontal,wedge,column.vertical,arc.forward,ring", "group formation options must match canonical IDs");
   assert(ENEMY_GROUP_COHESION_IDS.join(",") === "rigid,elastic", "group cohesion options must match foundation IDs");
+  const formationOptions = groupFormationSelectOptions();
+  assert(formationOptions.find((option) => option.label === "Line")?.value === "line.horizontal", "visible Line option must emit line.horizontal");
+  assert(formationOptions.find((option) => option.label === "Column")?.value === "column.vertical", "visible Column option must emit column.vertical");
 
   const payload = createDevSummonerGroupSpawnPayload({
     enemyTypeId: "red",
@@ -644,7 +647,10 @@ function assertDevSummonerGroupPayload(): void {
   assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "wedge", movementPresetId: "missing", cohesionId: "rigid" }) === null, "invalid movement preset must not emit group payload");
   assert(createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "wedge", movementPresetId: "straight.basic", cohesionId: "loose" }) === null, "invalid cohesion must not emit group payload");
   const linePayload = createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "line.horizontal", movementPresetId: "straight.basic", cohesionId: "rigid", params: { formation: { depth: 40 } } });
+  assert(linePayload?.formationId === "line.horizontal", "group payload preserves line.horizontal");
   assert(linePayload?.params?.formation?.depth === 40, "line mode may carry normalized depth without making it a geometry dependency");
+  const columnPayload = createDevSummonerGroupSpawnPayload({ enemyTypeId: "red", count: 5, anchorX: 1, anchorY: 2, formationId: "column.vertical", movementPresetId: "straight.basic", cohesionId: "rigid" });
+  assert(columnPayload?.formationId === "column.vertical", "group payload preserves column.vertical");
   const enemyPayload = createDevSummonerSpawnPayload({ typeId: "red", spawnX: 1, spawnY: 2, behaviorPresetId: "straight.basic", devManualSpawnId: 7 });
   assert(!(enemyPayload as any).params, "Enemy mode payload remains unchanged by group params");
 }
