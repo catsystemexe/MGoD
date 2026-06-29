@@ -217,6 +217,10 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
             if (count <= 0 || !ENEMY_DEFS[enemyTypeId as EnemyTypeId]) break;
 
             const anchor = { x: Number(p.anchor?.x ?? 0), y: Number(p.anchor?.y ?? 0) };
+            const worldAnchor = {
+              x: anchor.x + Number(this.world?.scrollX ?? 0),
+              y: anchor.y + Number(this.world?.scrollY ?? 0),
+            };
             const spacing = typeof p.spacing === "number" ? p.spacing : undefined;
             const formationId = normalizeFormationId(String(p.formationId));
             const cohesionId = normalizeCohesionId(String(p.cohesionId));
@@ -224,7 +228,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
             const groupId = this.groups.create({
               enemyTypeId,
               count,
-              anchor,
+              anchor: worldAnchor,
               formationId,
               movementPresetId: String(p.movementPresetId),
               cohesionId,
