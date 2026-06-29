@@ -18,6 +18,7 @@ const SMOKES = [
   "../game/systems/CombatLoop.smoke",
   "../game/systems/CollisionScrollInvariance.smoke",
   "../game/systems/LootPickupChain.smoke",
+  "../render/FxToggleState.smoke",
   "../game/systems/BombExplosionChain.smoke",
   "../game/systems/WeaponVFXEmit.smoke",
   "../render/webgl/bg/FlowDisturbanceKick.smoke",
