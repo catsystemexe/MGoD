@@ -140,7 +140,7 @@ export function formationOffset(id: FormationId, slotIndex: number, slotCount: n
     const theta = slot * Math.PI * 2 / count;
     return { x: Math.cos(theta) * params.formation.radius, y: Math.sin(theta) * params.formation.radius };
   }
-  return { x: 0, y: (slot - (count - 1) / 2) * spacing };
+  return { x: (slot - (count - 1) / 2) * spacing, y: 0 };
 }
 
 export class EnemyGroupRegistry {

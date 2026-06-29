@@ -7,7 +7,7 @@ import { WEAPON_DB } from "../defs/WeaponDB";
 import { createWorldState } from "../data/WorldState";
 import { SpawnSystem, type SpawnableEntity } from "../systems/SpawnSystem";
 import { EnemySystem } from "../systems/EnemySystem";
-import { EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams } from "./EnemyGroups";
+import { ENEMY_GROUP_FORMATION_IDS, EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams } from "./EnemyGroups";
 
 const DT = 1 / 60;
 const close = (a: number, b: number, eps = 0.001) => Math.abs(a - b) <= eps;
@@ -49,9 +49,27 @@ function enemiesOf(store: EntityStore<any>) {
   return out.sort((a, b) => a.group.slotIndex - b.group.slotIndex);
 }
 
+function assertLinearAxis(formationId: "line.horizontal" | "column.vertical", axis: "x" | "y", count: number, spacing: number): void {
+  const crossAxis = axis === "x" ? "y" : "x";
+  const offsets = Array.from({ length: count }, (_unused, i) => formationOffset(formationId, i, count, spacing));
+  assert(offsets.every((offset) => close(offset[crossAxis], 0)), `${formationId} keeps ${crossAxis.toUpperCase()} offsets at zero for count ${count}`);
+  const values = offsets.map((offset) => offset[axis]);
+  const expected = Array.from({ length: count }, (_unused, i) => (i - (count - 1) / 2) * spacing);
+  assert.deepEqual(values, expected, `${formationId} distributes members symmetrically on ${axis.toUpperCase()} for count ${count}`);
+  assert(close(values[0], -values[values.length - 1]), `${formationId} endpoints mirror around the anchor for count ${count}`);
+  if (count % 2 === 1) assert(offsets.some((offset) => close(offset.x, 0) && close(offset.y, 0)), `${formationId} odd count includes the anchor slot`);
+  else assert(close((values[count / 2 - 1] + values[count / 2]) / 2, 0), `${formationId} even count is centered between middle members`);
+  for (let i = 1; i < values.length; i++) assert(close(values[i] - values[i - 1], spacing), `${formationId} adjacent spacing is normalized for count ${count}`);
+}
+
 {
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, 20).y), [-20, 0, 20]);
-  assert.deepEqual([0, 1, 2, 3].map((i) => formationOffset("line.horizontal", i, 4, 20).y), [-30, -10, 10, 30]);
+  assert.deepEqual(ENEMY_GROUP_FORMATION_IDS, ["line.horizontal", "wedge", "column.vertical", "arc.forward", "ring"], "Formation Expansion Pack canonical IDs are present");
+  for (const count of [1, 4, 5]) {
+    assertLinearAxis("line.horizontal", "x", count, 20);
+    assertLinearAxis("column.vertical", "y", count, 20);
+  }
+  assert.notDeepEqual(formationOffset("line.horizontal", 0, 5, 20), formationOffset("column.vertical", 0, 5, 20), "line and column differ for non-center slots");
+  assert.notDeepEqual(formationOffset("line.horizontal", 1, 4, 20), formationOffset("column.vertical", 1, 4, 20), "line and column differ for even non-center slots");
   const wedge = [0, 1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, 20));
   assert.deepEqual(wedge, [{ x: 0, y: 0 }, { x: 20, y: -20 }, { x: 20, y: 20 }, { x: 40, y: -40 }, { x: 40, y: 40 }]);
   assert.equal(CM_EVENT_OWNERSHIP[EventType.SPAWN_ENEMY_GROUP], Phase.Simulation);
@@ -59,7 +77,8 @@ function enemiesOf(store: EntityStore<any>) {
 
 {
   const defaults = normalizeEnemyGroupParams(undefined, "rigid");
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, defaults).y), [-18, 0, 18], "omitted params preserve default line spacing");
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, defaults).x), [-18, 0, 18], "omitted params preserve default line spacing on X");
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, defaults).y), [0, 0, 0], "omitted params keep line Y fixed");
   assert.deepEqual([0, 1, 2].map((i) => formationOffset("wedge", i, 3, defaults)), [{ x: 0, y: 0 }, { x: 18, y: -18 }, { x: 18, y: 18 }], "omitted params preserve default wedge spacing/depth");
   const malformed = normalizeEnemyGroupParams({ formation: { spacing: Number.NaN, depth: -4 }, cohesion: { response: Infinity, maxCatchupSpeed: 9999 } }, "elastic");
   assert.equal(malformed.formation.spacing, defaults.formation.spacing, "invalid spacing falls back to default");
@@ -71,9 +90,9 @@ function enemiesOf(store: EntityStore<any>) {
 {
   const narrow = normalizeEnemyGroupParams({ formation: { spacing: 16, depth: 12 } }, "rigid");
   const wide = normalizeEnemyGroupParams({ formation: { spacing: 40, depth: 12 } }, "rigid");
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, narrow).y), [-16, 0, 16]);
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, wide).y), [-40, 0, 40]);
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, wide).x), [0, 0, 0], "line spacing does not change anchor axis");
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, narrow).x), [-16, 0, 16]);
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, wide).x), [-40, 0, 40]);
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, wide).y), [0, 0, 0], "line spacing does not change cross axis");
   const shallow = normalizeEnemyGroupParams({ formation: { spacing: 24, depth: 12 } }, "rigid");
   const deep = normalizeEnemyGroupParams({ formation: { spacing: 24, depth: 48 } }, "rigid");
   assert.deepEqual([1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, shallow).y), [-24, 24, -48, 48], "wedge spacing controls lateral spread");
@@ -81,7 +100,7 @@ function enemiesOf(store: EntityStore<any>) {
   assert.deepEqual([1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, shallow).x), [12, 12, 24, 24]);
   assert.deepEqual([1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, deep).x), [48, 48, 96, 96], "wedge depth controls longitudinal rows only");
   assert.deepEqual([0, 1, 2, 3, 4].map((i) => formationOffset("wedge", i, 5, wide).y), [0, -40, 40, -80, 80], "wedge symmetry and slot order remain stable");
-  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, deep).y), [-24, 0, 24], "depth does not affect horizontal line geometry");
+  assert.deepEqual([0, 1, 2].map((i) => formationOffset("line.horizontal", i, 3, deep).x), [-24, 0, 24], "depth does not affect horizontal line geometry");
 }
 
 {
@@ -90,12 +109,12 @@ function enemiesOf(store: EntityStore<any>) {
   assert.equal(groups.size(), 1);
   assert.deepEqual(es.map((e) => e.group.slotIndex), [0, 1, 2]);
   assert.equal(new Set(es.map((e) => e.group.groupId)).size, 1);
-  assert(es.every((e, i) => close(e.pos.x, 200) && close(e.pos.y, [70, 90, 110][i])), "members spawn at deterministic formation targets");
+  assert(es.every((e, i) => close(e.pos.x, [180, 200, 220][i]) && close(e.pos.y, 90)), "members spawn at deterministic horizontal line targets");
   assert(es.every((e) => e.behaviorId === "none"), "grouped members do not retain individual movement presets");
   enemies.update({ dt: DT, tick: 2, time: DT * 2 } as any);
   es = enemiesOf(store);
-  assert(es.every((e, i) => close(e.pos.y, [70, 90, 110][i])), "rigid line members preserve centered relative Y offsets");
-  assert(es.every((e) => e.pos.x < 200), "anchor movement uses straight.basic preset");
+  assert(es.every((e) => close(e.pos.y, 90)), "rigid line members preserve fixed Y offsets");
+  assert(es.every((e, i) => e.pos.x < [180, 200, 220][i]), "anchor movement uses straight.basic preset");
 }
 
 
@@ -251,12 +270,12 @@ function enemiesOf(store: EntityStore<any>) {
   let [group] = s.groups.snapshot();
   let es = enemiesOf(s.store);
   assert(close(group.anchor.x, 500) && close(group.anchor.y, 130), "group anchor is materialized in world coordinates when the camera is scrolled");
-  assert(es.every((e, i) => close(e.pos.x, 500) && close(e.pos.y, [112, 130, 148][i])), "scrolled group members spawn at the same world-space formation targets as the anchor");
+  assert(es.every((e, i) => close(e.pos.x, [482, 500, 518][i]) && close(e.pos.y, 130)), "scrolled line members spawn at the same world-space formation targets as the anchor");
   s.enemies.update({ dt: DT, tick: 2, time: DT * 2 } as any);
   group = s.groups.snapshot()[0];
   es = enemiesOf(s.store);
   assert(group.anchor.y > 130, "diagonal.down group anchor Y increases from its scrolled world start");
-  assert(es.every((e, i) => e.pos.y > [112, 130, 148][i]), "diagonal.down group members follow increasing world Y under scrolled camera state");
+  assert(es.every((e) => e.pos.y > 130), "diagonal.down group members follow increasing world Y under scrolled camera state");
 }
 
 {
@@ -383,6 +402,33 @@ function enemiesOf(store: EntityStore<any>) {
   const high = normalizeEnemyGroupParams({ formation: { radius: 999, angle: 999 } }, "rigid");
   assert.equal(high.formation.radius, 140, "excessive radius clamps");
   assert.equal(high.formation.angle, 180, "excessive angle clamps");
+}
+
+
+{
+  for (const [formationId, expectedPositions] of [
+    ["line.horizontal", [{ x: 160, y: 90 }, { x: 180, y: 90 }, { x: 200, y: 90 }, { x: 220, y: 90 }, { x: 240, y: 90 }]],
+    ["column.vertical", [{ x: 200, y: 50 }, { x: 200, y: 70 }, { x: 200, y: 90 }, { x: 200, y: 110 }, { x: 200, y: 130 }]],
+  ] as const) {
+    const { store, groups } = spawnGroup(formationId, "none.hold", "rigid", 5, { formation: { spacing: 20 }, cohesion: { maxCatchupSpeed: 600 } });
+    const [snapshot] = groups.snapshot();
+    const group = groups.get(snapshot.id) as any;
+    const es = enemiesOf(store);
+    assert.equal(group.formationId, formationId, `${formationId} is stored on group registry`);
+    assert.deepEqual(es.map((e) => e.group.slotIndex), [0, 1, 2, 3, 4], `${formationId} stable slot IDs are preserved`);
+    for (let i = 0; i < es.length; i++) {
+      const expectedOffset = formationOffset(formationId, i, 5, group.params);
+      assert(close(es[i].pos.x, 200 + expectedOffset.x) && close(es[i].pos.y, 90 + expectedOffset.y), `${formationId} member ${i} uses computed offset`);
+      assert(close(es[i].pos.x, expectedPositions[i].x) && close(es[i].pos.y, expectedPositions[i].y), `${formationId} member ${i} spawns on the expected axis`);
+    }
+    if (formationId === "line.horizontal") {
+      assert.equal(new Set(es.map((e) => e.pos.y)).size, 1, "line members share one Y coordinate");
+      assert(new Set(es.map((e) => e.pos.x)).size > 1, "line members vary on X");
+    } else {
+      assert.equal(new Set(es.map((e) => e.pos.x)).size, 1, "column members share one X coordinate");
+      assert(new Set(es.map((e) => e.pos.y)).size > 1, "column members vary on Y");
+    }
+  }
 }
 
 {

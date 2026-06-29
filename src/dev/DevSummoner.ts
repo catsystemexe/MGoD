@@ -15,6 +15,15 @@ type MovementGroups = Record<MovementClassId, Record<string, string[]>>;
 
 type CompactSelectOption = { value: string; label: string; disabled?: boolean };
 
+export function groupFormationSelectOptions(): Array<{ value: FormationId; label: string }> {
+  const formationLabel = (id: FormationId) => id === "line.horizontal" ? "Line"
+    : id === "wedge" ? "Wedge"
+      : id === "column.vertical" ? "Column"
+        : id === "arc.forward" ? "Arc"
+          : "Ring";
+  return ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: formationLabel(id) }));
+}
+
 const CONTROL_HEIGHT_PX = 26;
 const CONTROL_RADIUS_PX = 2;
 const CONTROL_FONT = "12px monospace";
@@ -694,12 +703,7 @@ export class DevSummoner {
       wrap.appendChild(segment);
       return { wrap, get value() { return value; }, addEventListener(listener: () => void) { listeners.push(listener); } };
     };
-    const formationLabel = (id: FormationId) => id === "line.horizontal" ? "Line"
-      : id === "wedge" ? "Wedge"
-        : id === "column.vertical" ? "Column"
-          : id === "arc.forward" ? "Arc"
-            : "Ring";
-    const formationChoice = makeCompactChoice<FormationId>("Form", ENEMY_GROUP_FORMATION_IDS.map((id) => ({ value: id, label: formationLabel(id) })), "line.horizontal");
+    const formationChoice = makeCompactChoice<FormationId>("Form", groupFormationSelectOptions(), "line.horizontal");
     const cohesionChoice = makeSegmentedChoice<CohesionId>("Coh", "Group cohesion", ENEMY_GROUP_COHESION_IDS.map((id) => ({ value: id, label: id === "rigid" ? "Rigid" : "Elastic" })), "rigid");
     const formationWrap = formationChoice.wrap;
     const cohesionWrap = cohesionChoice.wrap;
