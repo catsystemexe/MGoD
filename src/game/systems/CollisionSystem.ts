@@ -124,8 +124,8 @@ function playerBodyRadius(player: PlayerEntity): number {
   return positiveFiniteRadius((player as any).bodyRadius) ?? positiveFiniteRadius(player.radius) ?? 0;
 }
 
-export const W1_PROJECTILE_COLLISION_CIRCLE_COUNT = 3;
-export const W1_PROJECTILE_COLLISION_SPACING = 10;
+export const W1_PROJECTILE_COLLISION_OFFSETS = [5, 15] as const;
+export const W1_PROJECTILE_COLLISION_CIRCLE_COUNT = W1_PROJECTILE_COLLISION_OFFSETS.length;
 
 function projectileDirection(proj: ProjectileEntity): { x: number; y: number } {
   const vx = Number(proj.vel?.x ?? 0);
@@ -142,7 +142,7 @@ export function projectileCollisionCircles(proj: ProjectileEntity): Array<{ x: n
   if (String((proj as any).weaponTypeId ?? "") !== "w1.basic") return [{ x, y, radius }];
 
   const dir = projectileDirection(proj);
-  return [-W1_PROJECTILE_COLLISION_SPACING, 0, W1_PROJECTILE_COLLISION_SPACING].map((offset) => ({
+  return W1_PROJECTILE_COLLISION_OFFSETS.map((offset) => ({
     x: x + dir.x * offset,
     y: y + dir.y * offset,
     radius,

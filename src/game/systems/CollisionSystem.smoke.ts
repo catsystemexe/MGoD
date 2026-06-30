@@ -9,7 +9,13 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
-import { CollisionSystem, projectileHitsEnemy, type WorldEntity } from "./CollisionSystem";
+import {
+  CollisionSystem,
+  W1_PROJECTILE_COLLISION_OFFSETS,
+  projectileCollisionCircles,
+  projectileHitsEnemy,
+  type WorldEntity,
+} from "./CollisionSystem";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -108,14 +114,45 @@ function makeEnemy(x: number, y: number, radius: number): Extract<WorldEntity, {
 }
 
 function testW1ProjectileChainCoverage(): void {
-  const centerOnlyWouldMissFront = makeEnemy(17.9, 0, 3);
-  assert(projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), centerOnlyWouldMissFront), "W1 should hit with the front collision circle");
+  const proj = makeProjectile(0, 0, 1, 0, 5, "w1.basic");
+  const circles = projectileCollisionCircles(proj);
+  assert(circles.length === 2, "W1 should use exactly 2 collision circles");
+  assert(circles.every((circle) => circle.radius === 5), "W1 collision circles should keep projectile radius 5");
+  assert(circles.every((circle) => circle.x > proj.pos.x), "W1 collision circles should be in front of projectile center");
+  assert(circles.every((circle) => circle.x >= proj.pos.x), "W1 collision circles should not be behind projectile center");
+  assert(circles[0].x === W1_PROJECTILE_COLLISION_OFFSETS[0] && circles[1].x === W1_PROJECTILE_COLLISION_OFFSETS[1], "W1 forward offsets should be +5 and +15");
 
-  const centerOnlyWouldMissBack = makeEnemy(-17.9, 0, 3);
-  assert(projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), centerOnlyWouldMissBack), "W1 should hit with the rear collision circle");
+  const frontBody = makeEnemy(22.9, 0, 3);
+  assert(projectileHitsEnemy(proj, frontBody), "W1 should hit with the front projectile body");
+
+  const behindCenter = makeEnemy(-8.01, 0, 3);
+  assert(!projectileHitsEnemy(proj, behindCenter), "W1 should not hit behind projectile center");
 
   const outsideVisualBody = makeEnemy(0, 8.1, 3);
-  assert(!projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), outsideVisualBody), "W1 should not hit far outside the projectile body width");
+  assert(!projectileHitsEnemy(proj, outsideVisualBody), "W1 should not hit far outside the projectile body width");
+}
+
+function testW1ProjectileChainFlipsWithNegativeVelocity(): void {
+  const proj = makeProjectile(0, 0, -1, 0, 5, "w1.basic");
+  const circles = projectileCollisionCircles(proj);
+  assert(circles.length === 2, "left-moving W1 should use exactly 2 collision circles");
+  assert(circles.every((circle) => circle.radius === 5), "left-moving W1 collision circles should keep projectile radius 5");
+  assert(circles.every((circle) => circle.x < proj.pos.x), "left-moving W1 front should rotate to the left");
+  assert(projectileHitsEnemy(proj, makeEnemy(-22.9, 0, 3)), "left-moving W1 should hit with its left/front body");
+  assert(!projectileHitsEnemy(proj, makeEnemy(8.01, 0, 3)), "left-moving W1 should not hit behind its center");
+}
+
+function testW1ProjectileChainUsesNormalizedDiagonalVelocity(): void {
+  const proj = makeProjectile(10, 20, 3, 4, 5, "w1.basic");
+  const circles = projectileCollisionCircles(proj);
+  assert(circles.length === 2, "diagonal W1 should use exactly 2 collision circles");
+  const dir = { x: 3 / 5, y: 4 / 5 };
+  for (let i = 0; i < circles.length; i++) {
+    const offset = W1_PROJECTILE_COLLISION_OFFSETS[i];
+    assert(Math.abs(circles[i].x - (proj.pos.x + dir.x * offset)) < 1e-9, "diagonal W1 should normalize X velocity before applying front offset");
+    assert(Math.abs(circles[i].y - (proj.pos.y + dir.y * offset)) < 1e-9, "diagonal W1 should normalize Y velocity before applying front offset");
+    assert((circles[i].x - proj.pos.x) * dir.x + (circles[i].y - proj.pos.y) * dir.y > 0, "diagonal W1 circles should be in front along velocity");
+  }
 }
 
 function testNonW1ProjectileCollisionUnchanged(): void {
@@ -225,6 +262,8 @@ function testBodyRadiusFallsBackToCombatRadius(): void {
 function main() {
   testProjectileHitsEnemy();
   testW1ProjectileChainCoverage();
+  testW1ProjectileChainFlipsWithNegativeVelocity();
+  testW1ProjectileChainUsesNormalizedDiagonalVelocity();
   testNonW1ProjectileCollisionUnchanged();
   testW2AndBombCollisionContractsUnchanged();
   testPlayerRadiusSeparation();
