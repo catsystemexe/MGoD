@@ -27,7 +27,7 @@ type HudRefs = {
 
 type W2State = { active?: boolean; charge01?: number };
 
-type WeaponSlotHudLike = { level?: number; maxLevel?: number };
+type WeaponSlotHudLike = { level?: number; maxLevel?: number; weaponId?: string; displayName?: string };
 type WeaponSnapshotHudLike = { slots?: { w1?: WeaponSlotHudLike; w2?: WeaponSlotHudLike } };
 
 type PlayerLike = {
@@ -54,17 +54,29 @@ const LABEL_FONT = "'Orbitron', sans-serif";
 // --- Palette --------------------------------------------------------------
 const COL_CYAN = "#00ffee";
 
-export type HudWeaponLevels = { w1Level: number; w2Level: number };
+export type HudWeaponLevels = { w1Level: number; w2Level: number; w1Label: string; w2Label: string };
 
 function readHudLevel(slot: WeaponSlotHudLike | undefined): number {
   const n = Number(slot?.level ?? 1);
   return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1;
 }
 
+function readHudWeaponLabel(slot: WeaponSlotHudLike | undefined, fallback: string): string {
+  const name = String(slot?.displayName ?? "").trim();
+  if (name) return name.toUpperCase().replace(/ GUN$/, "");
+  const id = String(slot?.weaponId ?? "");
+  if (id === "w1.spread") return "SPREAD";
+  if (id === "w1.basic") return "BOLT";
+  if (id === "w2.laser") return "LASER";
+  return fallback;
+}
+
 export function getHudWeaponLevels(p: Pick<PlayerLike, "weapons">): HudWeaponLevels {
   return {
     w1Level: readHudLevel(p.weapons?.slots?.w1),
     w2Level: readHudLevel(p.weapons?.slots?.w2),
+    w1Label: readHudWeaponLabel(p.weapons?.slots?.w1, "BOLT"),
+    w2Label: readHudWeaponLabel(p.weapons?.slots?.w2, "LASER"),
   };
 }
 
@@ -431,7 +443,7 @@ export function createHUDArcade(root: HTMLElement) {
       if (ctx2) drawW2(ctx2, 14, 7, activeW === "W2", iconPhase);
 
       const weaponLevels = getHudWeaponLevels(p);
-      refs.w1Level.textContent = `LVL ${weaponLevels.w1Level}`;
+      refs.w1Level.textContent = `${weaponLevels.w1Label} LVL ${weaponLevels.w1Level}`;
       refs.w2Level.textContent = `LVL ${weaponLevels.w2Level}`;
 
       // bomb: PNG icon + count (icon degrades to count-only if PNG missing)

@@ -7,6 +7,7 @@ import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 
 import { SpawnSystem, type SpawnableEntity } from "./SpawnSystem";
 import { createWorldState } from "../data/WorldState";
+import { WEAPON_DB } from "../defs/WeaponDB";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -29,8 +30,9 @@ function main() {
       rng01: () => 0.5,
       logicSize: { w: 400, h: 224 },
       weaponDb: {
-        primary: { id: "primary", cooldownSec: 0, projectile: { speed: 200, ttlSec: 1.0, damage: 3, radius: 2 } },
-        secondary: { id: "secondary", cooldownSec: 0, projectile: { speed: 140, ttlSec: 1.2, damage: 7, radius: 3 } },
+        ...WEAPON_DB,
+        primary: { id: "primary", cooldownSec: 0, fireKind: "projectile", projectile: { speed: 200, ttlSec: 1.0, damage: 3, radius: 2 } },
+        secondary: { id: "secondary", cooldownSec: 0, fireKind: "projectile", projectile: { speed: 140, ttlSec: 1.2, damage: 7, radius: 3 } },
       },
       bomb: { travelSec: 0.25, damage: 20, radius: 10, ttlSec: 0.25 },
     },
@@ -50,6 +52,14 @@ function main() {
     origin: { x: 10, y: 20 },
     dir: { x: 1, y: 0 },
     weaponTypeId: "primary",
+  });
+
+  bus.emitNext(EventType.SPAWN_PROJECTILE, {
+    owner: ship,
+    origin: { x: 10, y: 25 },
+    dir: { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+    weaponTypeId: "w1.spread",
+    weaponLevel: 5,
   });
 
   bus.emitNext(EventType.SPAWN_BOMB, {
@@ -85,7 +95,22 @@ function main() {
     if (e.kind === "enemy") enemyCount++;
   });
 
-  assert(projCount === 1, "should spawn 1 projectile");
+  assert(projCount === 2, "should spawn 2 projectiles including Spread");
+  let foundSpread = false;
+  store.debugForEachAlive((_ref, e: any) => {
+    if (e.kind !== "projectile" || e.weaponTypeId !== "w1.spread") return;
+    foundSpread = true;
+    assert(e.damage === 2, "Spread spawn damage comes from definition");
+    assert(Math.abs(Math.hypot(e.vel.x, e.vel.y) - 980) < 1e-9, "Spread spawn speed comes from definition");
+    assert(Math.abs(e.ttl - 1.15) < 1e-9, "Spread spawn TTL comes from definition");
+    assert(e.radius === 6.5, "Spread L5 spawn radius grows for thick body");
+    assert(e.render?.sdf?.shape === "bolt", "Spread render keeps bolt SDF shape");
+    assert(e.render?.sdf?.color === "#ffd21f", "Spread render body color is yellow");
+    assert(e.render?.sdf?.tipColor === "#ff8a00", "Spread render tip color is orange");
+    assert(e.render?.sdf?.lengthPx === 34, "Spread render is about one-third Basic length");
+    assert(e.render?.sdf?.widthPx === 13, "Spread L5 render is thicker than L1-L4");
+  });
+  assert(foundSpread, "should materialize Spread projectile");
   assert(bombCount === 1, "should spawn 1 bomb");
   assert(enemyCount === 1, "should spawn 1 enemy");
 

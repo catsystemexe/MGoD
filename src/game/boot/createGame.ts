@@ -33,6 +33,7 @@ import { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
 import { applyWeaponLevelControlActions } from "../systems/WeaponLevelControls";
+import { handleW1WeaponToggleKeydown } from "../../debug/WeaponDevToggle";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
 import { VFXSystem } from "../vfx/VFXSystem";
 
@@ -311,6 +312,12 @@ export async function createGame(
           const code = (e as any).code as string | undefined;
           
         
+          const toggledW1Weapon = handleW1WeaponToggleKeydown(e, { toggleW1Weapon: () => weaponSystem.toggleW1Weapon() });
+          if (toggledW1Weapon) {
+            console.log("[DEV] W1 weapon", toggledW1Weapon);
+            return;
+          }
+
           // Toggle preset list visibility (DEV UI only)
           if (devHotkeys && (key === "i" || key === "I")) {
             devHotkeys.toggle();
@@ -395,6 +402,8 @@ export async function createGame(
           (window as any).__CM.weapons = {
             setLevel: (slot: "w1" | "w2", level: number) => weaponSystem.setLevel(slot, level),
             getSnapshot: () => weaponSystem.getSnapshot(),
+            setWeaponForSlot: (slot: "w1" | "w2", weaponId: string) => weaponSystem.setWeaponForSlot(slot, weaponId),
+            toggleW1Weapon: () => weaponSystem.toggleW1Weapon(),
           };
         }
 

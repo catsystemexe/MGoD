@@ -132,6 +132,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           const weaponTypeId = p.weaponTypeId;
           const def = this.cfg.weaponDb[weaponTypeId];
           const wcfg = def?.projectile;
+          const weaponLevel = Math.max(1, Math.floor(Number((p as any).weaponLevel ?? 1)));
           if (!wcfg) {
             if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
               console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", weaponTypeId, "def=", def);
@@ -161,12 +162,17 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
       //   "w1.basic" = primary slot, "w2.laser" = active secondary slot (laser path; w2 prefix reserved for compatibility).
       // Secondary bolts are visually distinct (magenta + larger) from primary.
       const isSecondary = String(weaponTypeId).startsWith("w2");
+      const visual = def?.visual;
+      const isSpread = String(weaponTypeId) === "w1.spread";
+      const projectileRadius = isSpread && weaponLevel >= 5 ? 6.5 : wcfg.radius;
       ent.render = {
         glyphId: "proj.capsule",
         sdf: {
-          shape: isSecondary ? "orb" : "bolt",
-          color: isSecondary ? COLORS.ORB : COLORS.BOLT,
-          size: isSecondary ? 2.0 : 5.0,
+          shape: visual?.sdfShape ?? (isSecondary ? "orb" : "bolt"),
+          color: visual?.sdfColor ?? (isSecondary ? COLORS.ORB : COLORS.BOLT),
+          ...(visual?.sdfTipColor ? { tipColor: visual.sdfTipColor } : {}),
+          size: visual?.sdfSize ?? (isSecondary ? 2.0 : 5.0),
+          ...(isSpread ? { lengthPx: 34, widthPx: weaponLevel >= 5 ? 13 : 10 } : {}),
         },
       };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
@@ -182,7 +188,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
     ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
     ent.ttl = Math.max(0.001, wcfg.ttlSec);
     ent.damage = wcfg.damage;
-    ent.radius = wcfg.radius;
+    ent.radius = projectileRadius;
 
      // keep these for collision/damage
     ent.consumed = false;

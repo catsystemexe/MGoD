@@ -1,14 +1,15 @@
 /**
  * Audited W1 projectile geometry.
  *
- * Runtime W1 projectiles are rendered by the SDF "bolt" path before the atlas
- * sprite path can run. SpawnSystem gives W1 radius=5 and render.sdf.size=5;
- * WebGLSceneRenderer passes radius*size=25 into SdfPass, and SdfPass draws
- * non-laser shapes on a 4x-radius quad. That makes a 100px wide SDF bolt with
- * local x -1..1 mapped to logic offsets -50..+50 from projectile.pos.
+ * Runtime W1 Basic projectiles are rendered by the SDF "bolt" path before the
+ * atlas sprite path can run. SpawnSystem gives W1 Basic radius=5 and
+ * render.sdf.size=5; WebGLSceneRenderer passes radius*size=25 into SdfPass, and
+ * SdfPass draws non-laser shapes on a 4x-radius quad. That makes a 100px wide
+ * SDF bolt with local x -1..1 mapped to logic offsets -50..+50 from
+ * projectile.pos.
  *
  * The SDF bolt shader fades cyan from the rear and turns white at local x=0.15.
- * The active gameplay body is the bright white core, not the cyan fade/trail.
+ * The active gameplay body is the bright core, not the rear fade/trail.
  */
 export const W1_ACTIVE_BODY_START = 7.5;
 export const W1_ACTIVE_BODY_END = 50;
@@ -23,3 +24,12 @@ export const W1_PROJECTILE_COLLISION_CIRCLE_COUNT = W1_PROJECTILE_COLLISION_OFFS
 export const W1_SDF_TRAIL_START = -50;
 export const W1_SDF_TRAIL_END = W1_ACTIVE_BODY_START;
 export const W1_SDF_VISUAL_END = 50;
+
+export const W1_SPREAD_SDF_VISUAL_LENGTH = 34;
+export const W1_SPREAD_COLLISION_OFFSET = W1_SPREAD_SDF_VISUAL_LENGTH * 0.25;
+
+export function projectileCollisionOffsetsForWeapon(weaponTypeId: string): readonly number[] {
+  if (weaponTypeId === "w1.basic") return W1_PROJECTILE_COLLISION_OFFSETS;
+  if (weaponTypeId === "w1.spread") return [W1_SPREAD_COLLISION_OFFSET];
+  return [0];
+}

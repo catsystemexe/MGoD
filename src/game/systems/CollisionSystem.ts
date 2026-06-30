@@ -6,7 +6,7 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import type { EnemyDeathGhostSnapshot } from "../fx/EnemyDeathVisual";
-import { W1_PROJECTILE_COLLISION_OFFSETS } from "../weapons/W1Geometry";
+import { projectileCollisionOffsetsForWeapon } from "../weapons/W1Geometry";
 
 // --- World entities (MVP subset used by Collision) ---
 
@@ -138,10 +138,11 @@ export function projectileCollisionCircles(proj: ProjectileEntity): Array<{ x: n
   const radius = Number(proj.radius ?? 0);
   const x = Number(proj.pos?.x ?? 0);
   const y = Number(proj.pos?.y ?? 0);
-  if (String((proj as any).weaponTypeId ?? "") !== "w1.basic") return [{ x, y, radius }];
+  const offsets = projectileCollisionOffsetsForWeapon(String((proj as any).weaponTypeId ?? ""));
+  if (offsets.length === 1 && offsets[0] === 0) return [{ x, y, radius }];
 
   const dir = projectileDirection(proj);
-  return W1_PROJECTILE_COLLISION_OFFSETS.map((offset) => ({
+  return offsets.map((offset) => ({
     x: x + dir.x * offset,
     y: y + dir.y * offset,
     radius,
