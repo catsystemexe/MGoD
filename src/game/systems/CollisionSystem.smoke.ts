@@ -9,7 +9,7 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import { EntityStore } from "../../engine/ecs/EntityStore";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 
-import { CollisionSystem, type WorldEntity } from "./CollisionSystem";
+import { CollisionSystem, projectileHitsEnemy, type WorldEntity } from "./CollisionSystem";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -87,6 +87,71 @@ function testProjectileHitsEnemy(): void {
   assert(hit.payload.projectile.slot === proj.slot, "payload.projectile ref matches");
 }
 
+function makeProjectile(x: number, y: number, vx: number, vy: number, radius: number, weaponTypeId?: string): Extract<WorldEntity, { kind: "projectile" }> {
+  return {
+    kind: "projectile",
+    owner: { slot: 1, gen: 1 },
+    weapon: "primary",
+    weaponTypeId,
+    pos: { x, y },
+    vel: { x: vx, y: vy },
+    ttl: 1,
+    damage: 3,
+    radius,
+    consumed: false,
+    pendingKill: false,
+  } as any;
+}
+
+function makeEnemy(x: number, y: number, radius: number): Extract<WorldEntity, { kind: "enemy" }> {
+  return { kind: "enemy", pos: { x, y }, radius, hp: 5, pendingKill: false } as any;
+}
+
+function testW1ProjectileChainCoverage(): void {
+  const centerOnlyWouldMissFront = makeEnemy(17.9, 0, 3);
+  assert(projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), centerOnlyWouldMissFront), "W1 should hit with the front collision circle");
+
+  const centerOnlyWouldMissBack = makeEnemy(-17.9, 0, 3);
+  assert(projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), centerOnlyWouldMissBack), "W1 should hit with the rear collision circle");
+
+  const outsideVisualBody = makeEnemy(0, 8.1, 3);
+  assert(!projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "w1.basic"), outsideVisualBody), "W1 should not hit far outside the projectile body width");
+}
+
+function testNonW1ProjectileCollisionUnchanged(): void {
+  const enemy = makeEnemy(12.9, 0, 3);
+  assert(!projectileHitsEnemy(makeProjectile(0, 0, 1, 0, 5, "enemy.projectile"), enemy), "non-W1 projectile should remain a single circle");
+}
+
+function testW2AndBombCollisionContractsUnchanged(): void {
+  const store = new EntityStore<WorldEntity>(16);
+  const enemyRef = store.spawn((e) => {
+    const ent = e as Extract<WorldEntity, { kind: "enemy" }>;
+    ent.kind = "enemy";
+    ent.pos = { x: 100, y: 100 };
+    ent.radius = 8;
+    ent.hp = 5;
+    ent.pendingKill = false;
+  });
+  store.spawn((e: any) => {
+    e.kind = "laser";
+    e.pos = { x: 50, y: 100 };
+    e.radius = 99;
+    e.pendingKill = false;
+  });
+  store.spawn((e: any) => {
+    e.kind = "bomb";
+    e.pos = { x: 100, y: 100 };
+    e.radius = 10;
+    e.explosionRadius = 48;
+    e.pendingKill = false;
+  });
+
+  const { impact } = drainCollision(store);
+  assert(Number((store.get(enemyRef) as any)?.laserHitTimer ?? 0) > 0, "W2 laser collision should still use its dedicated beam timer path");
+  assert(!impact.some((e: any) => e.payload?.projectile?.kind === "bomb"), "bomb entities should not use projectile-enemy collision");
+}
+
 function testPlayerRadiusSeparation(): void {
   const store = new EntityStore<WorldEntity>(16);
   const player = spawnPlayer(store, 0, 0);
@@ -159,6 +224,9 @@ function testBodyRadiusFallsBackToCombatRadius(): void {
 
 function main() {
   testProjectileHitsEnemy();
+  testW1ProjectileChainCoverage();
+  testNonW1ProjectileCollisionUnchanged();
+  testW2AndBombCollisionContractsUnchanged();
   testPlayerRadiusSeparation();
   testPlayerBodyRadiusHitsEnemyBody();
   testPlayerBodyRadiusCollectsPickup();

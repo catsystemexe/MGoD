@@ -1,6 +1,7 @@
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import { SpriteSystem } from "../sprites/SpriteSystem";
 import { getGlyph } from "../glyphs/GlyphDB";
+import { projectileCollisionCircles } from "../../game/systems/CollisionSystem";
 
 import { cosinePalette, MUZZLE_PALETTE, TRACER_PALETTE } from "../../game/vfx/cosinePalette";
 
@@ -180,7 +181,10 @@ export function collectCollisionDebugCircles(entity: any, x: number, y: number):
   if (!radius) return out;
   if (kind === "enemy") out.push({ kind: "enemy", x, y, radius, alpha: 0.8, thicknessPx: 1 });
   else if (kind === "pickup") out.push({ kind: "pickup", x, y, radius, alpha: 0.8, thicknessPx: 1 });
-  else if (kind === "projectile") out.push({ kind: "projectile", x, y, radius, alpha: 0.75, thicknessPx: 1 });
+  else if (kind === "projectile") {
+    const circles = projectileCollisionCircles({ ...entity, pos: { x, y } });
+    for (const circle of circles) out.push({ kind: "projectile", x: circle.x, y: circle.y, radius: circle.radius, alpha: 0.75, thicknessPx: 1 });
+  }
   else if (kind === "enemyProjectile") out.push({ kind: "enemyProjectile", x, y, radius, alpha: 0.75, thicknessPx: 1 });
   else if (kind === "bomb") out.push({ kind: "bomb", x, y, radius, alpha: 0.85, thicknessPx: 1 });
   return out;
@@ -222,6 +226,20 @@ export function sceneRenderPassRank(pass: SceneRenderPass): number {
     case "explosionFx": return 3;
     case "collisionDebugOverlay": return 4;
   }
+}
+
+export function computeScreenPixelScaleFromCanvasMetrics(metrics: {
+  drawingBufferWidth?: unknown;
+  drawingBufferHeight?: unknown;
+  width?: unknown;
+  height?: unknown;
+}, logicW: number, logicH: number): number {
+  const dbw = Number(metrics.drawingBufferWidth ?? metrics.width ?? 0);
+  const dbh = Number(metrics.drawingBufferHeight ?? metrics.height ?? 0);
+  const sx = dbw / logicW;
+  const sy = dbh / logicH;
+  const scale = Math.floor(Math.min(sx, sy));
+  return Number.isFinite(scale) && scale > 0 ? Math.max(1, scale) : 1;
 }
 
 export function computePickupVisualMetrics(screenPixelScaleRaw: unknown): {
@@ -650,13 +668,16 @@ export class WebGLSceneRenderer {
   
   private getScreenPixelScale(): number {
     const canvas = this.gl.canvas as HTMLCanvasElement;
-    const cssW = Number(canvas.clientWidth ?? 0);
-    const cssH = Number(canvas.clientHeight ?? 0);
-    const fallbackW = Number(canvas.width ?? this.gl.drawingBufferWidth ?? this.logicW);
-    const fallbackH = Number(canvas.height ?? this.gl.drawingBufferHeight ?? this.logicH);
-    const w = Number.isFinite(cssW) && cssW > 0 ? cssW : fallbackW;
-    const h = Number.isFinite(cssH) && cssH > 0 ? cssH : fallbackH;
-    return Math.max(1, Math.floor(Math.min(w / this.logicW, h / this.logicH)));
+    return computeScreenPixelScaleFromCanvasMetrics(
+      {
+        drawingBufferWidth: this.gl.drawingBufferWidth,
+        drawingBufferHeight: this.gl.drawingBufferHeight,
+        width: canvas.width,
+        height: canvas.height,
+      },
+      this.logicW,
+      this.logicH,
+    );
   }
 
   private drawPickupSymbolAt(gl: WebGL2RenderingContext, cx: number, cy: number, symbol: string, screenPixelScale: number): boolean {
