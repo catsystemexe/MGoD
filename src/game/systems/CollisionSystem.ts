@@ -35,6 +35,7 @@ export interface ProjectileEntity {
   kind: "projectile";
   owner: EntityRef;
   weapon: "primary" | "secondary";
+  weaponTypeId?: string;
   // projectile.pos is in WORLD space
   pos: { x: number; y: number };
   vel: { x: number; y: number };
@@ -123,6 +124,40 @@ function playerBodyRadius(player: PlayerEntity): number {
   return positiveFiniteRadius((player as any).bodyRadius) ?? positiveFiniteRadius(player.radius) ?? 0;
 }
 
+export const W1_PROJECTILE_COLLISION_CIRCLE_COUNT = 3;
+export const W1_PROJECTILE_COLLISION_SPACING = 10;
+
+function projectileDirection(proj: ProjectileEntity): { x: number; y: number } {
+  const vx = Number(proj.vel?.x ?? 0);
+  const vy = Number(proj.vel?.y ?? 0);
+  const len = Math.hypot(vx, vy);
+  if (Number.isFinite(len) && len > 0) return { x: vx / len, y: vy / len };
+  return { x: 1, y: 0 };
+}
+
+export function projectileCollisionCircles(proj: ProjectileEntity): Array<{ x: number; y: number; radius: number }> {
+  const radius = Number(proj.radius ?? 0);
+  const x = Number(proj.pos?.x ?? 0);
+  const y = Number(proj.pos?.y ?? 0);
+  if (String((proj as any).weaponTypeId ?? "") !== "w1.basic") return [{ x, y, radius }];
+
+  const dir = projectileDirection(proj);
+  return [-W1_PROJECTILE_COLLISION_SPACING, 0, W1_PROJECTILE_COLLISION_SPACING].map((offset) => ({
+    x: x + dir.x * offset,
+    y: y + dir.y * offset,
+    radius,
+  }));
+}
+
+export function projectileHitsEnemy(proj: ProjectileEntity, enemy: EnemyEntity): boolean {
+  const enemyRadius = Number(enemy.radius ?? 0);
+  for (const circle of projectileCollisionCircles(proj)) {
+    const rr = Number(circle.radius ?? 0) + enemyRadius;
+    if (dist2(circle.x, circle.y, enemy.pos.x, enemy.pos.y) <= rr * rr) return true;
+  }
+  return false;
+}
+
 const ACTIVE_W2_BEAM = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB).beam;
 const W2_LASER_DAMAGE = Number(ACTIVE_W2_BEAM?.damage ?? 15);
 const W2_LASER_HIT_INTERVAL_SEC = Number(ACTIVE_W2_BEAM?.hitIntervalSec ?? 0.08);
@@ -169,14 +204,8 @@ export class CollisionSystem {
       if ((e as any).consumed) return;
 
       const proj = e as ProjectileEntity;
-      const pr = Number(proj.radius ?? 0);
-
-      const psx = Number(proj.pos?.x ?? 0);
-      const psy = Number(proj.pos?.y ?? 0);
-
       for (const { ref: enemyRef, e: enemy } of enemies) {
-        const rr = pr + Number(enemy.radius ?? 0);
-        if (dist2(psx, psy, enemy.pos.x, enemy.pos.y) <= rr * rr) {
+        if (projectileHitsEnemy(proj, enemy)) {
           this.bus.emit(EventType.PROJECTILE_HIT_ENEMY, { projectile: projRef, enemy: enemyRef });
           (proj as any).consumed = true; // one-hit
           break;
