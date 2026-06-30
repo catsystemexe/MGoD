@@ -11,12 +11,16 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 
 import {
   CollisionSystem,
-  W1_PROJECTILE_COLLISION_OFFSETS,
-  W1_PROJECTILE_VISUAL_FRONT_OFFSET,
   projectileCollisionCircles,
   projectileHitsEnemy,
   type WorldEntity,
 } from "./CollisionSystem";
+import {
+  W1_ACTIVE_BODY_END,
+  W1_ACTIVE_BODY_START,
+  W1_PROJECTILE_COLLISION_OFFSETS,
+  W1_SDF_TRAIL_START,
+} from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -122,17 +126,22 @@ function testW1ProjectileChainCoverage(): void {
 
   assert(circles.length === 2, "W1 should use exactly 2 collision circles");
   assert(circles.every((circle) => circle.radius === radius), "W1 collision circles should keep projectile radius 5");
-  assert(rearOffset === W1_PROJECTILE_VISUAL_FRONT_OFFSET / 2, "W1 rear circle should be derived from visual-front geometry");
-  assert(frontOffset === W1_PROJECTILE_VISUAL_FRONT_OFFSET - radius, "W1 front circle should sit one radius inside the visual front");
-  assert(circles[0].x === rearOffset && circles[1].x === frontOffset, "W1 forward offsets should match derived visual-front geometry");
-  assert(frontOffset + radius === W1_PROJECTILE_VISUAL_FRONT_OFFSET, "W1 front circle should touch but not exceed the visual front edge");
-  assert(rearOffset >= W1_PROJECTILE_VISUAL_FRONT_OFFSET / 2, "W1 rear circle should remain in the front half of the active body");
+  assert(rearOffset === W1_ACTIVE_BODY_START + radius, "W1 rear circle should sit one radius inside the audited active body start");
+  assert(frontOffset === W1_ACTIVE_BODY_END - radius, "W1 front circle should sit one radius inside the audited active body end");
+  assert(circles[0].x === rearOffset && circles[1].x === frontOffset, "W1 forward offsets should match audited SDF-core geometry");
+  assert(rearOffset - radius >= W1_ACTIVE_BODY_START, "W1 rear circle back edge must not enter the cyan trail");
+  assert(frontOffset + radius <= W1_ACTIVE_BODY_END, "W1 front circle front edge must not exceed the white core tip");
+  assert(rearOffset >= W1_ACTIVE_BODY_START && rearOffset <= W1_ACTIVE_BODY_END, "W1 rear center should be inside the active body interval");
+  assert(frontOffset >= W1_ACTIVE_BODY_START && frontOffset <= W1_ACTIVE_BODY_END, "W1 front center should be inside the active body interval");
 
-  const visualTipContact = makeEnemy(W1_PROJECTILE_VISUAL_FRONT_OFFSET + 2.99, 0, 3);
-  assert(projectileHitsEnemy(proj, visualTipContact), "W1 should hit an enemy touching the visual tip");
+  const frontActiveContact = makeEnemy(W1_ACTIVE_BODY_END + 2.99, 0, 3);
+  assert(projectileHitsEnemy(proj, frontActiveContact), "W1 should hit an enemy touching the front active body");
 
-  const trailBehindBody = makeEnemy(-8.01, 0, 3);
-  assert(!projectileHitsEnemy(proj, trailBehindBody), "W1 should not hit in the trail behind the active body");
+  const rearCyanTrailOnly = makeEnemy(W1_SDF_TRAIL_START + 10, 0, 3);
+  assert(!projectileHitsEnemy(proj, rearCyanTrailOnly), "W1 should not hit in the rear cyan trail");
+
+  const beforeWhiteTip = makeEnemy(W1_ACTIVE_BODY_END + 3.01, 0, 3);
+  assert(!projectileHitsEnemy(proj, beforeWhiteTip), "W1 should not hit beyond the white active tip");
 
   const outsideVisualBody = makeEnemy(0, 8.1, 3);
   assert(!projectileHitsEnemy(proj, outsideVisualBody), "W1 should not hit far outside the projectile body width");
@@ -144,7 +153,7 @@ function testW1ProjectileChainFlipsWithNegativeVelocity(): void {
   assert(circles.length === 2, "left-moving W1 should use exactly 2 collision circles");
   assert(circles.every((circle) => circle.radius === 5), "left-moving W1 collision circles should keep projectile radius 5");
   assert(circles.every((circle, i) => circle.x === -W1_PROJECTILE_COLLISION_OFFSETS[i]), "left-moving W1 front should mirror the derived offsets to the left");
-  assert(projectileHitsEnemy(proj, makeEnemy(-W1_PROJECTILE_VISUAL_FRONT_OFFSET - 2.99, 0, 3)), "left-moving W1 should hit an enemy touching its left/front tip");
+  assert(projectileHitsEnemy(proj, makeEnemy(-W1_ACTIVE_BODY_END - 2.99, 0, 3)), "left-moving W1 should hit an enemy touching its left/front tip");
   assert(!projectileHitsEnemy(proj, makeEnemy(8.01, 0, 3)), "left-moving W1 should not hit behind its active body");
 }
 
