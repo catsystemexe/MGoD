@@ -15,6 +15,7 @@ import { VFXSystem } from "./game/vfx/VFXSystem";
 
 import { WebGLSceneRenderer } from "./render/webgl/WebGLSceneRenderer";
 import { ParticlePass } from "./render/webgl/ParticlePass";
+import { createFxToggleState, shouldRenderAtmosphericFx, shouldRenderPostFx, togglePostFx } from "./render/FxToggleState";
 export {};
 
 console.log("[BOOT] main.ts running");
@@ -187,15 +188,33 @@ async function main() {
 
   // ---- Display Reality Layer (post-process) toggle — default ON.
   // Works without DevUI (showcase mode): hotkey F or window.__CM.fx.* in console.
-  (globalThis as any).__CM_FX__ ??= true;
+  // Atmospheric FX is intentionally independent and temporarily defaulted OFF.
+  const fxState = createFxToggleState({
+    postFxEnabled: (globalThis as any).__CM_POST_FX__ ?? (globalThis as any).__CM_FX__,
+    atmosphericFxEnabled: (globalThis as any).__CM_ATMOSPHERIC_FX__,
+  });
+  const syncFxGlobals = () => {
+    (globalThis as any).__CM_POST_FX__ = fxState.postFxEnabled;
+    (globalThis as any).__CM_ATMOSPHERIC_FX__ = fxState.atmosphericFxEnabled;
+    // Legacy console compatibility: __CM_FX__ now mirrors Post FX only.
+    (globalThis as any).__CM_FX__ = fxState.postFxEnabled;
+  };
+  syncFxGlobals();
   window.__CM.fx = {
-    on: () => { (globalThis as any).__CM_FX__ = true; console.log("[FX] ON"); },
-    off: () => { (globalThis as any).__CM_FX__ = false; console.log("[FX] OFF"); },
+    on: () => { fxState.postFxEnabled = true; syncFxGlobals(); console.log("[POST_FX] ON"); },
+    off: () => { fxState.postFxEnabled = false; syncFxGlobals(); console.log("[POST_FX] OFF"); },
     toggle: () => {
-      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
-      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
+      const next = togglePostFx(fxState);
+      fxState.postFxEnabled = next.postFxEnabled;
+      syncFxGlobals();
+      console.log("[POST_FX]", fxState.postFxEnabled ? "ON" : "OFF");
     },
-    isOn: () => !!(globalThis as any).__CM_FX__,
+    isOn: () => fxState.postFxEnabled,
+    atmospheric: {
+      on: () => { fxState.atmosphericFxEnabled = true; syncFxGlobals(); console.log("[ATMOSPHERIC_FX] ON"); },
+      off: () => { fxState.atmosphericFxEnabled = false; syncFxGlobals(); console.log("[ATMOSPHERIC_FX] OFF"); },
+      isOn: () => fxState.atmosphericFxEnabled,
+    },
   };
 
   // ---- Audio Reality Layer (synth-only) — armed on first user gesture.
@@ -300,10 +319,9 @@ async function main() {
       return;
     }
 
-    // Post-process (Display Reality Layer) toggle (F): ON <-> OFF
+    // Post FX toggle (F): ON <-> OFF. Atmospheric FX is independent.
     if (e.code === "KeyF") {
-      (globalThis as any).__CM_FX__ = !(globalThis as any).__CM_FX__;
-      console.log("[FX]", (globalThis as any).__CM_FX__ ? "ON" : "OFF");
+      window.__CM.fx?.toggle?.();
       return;
     }
 
@@ -534,12 +552,14 @@ async function main() {
         const hasEvent =
           ((game as any).vfx?.getExplosions?.()?.length ?? 0) > 0 ||
           ((game as any).vfx?.getHits?.()?.length ?? 0) > 0;
-        (renderer as any).renderAtmosphere?.(
-          now / 1000,
-          (game as any).audio?.getFreqs?.() ?? null,
-          hasEvent,
-          Number((game as any).world?.scrollX ?? 0),
-        );
+        if (shouldRenderAtmosphericFx(fxState)) {
+          (renderer as any).renderAtmosphere?.(
+            now / 1000,
+            (game as any).audio?.getFreqs?.() ?? null,
+            hasEvent,
+            Number((game as any).world?.scrollX ?? 0),
+          );
+        }
       });
 
       // Event-driven chromatic aberration: peak CA over active VFX, decaying
@@ -558,7 +578,7 @@ async function main() {
       }
 
       gfx.present({
-        postProcess: !!(globalThis as any).__CM_FX__,
+        postProcess: shouldRenderPostFx(fxState),
         timeSec: now / 1000, // rAF timestamp (ms) -> seconds, same clock as performance.now()
         caIntensity,
       });
