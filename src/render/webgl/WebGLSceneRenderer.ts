@@ -258,6 +258,37 @@ export function computePickupVisualMetrics(screenPixelScaleRaw: unknown): {
   };
 }
 
+export type PickupDrawCommand = Readonly<{
+  ix: number;
+  iy: number;
+  defId: string;
+}>;
+
+export function pickupBackgroundColorForDefId(defId: string): readonly [number, number, number, number] {
+  if (defId === "energy") return [0, 1, 0, 1];
+  if (defId === "bomb") return [1, 1, 0, 1];
+  if (defId === "score") return [0, 1, 1, 1];
+  if (defId === "w1") return [0.25, 0.65, 1, 1];
+  if (defId === "w2") return [1, 0.35, 1, 1];
+  return [1, 0, 1, 1];
+}
+
+export function pickupSymbolForDefId(defId: string): string | null {
+  switch (defId) {
+    case "w1": return "1";
+    case "w2": return "2";
+    case "energy": return "+";
+    case "bomb": return "B";
+    default: return null;
+  }
+}
+
+export function collectPickupDrawCommand(entity: any, ix: number, iy: number): PickupDrawCommand | null {
+  if (!isPickupRenderEligible(entity)) return null;
+  if (!Number.isFinite(ix) || !Number.isFinite(iy)) return null;
+  return Object.freeze({ ix, iy, defId: String(entity.defId) });
+}
+
 export function computeSpriteDrawGeometry(frame: EnemySpriteFrame, scaleRaw: unknown): {
   width: number;
   height: number;
@@ -741,14 +772,15 @@ export class WebGLSceneRenderer {
     return true;
   }
 
-  private pickupSymbolForDefId(defId: string): string | null {
-    switch (defId) {
-      case "w1": return "1";
-      case "w2": return "2";
-      case "energy": return "+";
-      case "bomb": return "B";
-      default: return null;
-    }
+  private drawPickupVisual(gl: WebGL2RenderingContext, cmd: PickupDrawCommand, metrics: ReturnType<typeof computePickupVisualMetrics>): void {
+    const [r, g, b, a] = pickupBackgroundColorForDefId(cmd.defId);
+    gl.uniform4f(this.uColor, r, g, b, a);
+    gl.uniform2f(this.uPos, cmd.ix, cmd.iy);
+    gl.uniform2f(this.uSize, metrics.backgroundLogicPx, metrics.backgroundLogicPx);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    const symbol = pickupSymbolForDefId(cmd.defId);
+    if (symbol) this.drawPickupSymbolAt(gl, cmd.ix, cmd.iy, symbol, metrics.screenPixelScale);
   }
 
   private drawGlyphAt(gl: WebGL2RenderingContext, cx: number, cy: number, glyphId: string): boolean {
@@ -1054,6 +1086,7 @@ export class WebGLSceneRenderer {
 
     // clamp once per frame
     const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+    const pickupDraws: PickupDrawCommand[] = [];
     const deathGhostFx: Array<{ e: any; ix: number; iy: number }> = [];
     const explosionFx: Array<{ e: any; ix: number; iy: number; w: number; h: number }> = [];
     const debugCollisionCircles: CollisionDebugCircle[] = [];
@@ -1141,17 +1174,6 @@ export class WebGLSceneRenderer {
         gl.uniform4f(this.uColor, 0, 1, 0, 1);
       } else if (kind === "bomb") {
         gl.uniform4f(this.uColor, 1, 1, 0, 1);
-      } else if (kind === "pickup") {
-        w = pickupVisualMetrics.backgroundLogicPx;
-        h = pickupVisualMetrics.backgroundLogicPx;
-
-        const defId = String((e as any).defId ?? "");
-        if (defId === "energy") gl.uniform4f(this.uColor, 0, 1, 0, 1);
-        else if (defId === "bomb") gl.uniform4f(this.uColor, 1, 1, 0, 1);
-        else if (defId === "score") gl.uniform4f(this.uColor, 0, 1, 1, 1);
-        else if (defId === "w1") gl.uniform4f(this.uColor, 0.25, 0.65, 1, 1);
-        else if (defId === "w2") gl.uniform4f(this.uColor, 1, 0.35, 1, 1);
-        else gl.uniform4f(this.uColor, 1, 0, 1, 1);
       } else if (kind === "particle") {
         const sz = Number((e as any).size ?? 2);
         w = sz;
@@ -1200,6 +1222,12 @@ export class WebGLSceneRenderer {
       ix -= sx;
       iy -= sy;
       if (this.debugCollisionOverlay) debugCollisionCircles.push(...collectCollisionDebugCircles(e, ix, iy));
+
+      if (kind === "pickup") {
+        const cmd = collectPickupDrawCommand(e, ix, iy);
+        if (cmd) pickupDraws.push(cmd);
+        return;
+      }
 
       const fxLayer = classifyFxRenderLayer(e as any);
       if (fxLayer === "deathGhost") {
@@ -1594,11 +1622,11 @@ export class WebGLSceneRenderer {
       gl.uniform2f(this.uSize, w, h);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-      if (kind === "pickup") {
-        const symbol = this.pickupSymbolForDefId(String((e as any).defId ?? ""));
-        if (symbol) this.drawPickupSymbolAt(gl, ix, iy, symbol, pickupVisualMetrics.screenPixelScale);
-      }
     });
+
+    for (const pickup of pickupDraws) {
+      this.drawPickupVisual(gl, pickup, pickupVisualMetrics);
+    }
 
     for (const fx of deathGhostFx) {
       this.drawEnemyDeathGhostFx(fx.e, fx.ix, fx.iy, tSec);
