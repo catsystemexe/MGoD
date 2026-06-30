@@ -21,6 +21,7 @@ import {
   W1_PROJECTILE_COLLISION_OFFSETS,
   W1_SDF_TRAIL_START,
   W1_SPREAD_COLLISION_OFFSET,
+  W1_SPREAD_RENDER_LENGTH,
 } from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
@@ -177,6 +178,10 @@ function testSpreadProjectileCollisionGeometry(): void {
   assert(l4Circles.length === 1, "Spread L1-L4 should use one active-body circle");
   assert(l4Circles[0].x === W1_SPREAD_COLLISION_OFFSET && l4Circles[0].y === 0, "Spread circle should sit in its short front active body");
   assert(l4Circles[0].radius === 5, "Spread L1-L4 collision radius should be 5");
+  assert(
+    W1_SPREAD_COLLISION_OFFSET > 0 && W1_SPREAD_COLLISION_OFFSET < W1_SPREAD_RENDER_LENGTH / 2,
+    "Spread collision circle should remain inside the enlarged active visual body",
+  );
   assert(projectileHitsEnemy(l4, makeEnemy(W1_SPREAD_COLLISION_OFFSET + 7.99, 0, 3)), "Spread should hit within short active body");
   assert(!projectileHitsEnemy(l4, makeEnemy(-14, 0, 3)), "Spread should not collide with rear trail/glow");
 

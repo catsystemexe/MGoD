@@ -14,6 +14,11 @@ import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/Ene
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
 import { EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams, normalizeFormationId, normalizeCohesionId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
+import {
+  W1_SPREAD_RENDER_LENGTH,
+  W1_SPREAD_RENDER_WIDTH,
+  W1_SPREAD_RENDER_WIDTH_L5,
+} from "../weapons/W1Geometry";
 
 type Vec2 = { x: number; y: number };
 import type { WorldState } from "../data/WorldState";
@@ -172,7 +177,10 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           color: visual?.sdfColor ?? (isSecondary ? COLORS.ORB : COLORS.BOLT),
           ...(visual?.sdfTipColor ? { tipColor: visual.sdfTipColor } : {}),
           size: visual?.sdfSize ?? (isSecondary ? 2.0 : 5.0),
-          ...(isSpread ? { lengthPx: 34, widthPx: weaponLevel >= 5 ? 13 : 10 } : {}),
+          ...(isSpread ? {
+            lengthPx: W1_SPREAD_RENDER_LENGTH,
+            widthPx: weaponLevel >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH,
+          } : {}),
         },
       };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
