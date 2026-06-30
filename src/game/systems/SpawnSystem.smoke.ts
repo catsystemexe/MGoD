@@ -116,12 +116,14 @@ function main() {
     assert(e.render?.sdf?.shape === "bolt", "Spread render keeps bolt SDF shape");
     assert(e.render?.sdf?.color === "#ffd21f", "Spread render body color is yellow");
     assert(e.render?.sdf?.tipColor === "#ff8a00", "Spread render tip color is orange");
+    assert(e.render?.sdf?.lengthPx === 24, "Spread render length should use the near-square 24px contract");
     assert(e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread render length comes from named geometry constant");
-    assert(W1_SPREAD_RENDER_LENGTH > 34, "Spread render length should be larger than the original invisible 34px contract");
-    assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH / 2, "Spread render should remain distinctly shorter than Basic");
+    assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH, "Spread should remain shorter than Basic");
+    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? 24 : 18), `Spread L${weaponLevel} render width should use the tuned near-square contract`);
     assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH), `Spread L${weaponLevel} render width comes from named geometry constants`);
-    assert(weaponLevel < 5 || e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread L5 should not grow longer than lower levels");
+    assert(weaponLevel < 5 || e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread L5 should keep the same length as lower levels");
   });
+  assert(W1_SPREAD_RENDER_WIDTH_L5 > W1_SPREAD_RENDER_WIDTH, "Spread L5 should be wider than L1-L4");
   assert(JSON.stringify([...foundSpreadLevels].sort()) === JSON.stringify([1, 2, 3, 4, 5]), "should materialize Spread projectile levels L1-L5");
   assert(bombCount === 1, "should spawn 1 bomb");
   assert(enemyCount === 1, "should spawn 1 enemy");

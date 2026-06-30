@@ -26,17 +26,16 @@ export const W1_SDF_TRAIL_END = W1_ACTIVE_BODY_START;
 export const W1_SDF_VISUAL_END = 50;
 export const W1_BASIC_RENDER_LENGTH = W1_SDF_VISUAL_END - W1_SDF_TRAIL_START;
 
-export const W1_SPREAD_RENDER_LENGTH = 48;
-export const W1_SPREAD_RENDER_WIDTH = 14;
-export const W1_SPREAD_RENDER_WIDTH_L5 = 18;
-export const W1_SPREAD_COLLISION_AUDITED_LENGTH = 34;
+export const W1_SPREAD_RENDER_LENGTH = 24;
+export const W1_SPREAD_RENDER_WIDTH = 18;
+export const W1_SPREAD_RENDER_WIDTH_L5 = 24;
 export const W1_SPREAD_COLLISION_CORE_CENTER_RATIO = 0.25;
 
-// Keep the active gameplay circle centered on the same bright-core region that
-// was previously audited. The enlarged render quad improves readability, but
-// collision still represents the compact damaging body rather than the full glow.
+// Keep the active gameplay circle centered inside the bright yellow core. The
+// shorter near-square render quad improves readability, while collision remains
+// inside the damaging body instead of covering the full glow or orange tip.
 export const W1_SPREAD_COLLISION_OFFSET =
-  W1_SPREAD_COLLISION_AUDITED_LENGTH * W1_SPREAD_COLLISION_CORE_CENTER_RATIO;
+  W1_SPREAD_RENDER_LENGTH * W1_SPREAD_COLLISION_CORE_CENTER_RATIO;
 
 export function projectileCollisionOffsetsForWeapon(weaponTypeId: string): readonly number[] {
   if (weaponTypeId === "w1.basic") return W1_PROJECTILE_COLLISION_OFFSETS;
