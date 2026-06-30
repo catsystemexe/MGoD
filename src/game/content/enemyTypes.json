@@ -116,12 +116,12 @@
     {
       "id": "mandala",
       "hp": 8,
-      "radius": 7,
+      "radius": 24,
       "scoreOnKill": 34,
       "behaviorPresetId": "sine.soft",
       "render": {
         "color": "#2a2a2f",
-        "sdf": { "shape": "mandala", "color": "#ff8c2a", "size": 2.0 },
+        "sdf": { "shape": "mandala", "color": "#ff8c2a", "size": 0.58 },
         "glyphs": [
           { "id": "enemy.mandala.core", "dx": 0, "dy": 0, "color": "#2a2a2f", "alpha": 1 },
           { "id": "enemy.mandala.void", "dx": 0, "dy": 0, "color": "#7b2cff", "alpha": 1 },
@@ -157,13 +157,13 @@
     {
       "id": "sniper_aimed",
       "hp": 2,
-      "radius": 12,
+      "radius": 24,
       "scoreOnKill": 250,
       "behaviorPresetId": "sine.wide",
       "attackProfileId": "aimed_slow",
       "render": {
         "color": "#aa44ff",
-        "sdf": { "shape": "chevron", "size": 1.3 }
+        "sdf": { "shape": "chevron", "size": 0.65 }
       }
     }
 
@@ -182,7 +182,7 @@
     {
       "id": "basic_1",
       "hp": 3,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 75,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -198,7 +198,7 @@
      {
     "id": "basic_2",
       "hp": 5,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -214,7 +214,7 @@
      {
     "id": "shooter_1",
       "hp": 5,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -230,7 +230,7 @@
      {
       "id": "fsm_turret",
       "hp": 6,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.turret",
@@ -246,7 +246,7 @@
      {
       "id": "fsm_hover",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.hover",
@@ -262,7 +262,7 @@
      {
       "id": "fsm_charge",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.charge",
@@ -278,7 +278,7 @@
      {
     "id": "void_1",
       "hp": 5,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -294,7 +294,7 @@
      {
     "id": "crawler_1",
       "hp": 5,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -310,7 +310,7 @@
      {
     "id": "mine_1",
       "hp": 5,
-      "radius": 9,
+      "radius": 24,
       "scoreOnKill": 100,
       "behaviorPresetId": "straight.basic",
       "attackProfileId": "single_basic",
@@ -327,7 +327,7 @@
      {
       "id": "fsm_zigzag",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.zigzag",
@@ -344,7 +344,7 @@
      {
       "id": "fsm_smart_tracker",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_tracker",
@@ -360,7 +360,7 @@
      {
       "id": "fsm_smart_aligner",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_aligner",
@@ -376,7 +376,7 @@
      {
       "id": "fsm_smart_evader",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_evader",
@@ -393,7 +393,7 @@
      {
       "id": "fsm_smart_ranger",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_ranger",
@@ -409,7 +409,7 @@
      {
       "id": "fsm_smart_orbit_half",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_orbit_half",
@@ -425,7 +425,7 @@
      {
       "id": "fsm_smart_orbit_repeat",
       "hp": 4,
-      "radius": 18,
+      "radius": 24,
       "scoreOnKill": 25,
       "behaviorPresetId": "straight.basic",
       "behaviorGraphId": "fsm.smart_orbit_repeat",

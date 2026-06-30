@@ -15,7 +15,7 @@ import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
 import { createWorldState } from "../data/WorldState";
 import { WorldScrollSystem } from "../systems/WorldScrollSystem";
-import { SpawnSystem } from "../systems/SpawnSystem";
+import { DEFAULT_PICKUP_SPAWN_CONFIG, SpawnSystem } from "../systems/SpawnSystem";
 import { DirectorSystem } from "../systems/DirectorSystem";
 import { DirectorPhaseSystem } from "../systems/DirectorPhaseSystem";
 
@@ -32,6 +32,7 @@ import { EnemySystem } from "../systems/EnemySystem";
 import { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
+import { applyWeaponLevelControlActions } from "../systems/WeaponLevelControls";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
 import { VFXSystem } from "../vfx/VFXSystem";
 
@@ -39,7 +40,7 @@ import { VFXSystem } from "../vfx/VFXSystem";
 
 const WEAPONS_FALLBACK: any = {
   primary: "w1.basic",
-  secondary: "w2.basic",
+  secondary: "w2.laser",
   bomb: "b1.basic",
   bombCooldownSec: 0.8,
 };
@@ -99,6 +100,7 @@ export async function createGame(
    
     ent.speed = 700;
     ent.radius = 3;
+    ent.bodyRadius = 20;
     ent.pendingKill = false;
 
     ent.energyMax = 5;
@@ -166,10 +168,15 @@ export async function createGame(
     { dropChance: 0.25, rng01: Math.random }
   );
 
+  let upgradeWeaponSlot: ((slot: "w1" | "w2") => void) | null = null;
+
   const powerups = new PowerupSystem(
     session as any,
     store as any,
-    () => playerRef
+    () => playerRef,
+    {
+      upgradeWeaponSlot: (slot) => { upgradeWeaponSlot?.(slot); },
+    }
   );
 
   const flowDispatcher = new FlowDispatcher([
@@ -198,6 +205,7 @@ export async function createGame(
             radius: 6,                 // bomb sprite/collision radius (NOT the blast)
             explosionRadius: EXPLOSION_RADIUS,
           },
+          pickup: DEFAULT_PICKUP_SPAWN_CONFIG,
         };
 
  
@@ -301,8 +309,7 @@ export async function createGame(
         window.addEventListener("keydown", (e) => {
           const key = (e as any).key as string | undefined;
           const code = (e as any).code as string | undefined;
-          
-        
+
           // Toggle preset list visibility (DEV UI only)
           if (devHotkeys && (key === "i" || key === "I")) {
             devHotkeys.toggle();
@@ -382,6 +389,16 @@ export async function createGame(
             }
           },
         });
+        upgradeWeaponSlot = (slot: "w1" | "w2") => { weaponSystem.upgradeSlot(slot); };
+        if (typeof window !== "undefined") {
+          (window as any).__CM.weapons = {
+            setLevel: (slot: "w1" | "w2", level: number) => weaponSystem.setLevel(slot, level),
+            getSnapshot: () => weaponSystem.getSnapshot(),
+            setWeaponForSlot: (slot: "w1" | "w2", weaponId: string) => weaponSystem.setWeaponForSlot(slot, weaponId),
+            toggleW1Weapon: () => weaponSystem.toggleW1Weapon(),
+          };
+        }
+
         const projectileSystem = new ProjectileSystem(bus as any, store as any, LOGIC_W, LOGIC_H, world as any);
         const enemySystem = new EnemySystem(store, LOGIC_W, LOGIC_H, world as any, enemyGroups);
         
@@ -434,6 +451,9 @@ export async function createGame(
     
     playerEnt.speed = Number(playerEnt.speed ??700);
     playerEnt.radius = Number(playerEnt.radius ?? 3);
+    playerEnt.bodyRadius = Number.isFinite(Number(playerEnt.bodyRadius)) && Number(playerEnt.bodyRadius) > 0
+      ? Number(playerEnt.bodyRadius)
+      : 20;
     playerEnt.pendingKill = false;
 
     playerEnt.energyMax = RESET_CFG.startEnergy;
@@ -451,6 +471,9 @@ export async function createGame(
       inputRt.actions.firePrimary = false as any;
       inputRt.actions.fireSecondary = false as any;
       (inputRt.actions as any).bombPressed = false;
+      (inputRt.actions as any).toggleW1WeaponPressed = false;
+      (inputRt.actions as any).cycleW1LevelPressed = false;
+      (inputRt.actions as any).cycleW2LevelPressed = false;
     } catch {}
 
     // director runtime reset (keeps same instance)
@@ -493,6 +516,10 @@ export async function createGame(
 
           worldScroll.update(ctx.dt);
         if (Number(playerEnt.deadT ?? 0) <= 0) {
+          if ((inputRt.actions as any).toggleW1WeaponPressed) {
+            weaponSystem.toggleW1Weapon();
+          }
+          applyWeaponLevelControlActions(weaponSystem, inputRt.actions);
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
             shipVel: { x: playerEnt.vel?.x ?? 0, y: playerEnt.vel?.y ?? 0 },
@@ -502,7 +529,9 @@ export async function createGame(
         }
 
         // Mirror W2 (laser) state onto the player entity so the DOM HUD can read it.
-        const w2 = weaponSystem.getW2State();
+        const weaponSnapshot = weaponSystem.getSnapshot();
+        const w2 = { active: weaponSnapshot.slots.w2.active, charge01: weaponSnapshot.slots.w2.charge01 };
+        (playerEnt as any).weapons = weaponSnapshot;
         (playerEnt as any).w2 = w2;
         (playerEnt as any).weapon = w2.active ? "W2" : "W1";
 

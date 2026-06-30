@@ -2,114 +2,328 @@ import { EventBus, Phase } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
 import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
+import type { PlayerActions } from "../../engine/input/ActionSchema";
 
-import { WeaponSystem } from "./WeaponSystem";
+import { WeaponSystem, getShotAnglesForLevel, getShotDirections } from "./WeaponSystem";
 import { WEAPON_DB } from "../defs/WeaponDB";
+import {
+  ACTIVE_W1_WEAPON_ID,
+  ACTIVE_W2_WEAPON_ID,
+  WEAPONS_MVP,
+  resolveEffectiveWeaponSpec,
+  resolveWeaponDefinition,
+  type WeaponInstance,
+} from "../defs/Weapons";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
-function main() {
-  const bus = new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
+function approx(a: number, b: number, eps = 1e-9): boolean {
+  return Math.abs(a - b) <= eps;
+}
+
+function actions(overrides: Partial<PlayerActions> = {}): PlayerActions {
+  return {
+    move: { x: 0, y: 0 },
+    aimTarget: { x: 0, y: 0 },
+    firePrimary: false,
+    fireSecondary: false,
+    bombPressed: false,
+    bombTarget: { x: 0, y: 0 },
+    ...overrides,
+  };
+}
+
+function makeBus(): EventBus<CMEventMap> {
+  return new EventBus<CMEventMap>(CM_EVENT_OWNERSHIP, {
     maxEventsPerTick: 256,
     failFast: true,
     dropLeftoversInProd: true,
     onWarn: (m) => console.warn(m),
     onError: (m) => console.error(m),
   });
+}
 
-  const ws = new WeaponSystem(
-    bus,
-    { primary: "w1.basic", secondary: "w2.basic", bomb: "b1.basic", bombCooldownSec: 0.8 },
-    WEAPON_DB,
-    { scrollX: 0, scrollY: 0 },
-  );
+function drainNextSimulation(bus: EventBus<CMEventMap>, tick: number) {
+  bus.enterPhase(Phase.Cleanup);
+  bus.endTickAndSwap();
+  bus.beginTick(tick);
+  bus.enterPhase(Phase.Simulation);
+  return bus.drainPhase(Phase.Simulation);
+}
 
-  const shipRef: EntityRef = { slot: 1, gen: 1 };
-  const shipPos = { x: 100, y: 50 };
-  const aimDir = { x: 1, y: 0 };
+const shipRef: EntityRef = { slot: 1, gen: 1 };
+const shipPos = { x: 100, y: 50 };
+const snap = { shipPos, shipRef, bombs: 1 };
+const expectedOffsets: Record<number, number[]> = {
+  1: [0],
+  2: [-5, 5],
+  3: [-10, 0, 10],
+  4: [-15, -5, 5, 15],
+  5: [-20, -10, 0, 10, 20],
+};
 
-  // ---------------------------
-  // TICK 0: Simulation emitsNext
-  // ---------------------------
+function makeWeaponSystem(opts: ConstructorParameters<typeof WeaponSystem>[4] = {}) {
+  const bus = makeBus();
+  const ws = new WeaponSystem(bus, WEAPONS_MVP, WEAPON_DB, { scrollX: 0, scrollY: 0 }, opts);
+  return { bus, ws };
+}
+
+function assertDefinitionIntegrity(): void {
+  const w1Def = resolveWeaponDefinition(ACTIVE_W1_WEAPON_ID, WEAPON_DB);
+  const w2Def = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB);
+  assert(w1Def.fireKind === "projectile", "active W1 must be projectile");
+  assert(w2Def.fireKind === "beam", "active W2 must be beam");
+  assert(!Object.prototype.hasOwnProperty.call(WEAPON_DB, "w2.basic"), "unused projectile-style w2.basic must be absent");
+  assert(WEAPONS_MVP.primary === ACTIVE_W1_WEAPON_ID, "primary slot ID must be w1.basic");
+  assert(WEAPONS_MVP.secondary === ACTIVE_W2_WEAPON_ID, "secondary slot ID must be canonical laser ID");
+
+  assert(w1Def.levels?.length === 5, "W1 must define exactly five levels");
+  assert(w2Def.levels?.length === 5, "W2 must define exactly five levels");
+  for (let level = 1; level <= 5; level++) {
+    const w1 = resolveEffectiveWeaponSpec({ slot: "w1", weaponId: ACTIVE_W1_WEAPON_ID, level, cooldownRemainingSec: 0, active: false } satisfies WeaponInstance, WEAPON_DB);
+    const w2 = resolveEffectiveWeaponSpec({ slot: "w2", weaponId: ACTIVE_W2_WEAPON_ID, level, cooldownRemainingSec: 0, active: false } satisfies WeaponInstance, WEAPON_DB);
+    assert(w1.maxLevel === 5 && w2.maxLevel === 5, "max level must be 5");
+    assert(w1.projectileCount === level, `W1 L${level} projectile count must equal level`);
+    assert(approx(w2.beam?.durationSec ?? 0, level), `W2 L${level} duration must equal level seconds`);
+    assert(approx(w1.cooldownSec, 0.12), "W1 cooldown must remain 0.12 at every level");
+    assert(w1.projectile?.damage === 3, "W1 damage must remain 3 at every level");
+    assert(w1.projectile?.speed === 1100, "W1 speed must remain 1100 at every level");
+    assert(w1.projectile?.ttlSec === 3, "W1 TTL must remain 3 at every level");
+    assert(w1.projectile?.radius === 5, "W1 radius must remain 5 at every level");
+    assert(approx(w2.cooldownSec, 10.0), "W2 cooldown must remain 10.0 at every level");
+    assert(w2.beam?.damage === 15, "W2 damage must remain 15 at every level");
+    assert(approx(w2.beam?.hitIntervalSec ?? 0, 0.08), "W2 hit interval must remain 0.08 at every level");
+  }
+
+  const effectiveW1 = resolveEffectiveWeaponSpec({ slot: "w1", weaponId: ACTIVE_W1_WEAPON_ID, level: 1, cooldownRemainingSec: 0, active: false } satisfies WeaponInstance, WEAPON_DB);
+  assert(effectiveW1.projectile !== w1Def.projectile, "effective projectile spec must be copied");
+  assert(effectiveW1.levels !== w1Def.levels, "effective level specs must be copied");
+}
+
+function assertLevelApi(): void {
+  const { ws } = makeWeaponSystem();
+  let snapshot = ws.getSnapshot();
+  assert(ws.getLevel("w1") === 1 && ws.getLevel("w2") === 1, "both slots must start at level 1");
+  assert(ws.getMaxLevel("w1") === 5 && ws.getMaxLevel("w2") === 5, "both active slots must report max level 5");
+  assert(snapshot.slots.w1.maxLevel === 5 && snapshot.slots.w2.maxLevel === 5, "snapshot must expose max levels");
+
+  ws.setLevel("w1", 3);
+  assert(ws.getLevel("w1") === 3 && ws.getLevel("w2") === 1, "setLevel(w1) must not affect W2");
+  ws.setLevel("w2", 4);
+  assert(ws.getLevel("w1") === 3 && ws.getLevel("w2") === 4, "setLevel(w2) must not affect W1");
+  ws.setLevel("w1", -99);
+  ws.setLevel("w2", 99);
+  assert(ws.getLevel("w1") === 1, "below-min levels clamp to 1");
+  assert(ws.getLevel("w2") === 5, "above-max levels clamp to 5");
+  ws.setLevel("w1", 4);
+  ws.setLevel("w1", Number.NaN);
+  assert(ws.getLevel("w1") === 4, "non-finite level changes must not corrupt current level");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "upgradeSlot must increment one level");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "upgradeSlot at level 5 must remain level 5");
+
+  snapshot = ws.getSnapshot();
+  snapshot.slots.w1.level = 1;
+  snapshot.slots.w1.weaponId = "mutated";
+  snapshot.slots.w1.projectileCount = 99;
+  assert(ws.getLevel("w1") === 5, "snapshot mutation must not change internal W1 level");
+  assert(ws.getSnapshot().slots.w1.weaponId === ACTIVE_W1_WEAPON_ID, "snapshot mutation must not change internal W1 ID");
+}
+
+function assertW1Firing(): void {
+  for (let level = 1; level <= 5; level++) {
+    let fireFeedback = 0;
+    const { bus, ws } = makeWeaponSystem({ onSpawnProjectile: () => { fireFeedback++; } });
+    ws.setLevel("w1", level);
+    bus.beginTick(0);
+    bus.enterPhase(Phase.Simulation);
+    ws.update(0.016, actions({ firePrimary: true }), snap);
+    const snapshot = ws.getSnapshot();
+    assert(snapshot.slots.w1.projectileCount === level, `W1 L${level} snapshot projectile count must equal level`);
+    assert(snapshot.slots.w1.cooldownRemainingSec > 0, `W1 L${level} cooldown should be consumed once`);
+    assert(fireFeedback === 1, `W1 L${level} should invoke fire feedback once`);
+
+    const tick1Projectiles = drainNextSimulation(bus, 1).filter((e) => e.type === EventType.SPAWN_PROJECTILE);
+    assert(tick1Projectiles.length === level, `W1 L${level} should emit exactly ${level} projectile events`);
+    const offsets = tick1Projectiles.map((e) => (e as any).payload.origin.y - shipPos.y);
+    assert(JSON.stringify(offsets) === JSON.stringify(expectedOffsets[level]), `W1 L${level} offsets must be ${JSON.stringify(expectedOffsets[level])}`);
+    for (const e of tick1Projectiles) {
+      const payload = (e as any).payload;
+      assert(payload.weaponTypeId === ACTIVE_W1_WEAPON_ID, "projectile event must use weaponTypeId w1.basic");
+      assert(approx(payload.dir.x, 1) && approx(payload.dir.y, 0), "all W1 projectiles must keep parallel forward direction");
+    }
+
+    for (let i = 0; i < 7; i++) ws.update(0.016, actions({ firePrimary: true }), snap);
+    assert(drainNextSimulation(bus, 2).filter((e) => e.type === EventType.SPAWN_PROJECTILE).length === 0, `W1 L${level} must not refire before 0.12s cooldown`);
+  }
+}
+
+function assertW2Firing(): void {
+  for (let level = 1; level <= 5; level++) {
+    let laserStarts = 0;
+    let laserEnds = 0;
+    const { bus, ws } = makeWeaponSystem({
+      onLaserStart: () => { laserStarts++; },
+      onLaserEnd: () => { laserEnds++; },
+    });
+    ws.setLevel("w2", level);
+    bus.beginTick(0);
+    bus.enterPhase(Phase.Simulation);
+    ws.update(0.016, actions({ fireSecondary: true }), snap);
+    let snapshot = ws.getSnapshot();
+    assert(snapshot.slots.w2.active, `W2 L${level} should start active`);
+    assert(approx(snapshot.slots.w2.durationSec ?? 0, level), `W2 L${level} active duration must equal level seconds`);
+    assert(snapshot.slots.w2.damage === 15, "W2 damage must remain 15");
+    assert(approx(snapshot.slots.w2.hitIntervalSec ?? 0, 0.08), "W2 hit interval must remain 0.08");
+    assert(approx(snapshot.slots.w2.cooldownTotalSec, 10), "W2 cooldown must remain 10 seconds");
+    assert(Number.isFinite(snapshot.slots.w2.charge01) && snapshot.slots.w2.charge01 >= 0 && snapshot.slots.w2.charge01 <= 1, "W2 active charge must remain finite in [0,1]");
+    assert(laserStarts === 1, "laser start callback should fire once");
+    assert(drainNextSimulation(bus, 1).filter((e) => e.type === EventType.SPAWN_PROJECTILE).length === 0, "W2 laser must not emit SPAWN_PROJECTILE");
+
+    ws.update(0.016, actions({ fireSecondary: false }), snap);
+    snapshot = ws.getSnapshot();
+    assert(!snapshot.slots.w2.active, "W2 release should end laser immediately");
+    assert(snapshot.slots.w2.cooldownRemainingSec > 9.9, "W2 release should start 10s recharge");
+    assert(laserEnds === 1, "laser end callback should fire once on release");
+    ws.update(5.0, actions(), snap);
+    assert(approx(ws.getSnapshot().slots.w2.charge01, 0.5), "W2 recharge should be half full after 5 seconds");
+    ws.update(5.0, actions(), snap);
+    assert(approx(ws.getSnapshot().slots.w2.charge01, 1), "W2 recharge should be full after 10 seconds");
+
+    ws.update(0.016, actions({ fireSecondary: true }), snap);
+    assert(ws.getSnapshot().slots.w2.active, "W2 should restart after recharge");
+    ws.update(level, actions({ fireSecondary: true }), snap);
+    assert(!ws.getSnapshot().slots.w2.active, `W2 L${level} should end after level-second duration depletion`);
+    assert(laserEnds === 2, "laser end callback should fire on depletion");
+  }
+}
+
+function assertMidActivationLevelChange(): void {
+  const { ws } = makeWeaponSystem();
+  ws.setLevel("w2", 2);
+  ws.update(0.016, actions({ fireSecondary: true }), snap);
+  assert(ws.getSnapshot().slots.w2.active, "W2 level 2 activation should start");
+  assert(approx(ws.getSnapshot().slots.w2.durationSec ?? 0, 2), "W2 active duration should be captured as 2 seconds");
+  ws.setLevel("w2", 5);
+  assert(approx(ws.getSnapshot().slots.w2.durationSec ?? 0, 2), "mid-activation level change must not stretch active duration");
+  ws.update(1.5, actions({ fireSecondary: true }), snap);
+  assert(ws.getSnapshot().slots.w2.active, "level 2 activation should still be active before 2 seconds deplete");
+  ws.update(0.6, actions({ fireSecondary: true }), snap);
+  assert(!ws.getSnapshot().slots.w2.active, "level 2 activation should end near its captured duration despite level 5 setting");
+  ws.update(10.0, actions(), snap);
+  ws.update(0.016, actions({ fireSecondary: true }), snap);
+  assert(approx(ws.getSnapshot().slots.w2.durationSec ?? 0, 5), "next W2 activation should use newly selected level 5 duration");
+}
+
+function assertIndependenceAndBombCompatibility(): void {
+  let bombConsumes = 0;
+  const { bus, ws } = makeWeaponSystem({ onConsumeBomb: () => { bombConsumes++; } });
+  ws.setLevel("w1", 5);
+  ws.setLevel("w2", 4);
   bus.beginTick(0);
   bus.enterPhase(Phase.Simulation);
+  ws.update(0.016, actions({ firePrimary: true, fireSecondary: true }), snap);
+  let snapshot = ws.getSnapshot();
+  assert(snapshot.slots.w1.projectileCount === 5, "W2 level must not affect W1 projectile count");
+  assert(approx(snapshot.slots.w2.durationSec ?? 0, 4), "W1 level must not affect W2 duration");
+  assert(snapshot.slots.w1.cooldownRemainingSec > 0 && snapshot.slots.w2.active, "W1 cooldown and W2 active state must coexist independently");
 
-  ws.update(
-    0.016,
-    {
-      move: { x: 0, y: 0 },
-      aimTarget: { x: 0, y: 0 },
-      firePrimary: true,
-      fireSecondary: false,
-      bombPressed: false,
-      bombTarget: { x: 0, y: 0 },
-    },
-    { shipPos , shipRef }
-  );
+  ws.update(0.016, actions({ fireSecondary: false }), snap);
+  snapshot = ws.getSnapshot();
+  assert(!snapshot.slots.w2.active && snapshot.slots.w1.cooldownRemainingSec > 0, "W2 release/recharge must not reset W1 cooldown");
 
-  // Nothing should be drainable yet in tick 0 (emitNext goes to qNext)
-  const sim0 = bus.drainPhase(Phase.Simulation);
-  assert(sim0.length === 0, "no owned-by-Simulation events expected (spawn requests are owned by Director)");
+  ws.update(10.0, actions(), snap);
+  ws.update(0.016, actions({ bombPressed: true, bombTarget: { x: 123, y: 77 } }), snap);
+  const bombs = drainNextSimulation(bus, 1).filter((e) => e.type === EventType.SPAWN_BOMB);
+  assert(bombs.length === 1, "bomb path should still emit one SPAWN_BOMB when inventory is present");
+  assert(bombConsumes === 1, "bomb path should still call onConsumeBomb once");
+  assert((bombs[0] as any).payload.target.x === 123 && (bombs[0] as any).payload.target.y === 77, "bomb target must remain unchanged");
+}
 
-  bus.enterPhase(Phase.Cleanup);
-  bus.endTickAndSwap();
+function assertSpreadDefinitionAndPatterns(): void {
+  const spread = resolveWeaponDefinition("w1.spread", WEAPON_DB);
+  const basic = resolveWeaponDefinition(ACTIVE_W1_WEAPON_ID, WEAPON_DB);
+  const laser = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB);
+  assert(spread.slot === "w1", "w1.spread must belong to W1 slot");
+  assert(spread.levels?.length === 5, "w1.spread must define five levels");
+  assert(spread.projectile?.damage === 2, "Spread damage must be 2");
+  assert(spread.projectile?.speed === 980, "Spread speed must be 980");
+  assert(approx(spread.cooldownSec, 0.32), "Spread cooldown must be 0.32");
+  assert(spread.projectile?.radius === 5, "Spread base radius must be 5");
+  assert(approx(spread.projectile?.ttlSec ?? 0, 1.15), "Spread TTL must be 1.15");
+  assert(basic.projectile?.damage === 3 && basic.projectile.speed === 1100 && approx(basic.cooldownSec, 0.12), "w1.basic values must remain unchanged");
+  assert(laser.beam?.damage === 15 && approx(laser.cooldownSec, 10), "w2.laser values must remain unchanged");
 
-  // ---------------------------
-  // TICK 1: Director drains spawn requests
-  // ---------------------------
-  bus.beginTick(1);
-  bus.enterPhase(Phase.Simulation);
-  const sim1 = bus.drainPhase(Phase.Simulation);
-  const proj1 = sim1.filter(e => e.type === EventType.SPAWN_PROJECTILE);
-  assert(proj1.length === 1, "primary should spawn 1 projectile in next tick Director (emitNext)");
+  const expected: Record<number, number[]> = {
+    1: [-15, 15],
+    2: [-45, 0, 45],
+    3: [-45, -30, 30, 45],
+    4: [-45, -30, 0, 30, 45],
+    5: [-45, -30, 0, 30, 45],
+  };
+  for (let level = 1; level <= 5; level++) {
+    const angles = getShotAnglesForLevel("w1.spread", level);
+    assert(JSON.stringify(angles) === JSON.stringify(expected[level]), `Spread L${level} angles must match spec`);
+    assert(new Set(angles).size === angles.length, `Spread L${level} angles must not duplicate`);
+    const dirsRight = getShotDirections({ x: 1, y: 0 }, "w1.spread", level);
+    assert(dirsRight.length === angles.length, `Spread L${level} direction count must match angles`);
+    for (const dir of dirsRight) assert(approx(Math.hypot(dir.x, dir.y), 1, 1e-12), `Spread L${level} directions must be normalized`);
+    const dirsDiag = getShotDirections({ x: 1, y: 1 }, "w1.spread", level);
+    for (const dir of dirsDiag) assert(approx(Math.hypot(dir.x, dir.y), 1, 1e-12), `Spread L${level} diagonal directions must be normalized`);
+    const sum = angles.reduce((a, b) => a + b, 0);
+    assert(approx(sum, 0), `Spread L${level} angles must be symmetric around base direction`);
+  }
+}
 
-  bus.enterPhase(Phase.Cleanup);
-  bus.endTickAndSwap();
+function assertSpreadSelectionAndFiring(): void {
+  const { bus, ws } = makeWeaponSystem();
+  ws.setLevel("w1", 4);
+  ws.setLevel("w2", 3);
+  ws.setWeaponForSlot("w1", "w1.spread");
+  assert(ws.getSnapshot().slots.w1.weaponId === "w1.spread", "setWeaponForSlot must select Spread");
+  assert(ws.getLevel("w1") === 4, "W1 level must survive Basic -> Spread selection");
+  assert(ws.getLevel("w2") === 3, "W2 level must survive W1 selection");
+  ws.toggleW1Weapon();
+  assert(ws.getSnapshot().slots.w1.weaponId === ACTIVE_W1_WEAPON_ID, "toggle must return to Basic");
+  ws.toggleW1Weapon();
+  assert(ws.getSnapshot().slots.w1.weaponId === "w1.spread", "toggle must return to Spread");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "W1 pickup upgrade must still upgrade active W1 slot");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "Spread W1 max L5 must saturate");
 
-  // ---------------------------
-  // TICK 2: cooldown still active, so no new projectile request
-  // (we still call update to advance cooldown by dt)
-  // ---------------------------
-  bus.beginTick(2);
-  bus.enterPhase(Phase.Simulation);
+  for (let level = 1; level <= 5; level++) {
+    const local = makeWeaponSystem();
+    local.ws.setWeaponForSlot("w1", "w1.spread");
+    local.ws.setLevel("w1", level);
+    local.bus.beginTick(0);
+    local.bus.enterPhase(Phase.Simulation);
+    local.ws.update(0.016, actions({ firePrimary: true }), snap);
+    const events = drainNextSimulation(local.bus, 1).filter((e) => e.type === EventType.SPAWN_PROJECTILE);
+    const expectedAngles = getShotAnglesForLevel("w1.spread", level);
+    assert(events.length === expectedAngles.length, `Spread L${level} must emit pattern count`);
+    for (let i = 0; i < events.length; i++) {
+      const payload = (events[i] as any).payload;
+      assert(payload.weaponTypeId === "w1.spread", "Spread projectile must carry weaponTypeId w1.spread");
+      assert(payload.weaponLevel === level, "Spread projectile must carry current weapon level");
+      const deg = Math.round(Math.atan2(payload.dir.y, payload.dir.x) * 180 / Math.PI);
+      assert(deg === expectedAngles[i], `Spread L${level} projectile angle ${deg} must equal ${expectedAngles[i]}`);
+    }
+  }
+}
 
-  ws.update(
-    0.016,
-    {
-      move: { x: 0, y: 0 },
-      aimTarget: { x: 0, y: 0 },
-      firePrimary: true,
-      fireSecondary: false,
-      bombPressed: true,
-      bombTarget: { x: 123, y: 77 },
-    },
-    { shipPos, shipRef, bombs: 1 } // bomb now gated on inventory
-  );
-
-  bus.enterPhase(Phase.Cleanup);
-  bus.endTickAndSwap();
-
-  // ---------------------------
-  // TICK 3: Director drains; bomb should be there, projectile should NOT
-  // ---------------------------
-  bus.beginTick(3);
-  bus.enterPhase(Phase.Simulation);
-  const dir3 = bus.drainPhase(Phase.Simulation);
-  const proj3 = dir3.filter((e) => e.type === EventType.SPAWN_PROJECTILE);
-  const bomb3 = dir3.filter((e) => e.type === EventType.SPAWN_BOMB);
-
-  assert(proj3.length === 0, "primary should NOT spawn due to cooldown");
-  assert(bomb3.length === 1, "bomb should spawn (emitNext) and be drained in Director");
-  // payload shape check (non-generic access)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const p = (bomb3[0] as any).payload;
-  assert(p.target.x === 123 && p.target.y === 77, "bomb target must match captured target");
-
-  bus.enterPhase(Phase.Cleanup);
-  bus.endTickAndSwap();
-
+function main() {
+  assertDefinitionIntegrity();
+  assertSpreadDefinitionAndPatterns();
+  assertLevelApi();
+  assertW1Firing();
+  assertSpreadSelectionAndFiring();
+  assertW2Firing();
+  assertMidActivationLevelChange();
+  assertIndependenceAndBombCompatibility();
   console.log("[SMOKE] WeaponSystem OK ✅");
 }
 

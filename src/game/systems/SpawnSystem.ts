@@ -14,6 +14,10 @@ import { EnemyBehaviorPresets, type EnemyBehaviorPresetId } from "../enemies/Ene
 import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
 import { EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams, normalizeFormationId, normalizeCohesionId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
+import {
+  spreadOrbCollisionRadiusForLevel,
+  spreadOrbSizeForLevel,
+} from "../weapons/W1Geometry";
 
 type Vec2 = { x: number; y: number };
 import type { WorldState } from "../data/WorldState";
@@ -26,6 +30,17 @@ export interface SpawnSystemConfig {
   bomb?: { travelSec: number; ttlSec?: number; damage: number; radius: number; explosionRadius: number };
   pickup?: { ttlSec: number; radius: number; fallSpeed: number };
 }
+
+export const PICKUP_COLLISION_SCREEN_DIAMETER_PX = 30;
+export const PICKUP_COLLISION_CANONICAL_SCREEN_PIXEL_SCALE = 2;
+export const PICKUP_COLLISION_RADIUS =
+  (PICKUP_COLLISION_SCREEN_DIAMETER_PX / PICKUP_COLLISION_CANONICAL_SCREEN_PIXEL_SCALE) / 2;
+
+export const DEFAULT_PICKUP_SPAWN_CONFIG: Readonly<NonNullable<SpawnSystemConfig["pickup"]>> = {
+  ttlSec: 10,
+  radius: PICKUP_COLLISION_RADIUS,
+  fallSpeed: 30,
+};
 
 export interface ProjectileEntity extends BaseEntity {
   kind: "projectile";
@@ -121,6 +136,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
           const weaponTypeId = p.weaponTypeId;
           const def = this.cfg.weaponDb[weaponTypeId];
           const wcfg = def?.projectile;
+          const weaponLevel = Math.max(1, Math.floor(Number((p as any).weaponLevel ?? 1)));
           if (!wcfg) {
             if ((globalThis as any).__CM_DEBUG_PROJECTILES) {
               console.warn("[SPAWN_PROJECTILE] missing projectile cfg for weaponTypeId=", weaponTypeId, "def=", def);
@@ -147,15 +163,25 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
 
       // weaponTypeId is the concrete weapon type from the spawn payload:
-      //   "w1.basic" = primary slot, "w2.basic" = secondary slot (w2 prefix).
+      //   "w1.basic" = primary slot, "w2.laser" = active secondary slot (laser path; w2 prefix reserved for compatibility).
       // Secondary bolts are visually distinct (magenta + larger) from primary.
       const isSecondary = String(weaponTypeId).startsWith("w2");
+      const visual = def?.visual;
+      const isSpread = String(weaponTypeId) === "w1.spread";
+      const orbSize = isSpread ? spreadOrbSizeForLevel(weaponLevel) : undefined;
+      const collisionRadius = isSpread ? spreadOrbCollisionRadiusForLevel(weaponLevel) : wcfg.radius;
+      const projectileRadius = collisionRadius;
       ent.render = {
         glyphId: "proj.capsule",
         sdf: {
-          shape: isSecondary ? "orb" : "bolt",
-          color: isSecondary ? COLORS.ORB : COLORS.BOLT,
-          size: isSecondary ? 2.0 : 5.0,
+          shape: isSpread ? "plasmaOrb" : (visual?.sdfShape ?? (isSecondary ? "orb" : "bolt")),
+          color: isSpread ? "#ffd21f" : (visual?.sdfColor ?? (isSecondary ? COLORS.ORB : COLORS.BOLT)),
+          ...((isSpread || visual?.sdfTipColor) ? { tipColor: isSpread ? "#ff8a00" : visual?.sdfTipColor } : {}),
+          size: visual?.sdfSize ?? (isSecondary ? 2.0 : 5.0),
+          ...(isSpread ? {
+            lengthPx: orbSize,
+            widthPx: orbSize,
+          } : {}),
         },
       };
       // Sprite MVP v1: default mapping (renderer will ignore if atlas lacks these keys)
@@ -171,7 +197,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
     ent.vel = { x: nx * wcfg.speed, y: ny * wcfg.speed };
     ent.ttl = Math.max(0.001, wcfg.ttlSec);
     ent.damage = wcfg.damage;
-    ent.radius = wcfg.radius;
+    ent.radius = projectileRadius;
 
      // keep these for collision/damage
     ent.consumed = false;
@@ -263,7 +289,7 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
 
           case EventType.SPAWN_PICKUP: {
             const p = e.payload as CMEventMap[typeof EventType.SPAWN_PICKUP];
-            const pcfg = this.cfg.pickup ?? { ttlSec: 10, radius: 4, fallSpeed: 30 };
+            const pcfg = this.cfg.pickup ?? DEFAULT_PICKUP_SPAWN_CONFIG;
 
             // p.pos originates from a killed enemy => already WORLD space (unified
             // contract). Do NOT add scroll here (unlike viewport-relative enemy

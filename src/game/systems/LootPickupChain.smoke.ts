@@ -14,8 +14,8 @@
 // every other system in the chain was already wired in createGame.ts, but
 // SpawnSystem silently dropped SPAWN_PICKUP, so no pickup entity ever existed.
 //
-// We assert the CONCRETE end effect (player.energy goes 0 -> 1 for an "energy"
-// drop), not merely that "something happened".
+// We assert the CONCRETE end effect (energy gain and weapon level upgrades),
+// not merely that "something happened".
 
 import { EventBus, Phase } from "../../engine/core/EventBus";
 import { CM_EVENT_OWNERSHIP } from "../../engine/core/EventOwnershipMap";
@@ -27,19 +27,32 @@ import { CollisionSystem } from "./CollisionSystem";
 import { DamageSystem } from "./DamageSystem";
 import { SpawnSystem } from "./SpawnSystem";
 import { PickupSystem } from "./PickupSystem";
-import { LootDropSystem } from "./LootDropSystem";
+import { LootDropSystem, type PickupDefId } from "./LootDropSystem";
 import { PowerupSystem } from "./PowerupSystem";
+import { WeaponSystem } from "./WeaponSystem";
 
 import { FlowDispatcher } from "../systems/FlowDispatcher";
 import { FlowSystem } from "../systems/FlowSystem";
 import { ScoreSystem } from "../systems/ScoreSystem";
 import { makeSessionState } from "../data/SessionState";
+import { WEAPONS_MVP } from "../defs/Weapons";
+import { WEAPON_DB } from "../defs/WeaponDB";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
 }
 
-function main() {
+function typeRollFor(defId: PickupDefId): number {
+  switch (defId) {
+    case "energy": return 0;
+    case "bomb": return 0.36;
+    case "score": return 0.51;
+    case "w1": return 0.70;
+    case "w2": return 0.85;
+  }
+}
+
+function runPickupChain(defId: PickupDefId) {
   const bus = new EventBus(CM_EVENT_OWNERSHIP, {
     maxEventsPerTick: 256,
     failFast: true,
@@ -59,6 +72,7 @@ function main() {
     e.radius = 3;
     e.energy = 0;
     e.energyMax = 5;
+    e.bombs = 0;
     e.invulnT = 0;
     e.pendingKill = false;
   });
@@ -72,7 +86,7 @@ function main() {
     e.pendingKill = false;
   });
 
-  const proj = store.spawn((e: any) => {
+  store.spawn((e: any) => {
     e.kind = "projectile";
     e.owner = ship;
     e.pos = { x: 10, y: 0 };
@@ -93,22 +107,26 @@ function main() {
   const session = makeSessionState();
   const score = new ScoreSystem(session, { pointsPerCell: 1, pointsPerEntityKill: 10 });
 
-  // Forced drop: dropChance=1 + rng01()=>0 => passes the drop gate, and the weighted
-  // type roll (r < 0.50) deterministically yields "energy".
-  const lootDrop = new LootDropSystem(bus as any, store as any, { dropChance: 1, rng01: () => 0 });
-  const powerups = new PowerupSystem(session as any, store as any, () => playerRef);
+  let rngCalls = 0;
+  const lootDrop = new LootDropSystem(bus as any, store as any, {
+    dropChance: 1,
+    rng01: () => (rngCalls++ === 0 ? 0 : typeRollFor(defId)),
+  });
+
+  const weaponSystem = new WeaponSystem(bus as any, WEAPONS_MVP, WEAPON_DB as any, world as any);
+  const powerups = new PowerupSystem(session as any, store as any, () => playerRef, {
+    upgradeWeaponSlot: (slot) => { weaponSystem.upgradeSlot(slot); },
+  });
 
   const flowDispatcher = new FlowDispatcher([score, lootDrop, powerups]);
   const flow = new FlowSystem(flowDispatcher);
 
   const pickupSystem = new PickupSystem(store as any);
-
-  const spawnCfg = {
+  const spawn = new SpawnSystem(store as any, {
     rng01: () => 0,
     logicSize: { w: 960, h: 540 },
-    weaponDb: {} as any,
-  };
-  const spawn = new SpawnSystem(store as any, spawnCfg as any, world as any);
+    weaponDb: WEAPON_DB as any,
+  } as any, world as any);
 
   // ===================== TICK 0: kill enemy -> emit SPAWN_PICKUP =====================
   const ctx0: TickContext = { tick: 0, dt: 1 / 60 };
@@ -136,31 +154,42 @@ function main() {
   pickupSystem.update(ctx1.dt); // production order: pickups move before spawn (no-op here)
   spawn.update(ctx1, bus.drainPhase(Phase.Simulation) as any);
 
-  // Sanity: the pickup entity actually materialized as an "energy" pickup.
+  // Sanity: the pickup entity actually materialized with the forced defId.
   let pickupCount = 0;
   let pickupDefId = "";
   store.debugForEachAlive((_ref: any, e: any) => {
     if (e?.kind === "pickup" && !e.pendingKill) { pickupCount++; pickupDefId = String(e.defId); }
   });
   assert(pickupCount === 1, "tick1: exactly one pickup entity should be materialized (got " + pickupCount + ")");
-  assert(pickupDefId === "energy", 'tick1: pickup defId should be "energy" (got "' + pickupDefId + '")');
+  assert(pickupDefId === defId, 'tick1: pickup defId should be "' + defId + '" (got "' + pickupDefId + '")');
 
   // Collision: player overlaps the pickup -> PLAYER_PICKUP (Flow-owned).
   bus.enterPhase(Phase.Collision); collision.update();
 
-  // Flow: PowerupSystem applies the energy effect.
+  // Flow: PowerupSystem applies the concrete effect.
   bus.enterPhase(Phase.Flow);
   flow.update(ctx1, bus.drainPhase(Phase.Flow) as any);
 
   bus.enterPhase(Phase.Cleanup); store.cleanup();
   bus.endTickAndSwap();
 
-  // ===================== Concrete end-effect assertions =====================
-  const player = store.get(playerRef) as any;
-  assert(player && player.energy === 1,
-    "tick1: energy pickup must raise player.energy 0 -> 1 (got " + (player ? player.energy : "no player") + ")");
-  assert(session.score === 10,
-    "tick1: an energy pickup must NOT change score (got " + session.score + ")");
+  return { player: store.get(playerRef) as any, session, weaponSystem };
+}
+
+function main() {
+  const energy = runPickupChain("energy");
+  assert(energy.player && energy.player.energy === 1,
+    "energy pickup must raise player.energy 0 -> 1 (got " + (energy.player ? energy.player.energy : "no player") + ")");
+  assert(energy.session.score === 10,
+    "energy pickup must NOT change score beyond the kill reward (got " + energy.session.score + ")");
+
+  const w1 = runPickupChain("w1");
+  assert(w1.weaponSystem.getLevel("w1") === 2, "w1 pickup must upgrade production W1 level 1 -> 2");
+  assert(w1.weaponSystem.getLevel("w2") === 1, "w1 pickup must not upgrade W2");
+
+  const w2 = runPickupChain("w2");
+  assert(w2.weaponSystem.getLevel("w1") === 1, "w2 pickup must not upgrade W1");
+  assert(w2.weaponSystem.getLevel("w2") === 2, "w2 pickup must upgrade production W2 level 1 -> 2");
 
   console.log("[SMOKE] LootPickupChain OK ✅");
 }
