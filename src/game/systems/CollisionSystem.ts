@@ -6,6 +6,7 @@ import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { EntityStore } from "../../engine/ecs/EntityStore";
 import type { BaseEntity } from "../../engine/ecs/ComponentTypes";
 import type { EnemyDeathGhostSnapshot } from "../fx/EnemyDeathVisual";
+import { W1_PROJECTILE_COLLISION_OFFSETS } from "../weapons/W1Geometry";
 
 // --- World entities (MVP subset used by Collision) ---
 
@@ -124,15 +125,6 @@ function playerBodyRadius(player: PlayerEntity): number {
   return positiveFiniteRadius((player as any).bodyRadius) ?? positiveFiniteRadius(player.radius) ?? 0;
 }
 
-export const W1_PROJECTILE_SPRITE_FRAME_WIDTH = 32;
-export const W1_PROJECTILE_SPRITE_PIVOT_X = 16;
-export const W1_PROJECTILE_RENDER_SCALE = 1;
-export const W1_PROJECTILE_VISUAL_FRONT_OFFSET = (W1_PROJECTILE_SPRITE_FRAME_WIDTH - W1_PROJECTILE_SPRITE_PIVOT_X) * W1_PROJECTILE_RENDER_SCALE;
-export const W1_PROJECTILE_COLLISION_OFFSETS = [
-  W1_PROJECTILE_VISUAL_FRONT_OFFSET / 2,
-  W1_PROJECTILE_VISUAL_FRONT_OFFSET - 5,
-] as const;
-export const W1_PROJECTILE_COLLISION_CIRCLE_COUNT = W1_PROJECTILE_COLLISION_OFFSETS.length;
 
 function projectileDirection(proj: ProjectileEntity): { x: number; y: number } {
   const vx = Number(proj.vel?.x ?? 0);
