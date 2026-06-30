@@ -13,6 +13,9 @@ export type WeaponAudioSpec = {
 export type WeaponVisualSpec = {
   spriteAnimId?: string;
   sdfShape?: string;
+  sdfColor?: string;
+  sdfTipColor?: string;
+  sdfSize?: number;
 };
 
 export type WeaponProjectileSpec = {
@@ -57,6 +60,8 @@ export type WeaponLevelSpec = {
 
 export type WeaponDef = {
   id: WeaponTypeId;
+  name?: string;
+  slot?: WeaponSlotId;
   fireKind: WeaponFireKind;
 
   // cadence belongs to the weapon (not createGame)
@@ -124,6 +129,7 @@ export type WeaponSlotSnapshot = {
   ready01: number;
   damage?: number;
   projectileCount?: number;
+  displayName?: string;
   durationSec?: number;
   hitIntervalSec?: number;
 };

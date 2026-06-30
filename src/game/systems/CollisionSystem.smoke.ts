@@ -20,6 +20,7 @@ import {
   W1_ACTIVE_BODY_START,
   W1_PROJECTILE_COLLISION_OFFSETS,
   W1_SDF_TRAIL_START,
+  W1_SPREAD_COLLISION_OFFSET,
 } from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
@@ -170,6 +171,21 @@ function testW1ProjectileChainUsesNormalizedDiagonalVelocity(): void {
   }
 }
 
+function testSpreadProjectileCollisionGeometry(): void {
+  const l4 = makeProjectile(0, 0, 1, 0, 5, "w1.spread");
+  const l4Circles = projectileCollisionCircles(l4);
+  assert(l4Circles.length === 1, "Spread L1-L4 should use one active-body circle");
+  assert(l4Circles[0].x === W1_SPREAD_COLLISION_OFFSET && l4Circles[0].y === 0, "Spread circle should sit in its short front active body");
+  assert(l4Circles[0].radius === 5, "Spread L1-L4 collision radius should be 5");
+  assert(projectileHitsEnemy(l4, makeEnemy(W1_SPREAD_COLLISION_OFFSET + 7.99, 0, 3)), "Spread should hit within short active body");
+  assert(!projectileHitsEnemy(l4, makeEnemy(-14, 0, 3)), "Spread should not collide with rear trail/glow");
+
+  const l5 = makeProjectile(0, 0, 1, 0, 6.5, "w1.spread");
+  const l5Circles = projectileCollisionCircles(l5);
+  assert(l5Circles.length === 1, "Spread L5 should keep the same circle count as L4");
+  assert(l5Circles[0].radius === 6.5, "Spread L5 collision radius should grow with visual body thickness");
+}
+
 function testNonW1ProjectileCollisionUnchanged(): void {
   const nonW1 = makeProjectile(0, 0, 1, 0, 5, "enemy.projectile");
   const circles = projectileCollisionCircles(nonW1);
@@ -283,6 +299,7 @@ function main() {
   testW1ProjectileChainCoverage();
   testW1ProjectileChainFlipsWithNegativeVelocity();
   testW1ProjectileChainUsesNormalizedDiagonalVelocity();
+  testSpreadProjectileCollisionGeometry();
   testNonW1ProjectileCollisionUnchanged();
   testW2AndBombCollisionContractsUnchanged();
   testPlayerRadiusSeparation();

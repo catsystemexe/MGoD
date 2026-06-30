@@ -4,7 +4,7 @@ import { EventType, type CMEventMap } from "../../engine/core/events";
 import type { EntityRef } from "../../engine/ecs/EntityRef";
 import type { PlayerActions } from "../../engine/input/ActionSchema";
 
-import { WeaponSystem } from "./WeaponSystem";
+import { WeaponSystem, getShotAnglesForLevel, getShotDirections } from "./WeaponSystem";
 import { WEAPON_DB } from "../defs/WeaponDB";
 import {
   ACTIVE_W1_WEAPON_ID,
@@ -243,10 +243,84 @@ function assertIndependenceAndBombCompatibility(): void {
   assert((bombs[0] as any).payload.target.x === 123 && (bombs[0] as any).payload.target.y === 77, "bomb target must remain unchanged");
 }
 
+function assertSpreadDefinitionAndPatterns(): void {
+  const spread = resolveWeaponDefinition("w1.spread", WEAPON_DB);
+  const basic = resolveWeaponDefinition(ACTIVE_W1_WEAPON_ID, WEAPON_DB);
+  const laser = resolveWeaponDefinition(ACTIVE_W2_WEAPON_ID, WEAPON_DB);
+  assert(spread.slot === "w1", "w1.spread must belong to W1 slot");
+  assert(spread.levels?.length === 5, "w1.spread must define five levels");
+  assert(spread.projectile?.damage === 2, "Spread damage must be 2");
+  assert(spread.projectile?.speed === 980, "Spread speed must be 980");
+  assert(approx(spread.cooldownSec, 0.32), "Spread cooldown must be 0.32");
+  assert(spread.projectile?.radius === 5, "Spread base radius must be 5");
+  assert(approx(spread.projectile?.ttlSec ?? 0, 1.15), "Spread TTL must be 1.15");
+  assert(basic.projectile?.damage === 3 && basic.projectile.speed === 1100 && approx(basic.cooldownSec, 0.12), "w1.basic values must remain unchanged");
+  assert(laser.beam?.damage === 15 && approx(laser.cooldownSec, 10), "w2.laser values must remain unchanged");
+
+  const expected: Record<number, number[]> = {
+    1: [-15, 15],
+    2: [-45, 0, 45],
+    3: [-45, -30, 30, 45],
+    4: [-45, -30, 0, 30, 45],
+    5: [-45, -30, 0, 30, 45],
+  };
+  for (let level = 1; level <= 5; level++) {
+    const angles = getShotAnglesForLevel("w1.spread", level);
+    assert(JSON.stringify(angles) === JSON.stringify(expected[level]), `Spread L${level} angles must match spec`);
+    assert(new Set(angles).size === angles.length, `Spread L${level} angles must not duplicate`);
+    const dirsRight = getShotDirections({ x: 1, y: 0 }, "w1.spread", level);
+    assert(dirsRight.length === angles.length, `Spread L${level} direction count must match angles`);
+    for (const dir of dirsRight) assert(approx(Math.hypot(dir.x, dir.y), 1, 1e-12), `Spread L${level} directions must be normalized`);
+    const dirsDiag = getShotDirections({ x: 1, y: 1 }, "w1.spread", level);
+    for (const dir of dirsDiag) assert(approx(Math.hypot(dir.x, dir.y), 1, 1e-12), `Spread L${level} diagonal directions must be normalized`);
+    const sum = angles.reduce((a, b) => a + b, 0);
+    assert(approx(sum, 0), `Spread L${level} angles must be symmetric around base direction`);
+  }
+}
+
+function assertSpreadSelectionAndFiring(): void {
+  const { bus, ws } = makeWeaponSystem();
+  ws.setLevel("w1", 4);
+  ws.setLevel("w2", 3);
+  ws.setWeaponForSlot("w1", "w1.spread");
+  assert(ws.getSnapshot().slots.w1.weaponId === "w1.spread", "setWeaponForSlot must select Spread");
+  assert(ws.getLevel("w1") === 4, "W1 level must survive Basic -> Spread selection");
+  assert(ws.getLevel("w2") === 3, "W2 level must survive W1 selection");
+  ws.toggleW1Weapon();
+  assert(ws.getSnapshot().slots.w1.weaponId === ACTIVE_W1_WEAPON_ID, "toggle must return to Basic");
+  ws.toggleW1Weapon();
+  assert(ws.getSnapshot().slots.w1.weaponId === "w1.spread", "toggle must return to Spread");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "W1 pickup upgrade must still upgrade active W1 slot");
+  ws.upgradeSlot("w1");
+  assert(ws.getLevel("w1") === 5, "Spread W1 max L5 must saturate");
+
+  for (let level = 1; level <= 5; level++) {
+    const local = makeWeaponSystem();
+    local.ws.setWeaponForSlot("w1", "w1.spread");
+    local.ws.setLevel("w1", level);
+    local.bus.beginTick(0);
+    local.bus.enterPhase(Phase.Simulation);
+    local.ws.update(0.016, actions({ firePrimary: true }), snap);
+    const events = drainNextSimulation(local.bus, 1).filter((e) => e.type === EventType.SPAWN_PROJECTILE);
+    const expectedAngles = getShotAnglesForLevel("w1.spread", level);
+    assert(events.length === expectedAngles.length, `Spread L${level} must emit pattern count`);
+    for (let i = 0; i < events.length; i++) {
+      const payload = (events[i] as any).payload;
+      assert(payload.weaponTypeId === "w1.spread", "Spread projectile must carry weaponTypeId w1.spread");
+      assert(payload.weaponLevel === level, "Spread projectile must carry current weapon level");
+      const deg = Math.round(Math.atan2(payload.dir.y, payload.dir.x) * 180 / Math.PI);
+      assert(deg === expectedAngles[i], `Spread L${level} projectile angle ${deg} must equal ${expectedAngles[i]}`);
+    }
+  }
+}
+
 function main() {
   assertDefinitionIntegrity();
+  assertSpreadDefinitionAndPatterns();
   assertLevelApi();
   assertW1Firing();
+  assertSpreadSelectionAndFiring();
   assertW2Firing();
   assertMidActivationLevelChange();
   assertIndependenceAndBombCompatibility();

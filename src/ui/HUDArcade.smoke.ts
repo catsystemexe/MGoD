@@ -12,6 +12,7 @@ import { getHudWeaponLevels } from "./HUDArcade";
   });
   assert.equal(levels.w1Level, 4, "W1 HUD level comes from W1 snapshot");
   assert.equal(levels.w2Level, 3, "W2 HUD level comes from W2 snapshot");
+  assert.equal(levels.w1Label, "BOLT", "W1 basic HUD label falls back to BOLT");
 }
 
 {
@@ -33,6 +34,9 @@ import { getHudWeaponLevels } from "./HUDArcade";
   levels = getHudWeaponLevels(player);
   assert.equal(levels.w1Level, 5, "level changes are visible on the next HUD update");
   assert.equal(levels.w2Level, 4, "W2 level changes are visible on the next HUD update");
+  player.weapons = { slots: { w1: { level: 3, maxLevel: 5, weaponId: "w1.spread", displayName: "Spread Gun" }, w2: { level: 4, maxLevel: 5 } } };
+  levels = getHudWeaponLevels(player);
+  assert.equal(levels.w1Label, "SPREAD", "W1 Spread HUD label is visible");
   assert.equal(player.w2.charge01, 0.5, "W2 charge state remains available");
   assert.equal(player.bombs, 1, "bomb count remains unchanged");
 }

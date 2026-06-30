@@ -49,6 +49,7 @@ export type CMEventMap = {
     origin: Vec2;
     dir: Vec2;
     weaponTypeId: string; // concrete weapon id (e.g. "w1.basic")
+    weaponLevel?: number;
   };
 
   [EventType.SPAWN_BOMB]: {

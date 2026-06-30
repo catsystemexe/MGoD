@@ -50,6 +50,34 @@ type BeamRuntime = {
 };
 
 const W1_SHOT_SPACING_PX = 10;
+const W1_SPREAD_WEAPON_ID = "w1.spread";
+
+const SHOT_ANGLES_DEG_BY_WEAPON_LEVEL: Record<string, ReadonlyArray<ReadonlyArray<number>>> = {
+  [W1_SPREAD_WEAPON_ID]: [
+    [-15, 15],
+    [-45, 0, 45],
+    [-45, -30, 30, 45],
+    [-45, -30, 0, 30, 45],
+    [-45, -30, 0, 30, 45],
+  ],
+};
+
+export function getShotAnglesForLevel(weaponTypeId: WeaponTypeId, level: number): number[] {
+  const patterns = SHOT_ANGLES_DEG_BY_WEAPON_LEVEL[String(weaponTypeId)];
+  if (!patterns) return [0];
+  const index = Math.max(0, Math.min(patterns.length - 1, Math.floor(Number(level) || 1) - 1));
+  return [...patterns[index]];
+}
+
+export function getShotDirections(baseDir: Vec2, weaponTypeId: WeaponTypeId, level: number): Vec2[] {
+  const dir = safeUnitDir(baseDir);
+  return getShotAnglesForLevel(weaponTypeId, level).map((deg) => {
+    const rad = deg * Math.PI / 180;
+    const c = Math.cos(rad);
+    const s = Math.sin(rad);
+    return safeUnitDir({ x: dir.x * c - dir.y * s, y: dir.x * s + dir.y * c });
+  });
+}
 
 function safeUnitDir(dir: Vec2): Vec2 {
   const l = Math.hypot(dir.x, dir.y);
@@ -140,6 +168,28 @@ export class WeaponSystem {
     this.setLevel(slot, this.getLevel(slot) + 1);
   }
 
+  public setWeaponForSlot(slot: WeaponSlotId, weaponId: WeaponTypeId): void {
+    const def = this.db[weaponId];
+    if (!def) throw new Error(`[WeaponSystem] Unknown weaponId: ${String(weaponId)}`);
+    if (def.slot && def.slot !== slot) throw new Error(`[WeaponSystem] Weapon ${String(weaponId)} does not belong to slot ${slot}`);
+    const previousLevel = this.slots[slot].level;
+    this.slots[slot].weaponId = String(weaponId);
+    this.slots[slot].level = normalizeWeaponLevel(previousLevel, this.getMaxLevel(slot));
+    this.slots[slot].cooldownRemainingSec = 0;
+    if (slot === "w2") {
+      this.slots.w2.active = false;
+      this.beam.activeDurationRemainingSec = 0;
+      this.beam.activeDurationTotalSec = 0;
+      this.opts?.onLaserEnd?.();
+    }
+  }
+
+  public toggleW1Weapon(): WeaponTypeId {
+    const next = this.slots.w1.weaponId === W1_SPREAD_WEAPON_ID ? ACTIVE_W1_WEAPON_ID : W1_SPREAD_WEAPON_ID;
+    this.setWeaponForSlot("w1", next);
+    return next;
+  }
+
   /** Compatibility bridge for the existing DOM HUD. */
   public getW2State(): { active: boolean; charge01: number } {
     const snap = this.getSnapshot().slots.w2;
@@ -172,6 +222,7 @@ export class WeaponSystem {
       projectileCount: spec.fireKind === "projectile" ? spec.projectileCount : undefined,
       durationSec: spec.fireKind === "beam" && slot.active ? beamDuration : spec.beam?.durationSec,
       hitIntervalSec: spec.beam?.hitIntervalSec,
+      displayName: spec.name,
     };
   }
 
@@ -180,12 +231,14 @@ export class WeaponSystem {
     owner: EntityRef,
     origin: Vec2,
     dir: Vec2,
+    weaponLevel?: number,
   ): void {
     this.bus.emitNext(EventType.SPAWN_PROJECTILE, {
       owner,
       origin: { x: origin.x, y: origin.y },
       dir: { x: dir.x, y: dir.y },
       weaponTypeId: String(weaponTypeId),
+      weaponLevel,
     });
   }
 
@@ -214,11 +267,18 @@ export class WeaponSystem {
     const baseOrigin = { x: shipPos.x + dir.x * MUZZLE, y: shipPos.y + dir.y * MUZZLE };
     const projectileCount = Math.max(1, Math.floor(Number(spec.projectileCount ?? 1)));
 
-    // Deterministic top-to-bottom vertical stack. Offsets are applied to origin
-    // only; every bolt keeps the same forward direction and velocity.
-    for (let i = 0; i < projectileCount; i++) {
-      const offsetY = (i - (projectileCount - 1) / 2) * W1_SHOT_SPACING_PX;
-      this.emitProjectileEvent(spec.id, owner, { x: baseOrigin.x, y: baseOrigin.y + offsetY }, dir);
+    const shotDirections = getShotDirections(dir, spec.id, spec.level);
+    if (shotDirections.length > 1 || getShotAnglesForLevel(spec.id, spec.level)[0] !== 0) {
+      for (const shotDir of shotDirections) {
+        this.emitProjectileEvent(spec.id, owner, baseOrigin, shotDir, spec.level);
+      }
+    } else {
+      // Deterministic top-to-bottom vertical stack. Offsets are applied to origin
+      // only; every bolt keeps the same forward direction and velocity.
+      for (let i = 0; i < projectileCount; i++) {
+        const offsetY = (i - (projectileCount - 1) / 2) * W1_SHOT_SPACING_PX;
+        this.emitProjectileEvent(spec.id, owner, { x: baseOrigin.x, y: baseOrigin.y + offsetY }, dir, spec.level);
+      }
     }
 
     this.emitShotFeedback(baseOrigin, dir);

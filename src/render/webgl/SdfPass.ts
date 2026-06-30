@@ -60,6 +60,8 @@ out vec4 outColor;
 
 uniform int   uShapeType;    // 0 arrow / 1 orb / 2 crown / 3 mandala / 4 sigil
 uniform vec3  uColor;        // base tint
+uniform vec3  uTipColor;     // optional bolt tip tint
+uniform float uUseTipColor;  // 0 preserves legacy bolt gradient
 uniform float uHpRatio;      // 0..1 (drives deform + low-hp redshift)
 uniform float uTime;         // seconds (idle/rotation animation)
 uniform float uHitFlash;     // 0..1 (white pop on hit)
@@ -252,9 +254,10 @@ void main() {
     float taper = smoothstep(-0.8, 0.6, p.x);
     float core = smoothstep(0.0, 0.15, p.x);
 
-    vec3 cyan = vec3(0.0, 0.85, 1.0);
+    vec3 cyan = mix(vec3(0.0, 0.85, 1.0), uColor, uUseTipColor);
     vec3 white = vec3(1.0, 1.0, 1.0);
-    vec3 beamCol = mix(cyan, white, core);
+    vec3 tip = mix(white, uTipColor, uUseTipColor);
+    vec3 beamCol = mix(cyan, tip, core);
 
     float alpha = beam * taper * 2.5;
     outColor = vec4(beamCol * alpha, alpha);
@@ -393,8 +396,11 @@ export type SdfPass = {
     ix: number;      // screen-space center
     iy: number;
     radius: number;
+    sizeX?: number;
+    sizeY?: number;
     shape: string;
     color: string;   // hex
+    tipColor?: string;
     hpRatio: number;
     time: number;
     hitFlash: number;
@@ -461,6 +467,8 @@ export function createSdfPass(
   const uSize = gl.getUniformLocation(prog, "uSize");
   const uShapeType = gl.getUniformLocation(prog, "uShapeType");
   const uColor = gl.getUniformLocation(prog, "uColor");
+  const uTipColor = gl.getUniformLocation(prog, "uTipColor");
+  const uUseTipColor = gl.getUniformLocation(prog, "uUseTipColor");
   const uHpRatio = gl.getUniformLocation(prog, "uHpRatio");
   const uTime = gl.getUniformLocation(prog, "uTime");
   const uHitFlash = gl.getUniformLocation(prog, "uHitFlash");
@@ -492,12 +500,19 @@ export function createSdfPass(
 
       if (uLogic) gl.uniform2f(uLogic, logicW, logicH);
       if (uPos) gl.uniform2f(uPos, args.ix, args.iy);
-      if (uSize) gl.uniform2f(uSize, sizePx, sizePx);
+      const sizeX = Number.isFinite(args.sizeX ?? NaN) ? Math.max(1, Number(args.sizeX)) : sizePx;
+      const sizeY = Number.isFinite(args.sizeY ?? NaN) ? Math.max(1, Number(args.sizeY)) : sizePx;
+      if (uSize) gl.uniform2f(uSize, sizeX, sizeY);
       if (uShapeType) gl.uniform1i(uShapeType, SHAPE_ID[args.shape] ?? 0);
       if (uColor) {
         const [r, g, b] = hexToRgb(args.color);
         gl.uniform3f(uColor, r, g, b);
       }
+      if (uTipColor) {
+        const [tr, tg, tb] = hexToRgb(args.tipColor ?? args.color);
+        gl.uniform3f(uTipColor, tr, tg, tb);
+      }
+      if (uUseTipColor) gl.uniform1f(uUseTipColor, typeof args.tipColor === "string" ? 1 : 0);
       if (uHpRatio) gl.uniform1f(uHpRatio, Number.isFinite(args.hpRatio) ? args.hpRatio : 1);
       if (uTime) gl.uniform1f(uTime, args.time);
       if (uHitFlash) gl.uniform1f(uHitFlash, Number.isFinite(args.hitFlash) ? args.hitFlash : 0);
