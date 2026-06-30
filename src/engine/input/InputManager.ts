@@ -1,4 +1,70 @@
 import type { PlayerActions } from "./ActionSchema";
+import { DEFAULT_BINDINGS } from "./InputBindings";
+
+type GamepadButtonLike = { pressed?: boolean; value?: number };
+type GamepadLike = {
+  id?: string;
+  mapping?: string;
+  connected?: boolean;
+  axes?: readonly number[];
+  buttons?: readonly GamepadButtonLike[];
+};
+
+const GAMEPAD_DEADZONE = 0.22;
+const GAMEPAD_BUTTON_THRESHOLD = 0.5;
+
+function clampAxis(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
+}
+
+function applyRadialDeadzone(x: number, y: number, deadzone = GAMEPAD_DEADZONE): { x: number; y: number } {
+  const len = Math.hypot(x, y);
+  if (len <= deadzone) return { x: 0, y: 0 };
+  const scaled = Math.min(1, (len - deadzone) / (1 - deadzone));
+  return { x: (x / len) * scaled, y: (y / len) * scaled };
+}
+
+function normalizeMove(x: number, y: number): { x: number; y: number } {
+  const len = Math.hypot(x, y);
+  return len > 1 ? { x: x / len, y: y / len } : { x, y };
+}
+
+function gamepadButtonDown(pad: GamepadLike, index: number): boolean {
+  const b = pad.buttons?.[index];
+  return !!b && (!!b.pressed || (typeof b.value === "number" && b.value > GAMEPAD_BUTTON_THRESHOLD));
+}
+
+function readGamepadMove(pad: GamepadLike): { x: number; y: number } {
+  const axes = pad.axes ?? [];
+  const stick = applyRadialDeadzone(clampAxis(axes[0]), clampAxis(axes[1]));
+  const dpadX = (gamepadButtonDown(pad, 15) ? 1 : 0) + (gamepadButtonDown(pad, 14) ? -1 : 0);
+  const dpadY = (gamepadButtonDown(pad, 13) ? 1 : 0) + (gamepadButtonDown(pad, 12) ? -1 : 0);
+  return normalizeMove(stick.x + dpadX, stick.y + dpadY);
+}
+
+export function sampleGamepadForActions(pad: GamepadLike | null | undefined) {
+  if (!pad || pad.connected === false) {
+    return {
+      move: { x: 0, y: 0 },
+      firePrimary: false,
+      fireSecondary: false,
+      bombDown: false,
+      toggleW1WeaponDown: false,
+      connected: false,
+    };
+  }
+
+  return {
+    move: readGamepadMove(pad),
+    // Standard Xbox-like mapping. Do not key behavior on exact device id
+    // strings such as "Xbox MAXFire Blaze 5".
+    firePrimary: gamepadButtonDown(pad, 0),
+    fireSecondary: gamepadButtonDown(pad, 2),
+    bombDown: gamepadButtonDown(pad, 1),
+    toggleW1WeaponDown: gamepadButtonDown(pad, 3),
+    connected: true,
+  };
+}
 
 /**
  * InputManager (MVP)
@@ -36,24 +102,34 @@ export class InputManager {
   private mousePrevY = 0;
 
   private prevBombDown = false;
+  private prevGamepadBombDown = false;
+  private prevToggleW1WeaponDown = false;
+  private prevGamepadToggleW1WeaponDown = false;
   private bombDown = false;
   private prevCycleW1Down = false;
   private prevCycleW2Down = false;
   private bound = false;
 
   constructor(private readonly getCanvas: () => HTMLCanvasElement | null) {
-    window.addEventListener("keydown", (e) => this.keys.add(e.code));
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    const w = globalThis.window;
+    if (!w) return;
+
+    w.addEventListener("keydown", (e) => this.keys.add(e.code));
+    w.addEventListener("keyup", (e) => this.keys.delete(e.code));
 
     // global fallback: kill context menu
-    window.addEventListener("contextmenu", (e) => e.preventDefault());
+    w.addEventListener("contextmenu", (e) => e.preventDefault());
 
     // safety: when focus is lost, avoid stuck buttons
-    window.addEventListener("blur", () => {
+    w.addEventListener("blur", () => {
+      this.keys.clear();
       this.mouseDownL = false;
       this.mouseDownR = false;
       this.bombDown = false;
       this.prevBombDown = false;
+      this.prevGamepadBombDown = false;
+      this.prevToggleW1WeaponDown = false;
+      this.prevGamepadToggleW1WeaponDown = false;
       this.prevCycleW1Down = false;
       this.prevCycleW2Down = false;
     });
@@ -216,9 +292,10 @@ export class InputManager {
     const right = this.isDown("KeyD") || this.isDown("ArrowRight");
     const up = this.isDown("KeyW") || this.isDown("ArrowUp");
     const down = this.isDown("KeyS") || this.isDown("ArrowDown");
+    const gamepad = this.sampleGamepad();
 
-    let mx = (right ? 1 : 0) + (left ? -1 : 0);
-    let my = (down ? 1 : 0) + (up ? -1 : 0);
+    let mx = (right ? 1 : 0) + (left ? -1 : 0) + gamepad.move.x;
+    let my = (down ? 1 : 0) + (up ? -1 : 0) + gamepad.move.y;
 
     const len = Math.hypot(mx, my);
     if (len > 1e-6) {
@@ -264,16 +341,28 @@ export class InputManager {
     out.aimTarget.x = x;
     out.aimTarget.y = y;
     // Fire (held)
-    out.firePrimary = this.mouseDownL;
-    out.fireSecondary = this.mouseDownR;
+    out.firePrimary = this.mouseDownL || this.anyKeyDown(DEFAULT_BINDINGS.firePrimary) || gamepad.firePrimary;
+    out.fireSecondary = this.mouseDownR || gamepad.fireSecondary;
 
     // Bomb (buffered press)
-    const bombPressed = this.bombDown && !this.prevBombDown;
-    this.prevBombDown = this.bombDown;
+    const bombDown = this.bombDown || this.anyKeyDown(DEFAULT_BINDINGS.fireBomb);
+    const bombPressed = (bombDown && !this.prevBombDown) || (gamepad.bombDown && !this.prevGamepadBombDown);
+    this.prevBombDown = bombDown;
+    if (gamepad.connected || gamepad.bombDown) {
+      this.prevGamepadBombDown = gamepad.bombDown;
+    }
 
     out.bombPressed = bombPressed;
     out.bombTarget.x = x;
     out.bombTarget.y = y;
+
+    const toggleW1WeaponDown = this.isDown("KeyJ");
+    out.toggleW1WeaponPressed = (toggleW1WeaponDown && !this.prevToggleW1WeaponDown)
+      || (gamepad.toggleW1WeaponDown && !this.prevGamepadToggleW1WeaponDown);
+    this.prevToggleW1WeaponDown = toggleW1WeaponDown;
+    if (gamepad.connected || gamepad.toggleW1WeaponDown) {
+      this.prevGamepadToggleW1WeaponDown = gamepad.toggleW1WeaponDown;
+    }
 
     // Temporary weapon level controls. Minus/Equal are intentionally used
     // instead of Digit1/Digit2 (dev wave hotkeys) or Brackets (BG preset hotswap).
@@ -287,6 +376,19 @@ export class InputManager {
 
   private isDown(code: string): boolean {
     return this.keys.has(code);
+  }
+
+  private anyKeyDown(codes: readonly string[]): boolean {
+    return codes.some((code) => this.isDown(code));
+  }
+
+  private sampleGamepad(): ReturnType<typeof sampleGamepadForActions> {
+    const nav = globalThis.navigator;
+    const pads = typeof nav?.getGamepads === "function" ? nav.getGamepads() : [];
+    for (const pad of pads) {
+      if (pad) return sampleGamepadForActions(pad);
+    }
+    return sampleGamepadForActions(null);
   }
 
   private clientToLogic(logicW: number, logicH: number): { x: number; y: number } {

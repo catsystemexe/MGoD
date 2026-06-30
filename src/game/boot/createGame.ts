@@ -33,7 +33,6 @@ import { EnemyGroupRegistry } from "../enemies/EnemyGroups";
 import { PlayerSystem } from "../systems/PlayerSystem";
 import { WeaponSystem } from "../systems/WeaponSystem";
 import { applyWeaponLevelControlActions } from "../systems/WeaponLevelControls";
-import { handleW1WeaponToggleKeydown } from "../../debug/WeaponDevToggle";
 import { ProjectileSystem } from "../systems/ProjectileSystem";
 import { VFXSystem } from "../vfx/VFXSystem";
 
@@ -310,13 +309,6 @@ export async function createGame(
         window.addEventListener("keydown", (e) => {
           const key = (e as any).key as string | undefined;
           const code = (e as any).code as string | undefined;
-          
-        
-          const toggledW1Weapon = handleW1WeaponToggleKeydown(e, { toggleW1Weapon: () => weaponSystem.toggleW1Weapon() });
-          if (toggledW1Weapon) {
-            console.log("[DEV] W1 weapon", toggledW1Weapon);
-            return;
-          }
 
           // Toggle preset list visibility (DEV UI only)
           if (devHotkeys && (key === "i" || key === "I")) {
@@ -479,6 +471,7 @@ export async function createGame(
       inputRt.actions.firePrimary = false as any;
       inputRt.actions.fireSecondary = false as any;
       (inputRt.actions as any).bombPressed = false;
+      (inputRt.actions as any).toggleW1WeaponPressed = false;
       (inputRt.actions as any).cycleW1LevelPressed = false;
       (inputRt.actions as any).cycleW2LevelPressed = false;
     } catch {}
@@ -523,6 +516,9 @@ export async function createGame(
 
           worldScroll.update(ctx.dt);
         if (Number(playerEnt.deadT ?? 0) <= 0) {
+          if ((inputRt.actions as any).toggleW1WeaponPressed) {
+            weaponSystem.toggleW1Weapon();
+          }
           applyWeaponLevelControlActions(weaponSystem, inputRt.actions);
           weaponSystem.update(ctx.dt, inputRt.actions as any, {
             shipPos: { x: playerEnt.pos.x, y: playerEnt.pos.y },
