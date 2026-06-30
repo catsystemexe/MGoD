@@ -8,6 +8,12 @@ import type { AnyEvent, TickContext } from "../../engine/core/Loop";
 import { SpawnSystem, type SpawnableEntity } from "./SpawnSystem";
 import { createWorldState } from "../data/WorldState";
 import { WEAPON_DB } from "../defs/WeaponDB";
+import {
+  W1_BASIC_RENDER_LENGTH,
+  W1_SPREAD_RENDER_LENGTH,
+  W1_SPREAD_RENDER_WIDTH,
+  W1_SPREAD_RENDER_WIDTH_L5,
+} from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error("[SMOKE] " + msg);
@@ -110,8 +116,11 @@ function main() {
     assert(e.render?.sdf?.shape === "bolt", "Spread render keeps bolt SDF shape");
     assert(e.render?.sdf?.color === "#ffd21f", "Spread render body color is yellow");
     assert(e.render?.sdf?.tipColor === "#ff8a00", "Spread render tip color is orange");
-    assert(e.render?.sdf?.lengthPx === 34, "Spread render is about one-third Basic length");
-    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? 13 : 10), `Spread L${weaponLevel} render width comes from level materialization`);
+    assert(e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread render length comes from named geometry constant");
+    assert(W1_SPREAD_RENDER_LENGTH > 34, "Spread render length should be larger than the original invisible 34px contract");
+    assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH / 2, "Spread render should remain distinctly shorter than Basic");
+    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH), `Spread L${weaponLevel} render width comes from named geometry constants`);
+    assert(weaponLevel < 5 || e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread L5 should not grow longer than lower levels");
   });
   assert(JSON.stringify([...foundSpreadLevels].sort()) === JSON.stringify([1, 2, 3, 4, 5]), "should materialize Spread projectile levels L1-L5");
   assert(bombCount === 1, "should spawn 1 bomb");
