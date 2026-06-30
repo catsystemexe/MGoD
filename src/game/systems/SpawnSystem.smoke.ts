@@ -54,13 +54,15 @@ function main() {
     weaponTypeId: "primary",
   });
 
-  bus.emitNext(EventType.SPAWN_PROJECTILE, {
-    owner: ship,
-    origin: { x: 10, y: 25 },
-    dir: { x: Math.SQRT1_2, y: Math.SQRT1_2 },
-    weaponTypeId: "w1.spread",
-    weaponLevel: 5,
-  });
+  for (let weaponLevel = 1; weaponLevel <= 5; weaponLevel++) {
+    bus.emitNext(EventType.SPAWN_PROJECTILE, {
+      owner: ship,
+      origin: { x: 10, y: 20 + weaponLevel * 5 },
+      dir: { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+      weaponTypeId: "w1.spread",
+      weaponLevel,
+    });
+  }
 
   bus.emitNext(EventType.SPAWN_BOMB, {
     owner: ship,
@@ -95,22 +97,23 @@ function main() {
     if (e.kind === "enemy") enemyCount++;
   });
 
-  assert(projCount === 2, "should spawn 2 projectiles including Spread");
-  let foundSpread = false;
+  assert(projCount === 6, "should spawn 6 projectiles including five Spread materialization levels");
+  const foundSpreadLevels = new Set<number>();
   store.debugForEachAlive((_ref, e: any) => {
     if (e.kind !== "projectile" || e.weaponTypeId !== "w1.spread") return;
-    foundSpread = true;
+    const weaponLevel = Math.round((Number(e.pos.y) - 20) / 5);
+    foundSpreadLevels.add(weaponLevel);
     assert(e.damage === 2, "Spread spawn damage comes from definition");
     assert(Math.abs(Math.hypot(e.vel.x, e.vel.y) - 980) < 1e-9, "Spread spawn speed comes from definition");
     assert(Math.abs(e.ttl - 1.15) < 1e-9, "Spread spawn TTL comes from definition");
-    assert(e.radius === 6.5, "Spread L5 spawn radius grows for thick body");
+    assert(e.radius === (weaponLevel >= 5 ? 6.5 : 5), `Spread L${weaponLevel} spawn radius comes from level materialization`);
     assert(e.render?.sdf?.shape === "bolt", "Spread render keeps bolt SDF shape");
     assert(e.render?.sdf?.color === "#ffd21f", "Spread render body color is yellow");
     assert(e.render?.sdf?.tipColor === "#ff8a00", "Spread render tip color is orange");
     assert(e.render?.sdf?.lengthPx === 34, "Spread render is about one-third Basic length");
-    assert(e.render?.sdf?.widthPx === 13, "Spread L5 render is thicker than L1-L4");
+    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? 13 : 10), `Spread L${weaponLevel} render width comes from level materialization`);
   });
-  assert(foundSpread, "should materialize Spread projectile");
+  assert(JSON.stringify([...foundSpreadLevels].sort()) === JSON.stringify([1, 2, 3, 4, 5]), "should materialize Spread projectile levels L1-L5");
   assert(bombCount === 1, "should spawn 1 bomb");
   assert(enemyCount === 1, "should spawn 1 enemy");
 

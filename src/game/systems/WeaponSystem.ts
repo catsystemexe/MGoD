@@ -175,7 +175,8 @@ export class WeaponSystem {
     const previousLevel = this.slots[slot].level;
     this.slots[slot].weaponId = String(weaponId);
     this.slots[slot].level = normalizeWeaponLevel(previousLevel, this.getMaxLevel(slot));
-    this.slots[slot].cooldownRemainingSec = 0;
+    const currentCooldown = Number(this.slots[slot].cooldownRemainingSec ?? 0);
+    this.slots[slot].cooldownRemainingSec = Number.isFinite(currentCooldown) ? Math.max(0, currentCooldown) : 0;
     if (slot === "w2") {
       this.slots.w2.active = false;
       this.beam.activeDurationRemainingSec = 0;
