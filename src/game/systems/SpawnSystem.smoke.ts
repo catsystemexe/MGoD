@@ -9,10 +9,8 @@ import { SpawnSystem, type SpawnableEntity } from "./SpawnSystem";
 import { createWorldState } from "../data/WorldState";
 import { WEAPON_DB } from "../defs/WeaponDB";
 import {
-  W1_BASIC_RENDER_LENGTH,
-  W1_SPREAD_RENDER_LENGTH,
-  W1_SPREAD_RENDER_WIDTH,
-  W1_SPREAD_RENDER_WIDTH_L5,
+  W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL,
+  W1_SPREAD_ORB_SIZE_BY_LEVEL,
 } from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
@@ -104,26 +102,34 @@ function main() {
   });
 
   assert(projCount === 6, "should spawn 6 projectiles including five Spread materialization levels");
+  const expectedSizes = W1_SPREAD_ORB_SIZE_BY_LEVEL;
+  const expectedRadii = W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL;
   const foundSpreadLevels = new Set<number>();
+  const seenSizes: number[] = [];
   store.debugForEachAlive((_ref, e: any) => {
     if (e.kind !== "projectile" || e.weaponTypeId !== "w1.spread") return;
-    const weaponLevel = Math.round((Number(e.pos.y) - 20) / 5);
+    const weaponLevel = Math.round((Number(e.pos.y) - 20) / 5) as keyof typeof expectedSizes;
     foundSpreadLevels.add(weaponLevel);
+    const expectedSize = expectedSizes[weaponLevel];
+    const expectedRadius = expectedRadii[weaponLevel];
+    seenSizes.push(Number(e.render?.sdf?.lengthPx));
     assert(e.damage === 2, "Spread spawn damage comes from definition");
     assert(Math.abs(Math.hypot(e.vel.x, e.vel.y) - 980) < 1e-9, "Spread spawn speed comes from definition");
     assert(Math.abs(e.ttl - 1.15) < 1e-9, "Spread spawn TTL comes from definition");
-    assert(e.radius === (weaponLevel >= 5 ? 6.5 : 5), `Spread L${weaponLevel} spawn radius comes from level materialization`);
-    assert(e.render?.sdf?.shape === "bolt", "Spread render keeps bolt SDF shape");
+    assert(e.radius === expectedRadius, `Spread L${weaponLevel} spawn radius comes from level materialization`);
+    assert(e.render?.sdf?.shape === "plasmaOrb", "Spread render uses plasmaOrb SDF shape");
     assert(e.render?.sdf?.color === "#ffd21f", "Spread render body color is yellow");
     assert(e.render?.sdf?.tipColor === "#ff8a00", "Spread render tip color is orange");
-    assert(e.render?.sdf?.lengthPx === 24, "Spread render length should use the near-square 24px contract");
-    assert(e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread render length comes from named geometry constant");
-    assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH, "Spread should remain shorter than Basic");
-    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? 24 : 18), `Spread L${weaponLevel} render width should use the tuned near-square contract`);
-    assert(e.render?.sdf?.widthPx === (weaponLevel >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH), `Spread L${weaponLevel} render width comes from named geometry constants`);
-    assert(weaponLevel < 5 || e.render?.sdf?.lengthPx === W1_SPREAD_RENDER_LENGTH, "Spread L5 should keep the same length as lower levels");
+    assert(e.render?.sdf?.lengthPx === expectedSize, `Spread L${weaponLevel} render length should use the level orb size`);
+    assert(e.render?.sdf?.widthPx === expectedSize, `Spread L${weaponLevel} render width should match the level orb size`);
+    assert(e.render?.sdf?.lengthPx === e.render?.sdf?.widthPx, `Spread L${weaponLevel} should render as a square orb`);
   });
-  assert(W1_SPREAD_RENDER_WIDTH_L5 > W1_SPREAD_RENDER_WIDTH, "Spread L5 should be wider than L1-L4");
+  const sortedSizes = seenSizes.slice().sort((a, b) => a - b);
+  for (let i = 1; i < sortedSizes.length; i++) {
+    assert(sortedSizes[i] > sortedSizes[i - 1], "Spread orb sizes should be strictly increasing by level");
+    const ratio = sortedSizes[i] / sortedSizes[i - 1];
+    assert(ratio >= 1.15 && ratio <= 1.25, "Spread orb size steps should stay near +20% after rounding");
+  }
   assert(JSON.stringify([...foundSpreadLevels].sort()) === JSON.stringify([1, 2, 3, 4, 5]), "should materialize Spread projectile levels L1-L5");
   assert(bombCount === 1, "should spawn 1 bomb");
   assert(enemyCount === 1, "should spawn 1 enemy");

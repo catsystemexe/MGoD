@@ -15,9 +15,8 @@ import { ENEMY_DEFS, type EnemyTypeId } from "../defs/EnemyDefs";
 import { materializeEnemyAppearance } from "../defs/EnemyAppearanceTypes";
 import { EnemyGroupRegistry, formationOffset, normalizeEnemyGroupParams, normalizeFormationId, normalizeCohesionId, type EnemyGroupMembership } from "../enemies/EnemyGroups";
 import {
-  W1_SPREAD_RENDER_LENGTH,
-  W1_SPREAD_RENDER_WIDTH,
-  W1_SPREAD_RENDER_WIDTH_L5,
+  spreadOrbCollisionRadiusForLevel,
+  spreadOrbSizeForLevel,
 } from "../weapons/W1Geometry";
 
 type Vec2 = { x: number; y: number };
@@ -169,17 +168,19 @@ export type SpawnableEntity = ProjectileEntity | BombEntity | PickupEntity | Ene
       const isSecondary = String(weaponTypeId).startsWith("w2");
       const visual = def?.visual;
       const isSpread = String(weaponTypeId) === "w1.spread";
-      const projectileRadius = isSpread && weaponLevel >= 5 ? 6.5 : wcfg.radius;
+      const orbSize = isSpread ? spreadOrbSizeForLevel(weaponLevel) : undefined;
+      const collisionRadius = isSpread ? spreadOrbCollisionRadiusForLevel(weaponLevel) : wcfg.radius;
+      const projectileRadius = collisionRadius;
       ent.render = {
         glyphId: "proj.capsule",
         sdf: {
-          shape: visual?.sdfShape ?? (isSecondary ? "orb" : "bolt"),
-          color: visual?.sdfColor ?? (isSecondary ? COLORS.ORB : COLORS.BOLT),
-          ...(visual?.sdfTipColor ? { tipColor: visual.sdfTipColor } : {}),
+          shape: isSpread ? "plasmaOrb" : (visual?.sdfShape ?? (isSecondary ? "orb" : "bolt")),
+          color: isSpread ? "#ffd21f" : (visual?.sdfColor ?? (isSecondary ? COLORS.ORB : COLORS.BOLT)),
+          ...((isSpread || visual?.sdfTipColor) ? { tipColor: isSpread ? "#ff8a00" : visual?.sdfTipColor } : {}),
           size: visual?.sdfSize ?? (isSecondary ? 2.0 : 5.0),
           ...(isSpread ? {
-            lengthPx: W1_SPREAD_RENDER_LENGTH,
-            widthPx: weaponLevel >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH,
+            lengthPx: orbSize,
+            widthPx: orbSize,
           } : {}),
         },
       };

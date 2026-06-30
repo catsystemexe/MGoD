@@ -34,7 +34,7 @@ export const WEAPON_DB: WeaponDB = {
     },
   },
 
-  // W1 spread weapon: short yellow/orange fan bolts.
+  // W1 spread weapon: level-scaled yellow/orange plasma orbs.
   "w1.spread": {
     id: "w1.spread",
     name: "Spread Gun",
@@ -44,7 +44,7 @@ export const WEAPON_DB: WeaponDB = {
     spriteAnimId: "projectile.w1",
     visual: {
       spriteAnimId: "projectile.w1",
-      sdfShape: "bolt",
+      sdfShape: "plasmaOrb",
       sdfColor: "#ffd21f",
       sdfTipColor: "#ff8a00",
       sdfSize: 1.7,

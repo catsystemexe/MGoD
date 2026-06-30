@@ -26,19 +26,40 @@ export const W1_SDF_TRAIL_END = W1_ACTIVE_BODY_START;
 export const W1_SDF_VISUAL_END = 50;
 export const W1_BASIC_RENDER_LENGTH = W1_SDF_VISUAL_END - W1_SDF_TRAIL_START;
 
-export const W1_SPREAD_RENDER_LENGTH = 24;
-export const W1_SPREAD_RENDER_WIDTH = 18;
-export const W1_SPREAD_RENDER_WIDTH_L5 = 24;
-export const W1_SPREAD_COLLISION_CORE_CENTER_RATIO = 0.25;
+export const W1_SPREAD_ORB_SIZE_BY_LEVEL = {
+  1: 18,
+  2: 22,
+  3: 26,
+  4: 31,
+  5: 37,
+} as const;
 
-// Keep the active gameplay circle centered inside the bright yellow core. The
-// shorter near-square render quad improves readability, while collision remains
-// inside the damaging body instead of covering the full glow or orange tip.
-export const W1_SPREAD_COLLISION_OFFSET =
-  W1_SPREAD_RENDER_LENGTH * W1_SPREAD_COLLISION_CORE_CENTER_RATIO;
+export function spreadOrbSizeForLevel(level: number): number {
+  const normalizedLevel = Math.max(1, Math.min(5, Math.floor(level)));
+  return W1_SPREAD_ORB_SIZE_BY_LEVEL[
+    normalizedLevel as keyof typeof W1_SPREAD_ORB_SIZE_BY_LEVEL
+  ];
+}
+
+export const W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL = {
+  1: 5,
+  2: 5.5,
+  3: 6,
+  4: 6.5,
+  5: 7,
+} as const;
+
+export function spreadOrbCollisionRadiusForLevel(level: number): number {
+  const normalizedLevel = Math.max(1, Math.min(5, Math.floor(level)));
+  return W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL[
+    normalizedLevel as keyof typeof W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL
+  ];
+}
+
+export const W1_SPREAD_ORB_COLLISION_OFFSET = 0;
 
 export function projectileCollisionOffsetsForWeapon(weaponTypeId: string): readonly number[] {
   if (weaponTypeId === "w1.basic") return W1_PROJECTILE_COLLISION_OFFSETS;
-  if (weaponTypeId === "w1.spread") return [W1_SPREAD_COLLISION_OFFSET];
+  if (weaponTypeId === "w1.spread") return [W1_SPREAD_ORB_COLLISION_OFFSET];
   return [0];
 }

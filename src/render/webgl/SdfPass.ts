@@ -21,7 +21,7 @@ import { hexToRgb } from "../../rendering/ColorPalette";
 // (enemies). New shapes: add SHAPE_ID entry +
 // matching branch in the fragment shader.
 // ───────────────────────────────────────────
-const SHAPE_ID: Record<string, number> = {
+export const SHAPE_ID: Record<string, number> = {
   arrow: 0,
   orb: 1,
   crown: 2,
@@ -32,6 +32,7 @@ const SHAPE_ID: Record<string, number> = {
   chevron: 7,
   thruster: 8,
   laser: 9,
+  plasmaOrb: 10,
 };
 
 // Bounded-quad vertex shader: identical world->screen transform to the main
@@ -261,6 +262,30 @@ void main() {
 
     float alpha = beam * taper * 2.5;
     outColor = vec4(beamCol * alpha, alpha);
+    return;
+  } else if (uShapeType == 10) {
+    // PLASMA ORB — round W1 Spread projectile with a +X orange leading accent.
+    float dOrb = length(vLocal);
+    float body = 1.0 - smoothstep(0.54, 0.78, dOrb);
+    float core = 1.0 - smoothstep(0.04, 0.40, dOrb);
+    float innerGlow = 1.0 - smoothstep(0.30, 0.72, dOrb);
+    float outerGlow = 1.0 - smoothstep(0.68, 1.00, dOrb);
+    vec2 tipLocal = (vLocal - vec2(0.40, 0.0)) / vec2(0.42, 0.66);
+    float tip = 1.0 - smoothstep(0.40, 0.92, length(tipLocal));
+    vec3 coreColor = vec3(1.0, 0.97, 0.76);
+    vec3 safeTipColor = mix(vec3(1.0, 0.54, 0.0), uTipColor, uUseTipColor);
+    vec3 color = uColor;
+    color = mix(color, coreColor, clamp(core + innerGlow * 0.25, 0.0, 1.0));
+    color = mix(color, safeTipColor, tip * 0.88);
+    float alpha = clamp(
+      body * 0.92 +
+      core * 0.30 +
+      innerGlow * 0.16 +
+      outerGlow * 0.18,
+      0.0,
+      1.0
+    );
+    outColor = vec4(color, alpha);
     return;
   } else if (uShapeType == 7) {
     // CHEVRON + thruster, points +X

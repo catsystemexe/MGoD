@@ -20,8 +20,9 @@ import {
   W1_ACTIVE_BODY_START,
   W1_PROJECTILE_COLLISION_OFFSETS,
   W1_SDF_TRAIL_START,
-  W1_SPREAD_COLLISION_OFFSET,
-  W1_SPREAD_RENDER_LENGTH,
+  W1_SPREAD_ORB_COLLISION_OFFSET,
+  W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL,
+  W1_SPREAD_ORB_SIZE_BY_LEVEL,
 } from "../weapons/W1Geometry";
 
 function assert(cond: unknown, msg: string): void {
@@ -173,27 +174,25 @@ function testW1ProjectileChainUsesNormalizedDiagonalVelocity(): void {
 }
 
 function testSpreadProjectileCollisionGeometry(): void {
-  const l4 = makeProjectile(0, 0, 1, 0, 5, "w1.spread");
-  const l4Circles = projectileCollisionCircles(l4);
-  assert(l4Circles.length === 1, "Spread L1-L4 should use one active-body circle");
-  assert(l4Circles[0].x === W1_SPREAD_COLLISION_OFFSET && l4Circles[0].y === 0, "Spread circle should sit in its short front active body");
-  assert(l4Circles[0].radius === 5, "Spread L1-L4 collision radius should be 5");
-  assert(
-    W1_SPREAD_COLLISION_OFFSET > 0 && W1_SPREAD_COLLISION_OFFSET < W1_SPREAD_RENDER_LENGTH / 2,
-    "Spread collision circle center should remain inside the short near-square active visual body",
-  );
-  assert(
-    W1_SPREAD_COLLISION_OFFSET + l4Circles[0].radius <= W1_SPREAD_RENDER_LENGTH / 2,
-    "Spread L1-L4 collision circle should stay inside the new yellow body length",
-  );
-  assert(projectileHitsEnemy(l4, makeEnemy(W1_SPREAD_COLLISION_OFFSET + 7.99, 0, 3)), "Spread should hit within short active body");
-  assert(!projectileHitsEnemy(l4, makeEnemy(-14, 0, 3)), "Spread should not collide with rear trail/glow");
+  for (const level of [1, 2, 3, 4, 5] as const) {
+    const radius = W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL[level];
+    const visualSize = W1_SPREAD_ORB_SIZE_BY_LEVEL[level];
+    const proj = makeProjectile(0, 0, 1, 0, radius, "w1.spread");
+    const circles = projectileCollisionCircles(proj);
+    assert(circles.length === 1, `Spread L${level} should use exactly one collision circle`);
+    assert(circles[0].x === 0 && circles[0].y === 0, `Spread L${level} collision circle should use center offset 0`);
+    assert(circles[0].x - proj.pos.x === W1_SPREAD_ORB_COLLISION_OFFSET, `Spread L${level} should use the shared zero offset helper`);
+    assert(circles[0].radius === radius, `Spread L${level} collision radius should come from the level map`);
+    assert(circles[0].radius <= visualSize / 2, `Spread L${level} collision circle should fit inside the orb visual`);
+    assert(projectileHitsEnemy(proj, makeEnemy(radius + 2.99, 0, 3)), `Spread L${level} should hit at its centered orb edge`);
+    assert(!projectileHitsEnemy(proj, makeEnemy(visualSize / 2 + 3.01, 0, 3)), `Spread L${level} should not hit beyond the orb visual`);
+  }
 
-  const l5 = makeProjectile(0, 0, 1, 0, 6.5, "w1.spread");
-  const l5Circles = projectileCollisionCircles(l5);
-  assert(l5Circles.length === 1, "Spread L5 should keep the same circle count as L4");
-  assert(l5Circles[0].radius === 6.5, "Spread L5 collision radius should grow with visual body thickness");
-  assert(l5Circles[0].radius > l4Circles[0].radius, "Spread L5 collision radius should remain larger than L1-L4");
+  const overlayProjectile = makeProjectile(10, 20, -1, 0, W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL[5], "w1.spread");
+  const gameplayCircles = projectileCollisionCircles(overlayProjectile);
+  const overlayCircles = projectileCollisionCircles({ ...overlayProjectile, pos: { x: overlayProjectile.pos.x, y: overlayProjectile.pos.y } });
+  assert(JSON.stringify(overlayCircles) === JSON.stringify(gameplayCircles), "Spread debug overlay and gameplay should use the same collision geometry helper");
+  assert(W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL[5] > W1_SPREAD_ORB_COLLISION_RADIUS_BY_LEVEL[1], "Spread collision radius should grow across levels");
 }
 
 function testNonW1ProjectileCollisionUnchanged(): void {
