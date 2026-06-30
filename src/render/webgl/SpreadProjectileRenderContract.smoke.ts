@@ -85,7 +85,9 @@ for (const level of [1, 4, 5]) {
   const projectile = spawnProjectile("w1.spread", level);
   const draw = rendererSdfContract(projectile);
   assert(draw.shape === "bolt", `Spread L${level} should render through the bolt SDF branch`);
+  assert(draw.sizeX === 24, `Spread L${level} should use the 24px near-square render length`);
   assert(draw.sizeX === W1_SPREAD_RENDER_LENGTH, `Spread L${level} should use the named render length`);
+  assert(draw.sizeY === (level >= 5 ? 24 : 18), `Spread L${level} should use the tuned near-square render width`);
   assert(draw.sizeY === (level >= 5 ? W1_SPREAD_RENDER_WIDTH_L5 : W1_SPREAD_RENDER_WIDTH), `Spread L${level} should use the expected render width`);
   assert(Number.isFinite(draw.ix) && Number.isFinite(draw.iy), `Spread L${level} draw position should be finite`);
   assert(draw.color === "#ffd21f", `Spread L${level} body color should stay yellow`);
@@ -100,8 +102,10 @@ for (const level of [1, 4, 5]) {
   assert(circles[0].x < projectile.pos.x + W1_SPREAD_RENDER_LENGTH / 2, `Spread L${level} collision circle should not move past the visual tip`);
 }
 
-assert(W1_SPREAD_RENDER_LENGTH > 34, "Spread render length should increase from the invisible 34px contract");
-assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH / 2, "Spread should remain less than half the Basic render length");
+assert(W1_SPREAD_RENDER_LENGTH === 24, "Spread render length should be the tuned short 24px contract");
+assert(W1_SPREAD_RENDER_WIDTH === 18, "Spread L1-L4 width should be the tuned thick 18px contract");
+assert(W1_SPREAD_RENDER_WIDTH_L5 === 24, "Spread L5 width should be the tuned square 24px contract");
+assert(W1_SPREAD_RENDER_LENGTH < W1_BASIC_RENDER_LENGTH, "Spread should remain shorter than Basic");
 assert(W1_SPREAD_RENDER_WIDTH_L5 > W1_SPREAD_RENDER_WIDTH, "Spread L5 should be visibly thicker than L1-L4");
 
 const basic = spawnProjectile("w1.basic", 1);

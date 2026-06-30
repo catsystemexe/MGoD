@@ -180,7 +180,11 @@ function testSpreadProjectileCollisionGeometry(): void {
   assert(l4Circles[0].radius === 5, "Spread L1-L4 collision radius should be 5");
   assert(
     W1_SPREAD_COLLISION_OFFSET > 0 && W1_SPREAD_COLLISION_OFFSET < W1_SPREAD_RENDER_LENGTH / 2,
-    "Spread collision circle should remain inside the enlarged active visual body",
+    "Spread collision circle center should remain inside the short near-square active visual body",
+  );
+  assert(
+    W1_SPREAD_COLLISION_OFFSET + l4Circles[0].radius <= W1_SPREAD_RENDER_LENGTH / 2,
+    "Spread L1-L4 collision circle should stay inside the new yellow body length",
   );
   assert(projectileHitsEnemy(l4, makeEnemy(W1_SPREAD_COLLISION_OFFSET + 7.99, 0, 3)), "Spread should hit within short active body");
   assert(!projectileHitsEnemy(l4, makeEnemy(-14, 0, 3)), "Spread should not collide with rear trail/glow");
@@ -189,6 +193,7 @@ function testSpreadProjectileCollisionGeometry(): void {
   const l5Circles = projectileCollisionCircles(l5);
   assert(l5Circles.length === 1, "Spread L5 should keep the same circle count as L4");
   assert(l5Circles[0].radius === 6.5, "Spread L5 collision radius should grow with visual body thickness");
+  assert(l5Circles[0].radius > l4Circles[0].radius, "Spread L5 collision radius should remain larger than L1-L4");
 }
 
 function testNonW1ProjectileCollisionUnchanged(): void {
